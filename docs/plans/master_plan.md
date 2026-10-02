@@ -130,20 +130,43 @@ Key rules for the workers:
 ## 4. Product B: Research Bridge
 
 ### 4.1 Scope for Lisbon
-- BC side: researchers at 3 BC universities (start with SFU), from public
-  profiles plus OpenAlex.
+
+**Pilot: AI-enable SFU's Research Expertise Engine (REE).** REE is SFU's
+researcher directory: pre-populated faculty profiles, 46,000+ titles by SFU
+authors, searchable by keyword, author, department or faculty. Faculty can
+add a research statement, say whether they are accepting graduate students,
+and tag the UN Sustainable Development Goals (SDGs) their work supports. It
+is run by SFU's Research Intelligence team (RIO).
+
+Research Bridge adds an AI layer on top of REE rather than replacing it:
+- Ask in plain language ("who at SFU works on wildfire smoke and health?").
+- Find EU partners and open Horizon Europe calls for an SFU researcher.
+- Help prospective graduate students (including from the EU) find
+  supervisors who are accepting students.
+- Help industry, government and media find the right SFU expert.
+
+REE's SDG tags map onto Horizon Europe clusters and missions, which gives a
+ready-made bridge between the two sides.
+
+Data sources:
+- BC side: REE profiles and publications (through an agreement with RIO,
+  not scraping), enriched with OpenAlex and ORCID. Other BC universities
+  after the pilot.
 - EU side: Horizon Europe projects and participants (CORDIS open data), open
   calls (EU Funding & Tenders portal), EU author profiles (OpenAlex).
 - Optional Canadian funding: NSERC/SSHRC award open data.
-- Three user journeys:
+- Four user journeys:
   1. "Find EU partners for this call" (research office).
   2. "Which open calls fit this researcher or lab?" (researcher).
   3. "Draft a consortium for this call" (research office).
+  4. "Find an SFU expert or supervisor for this topic" (public, students,
+     industry): natural-language search over REE.
 
 ### 4.2 Graph schema (Neo4j)
 
 ```text
-(Researcher)-[:AFFILIATED_WITH]->(Institution)-[:LOCATED_IN]->(Country)
+(Researcher {accepting_grad_students})-[:AFFILIATED_WITH]->(Institution)-[:LOCATED_IN]->(Country)
+(Researcher)-[:CONTRIBUTES_TO]->(SDG)<-[:ALIGNS_WITH]-(Cluster)
 (Researcher)-[:AUTHORED]->(Publication)-[:ABOUT]->(Topic)
 (Researcher)-[:COAUTHORED_WITH {count}]->(Researcher)
 (Organization)-[:PARTICIPATED_IN {role}]->(Project)-[:ABOUT]->(Topic)
@@ -159,7 +182,7 @@ indexing.
 
 ```mermaid
 flowchart TD
-    Q[User request] --> RT{Router: journey 1, 2 or 3}
+    Q[User request] --> RT{Router: journey 1-4}
     RT --> CA[Call analyst - extract topics, expected outcomes, consortium rules]
     CA --> PS[Partner scout - hybrid retrieval + graph expansion]
     PS --> CS[Complementarity scorer - what each partner adds]
@@ -258,10 +281,11 @@ Each card is sized for one cloud session and one PR.
 | A4 | Structure, table and text workers | A1 |
 | A5 | Rebuild accessible DOCX/HTML + verify loop | A2-A4 |
 | A6 | Gold set + eval metrics in `evals/course_access/` | A2, P6 |
-| R1 | OpenAlex loader (BC institutions, authors, topics) | P5 |
+| R0 | REE integration spec with RIO: fields, access method, refresh, consent | - |
+| R1 | OpenAlex loader (SFU authors, topics), REE loader once R0 is agreed | P5, R0 |
 | R2 | CORDIS loader (projects, participants) + calls loader | P5 |
 | R3 | Graph schema + indexing for Researcher/Project/Call | R1, R2 |
-| R4 | Router + call analyst + partner scout | R3, P1 |
+| R4 | Router + call analyst + partner scout + expert search (journey 4) | R3, P1 |
 | R5 | Network worker, eligibility rules, citation evaluator | R4 |
 | R6 | Back-test eval (recall@10) | R3, P6 |
 
@@ -283,7 +307,7 @@ Commit, push to your branch, and open a PR with the eval results.
 |---|---|---|
 | D1 | Same repo or new repo for the products | **Decided:** new private repo `Teamworxai/campus-ai`, clean build, no code copied from the SFU prototype |
 | D2 | Model hosting | **Decided:** Claude via in-region cloud (Canada + EU) for reasoning and vision; Ollama for offline demo fallback. Confirm per-region model availability in week 0 |
-| D3 | Pilot partner for gold data | SFU accessibility services (A) and SFU research office (R) |
+| D3 | Pilot partner for gold data | SFU accessibility services (A); SFU Research Intelligence team (RIO), owner of REE (R). Needs a data-sharing agreement for REE profiles before any REE data enters this repo |
 | D4 | Product names | Working names here; Teamworx branding to decide |
 | D5 | Demo hosting at Lisbon | Pre-loaded laptop with local fallback; do not rely on venue Wi-Fi |
 | D6 | Who labels gold sets | One accessibility specialist (A); two research officers (R) |
@@ -297,4 +321,5 @@ Commit, push to your branch, and open a PR with the eval results.
 | Researcher name ambiguity across sources | Use OpenAlex/ORCID IDs as keys; never merge on name alone |
 | Calls data changes or API limits | Cache snapshots; weekly refresh routine |
 | GDPR complaints about profiling | Public data only, removal process, evidence shown for every match |
+| REE data access not agreed in time | Build and demo on public OpenAlex/ORCID data for SFU authors; swap in REE data once RIO agrees. Respect REE profile choices (e.g. not accepting students) |
 | Max usage limits slow the build | Cap parallel heavy sessions at 3; push bulk work to subagents and off-peak routines |
