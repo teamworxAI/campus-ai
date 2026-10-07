@@ -361,7 +361,7 @@ Commit, push to your branch, and open a PR with the eval results.
 | D4 | Product names | Working names here; Teamworx branding to decide |
 | D5 | Demo hosting at Lisbon | Pre-loaded laptop with local fallback; do not rely on venue Wi-Fi |
 | D6 | Who labels gold sets | One accessibility specialist (A); two research officers (R); one librarian for collections search |
-| D7 | Default embedder | **Decided, pending bake-off:** EmbeddingGemma 2 (released Oct 6, 2026), local and in-region. Keep the text baseline if it loses on our gold set |
+| D7 | Default embedder | **Decided, pending bake-off:** EmbeddingGemma 2 (`google/embeddinggemma-2`, released Oct 6, 2026, Matryoshka dims 768/512/256/128), local and in-region. Text baseline: `intfloat/multilingual-e5-small`. Keep the baseline if it loses on our gold set. P7 ships text only; image, audio and video inputs follow once their API is verified against the model card |
 
 ## 9. Risks
 
