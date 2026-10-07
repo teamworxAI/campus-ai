@@ -1,4 +1,4 @@
-# Master Plan: Course Access Agent and Research Bridge
+# Master Plan: Course Access Agent and Research Assistant
 
 Two higher-ed products for Web Summit Lisbon, built in 4 weeks with Claude Code
 agents, in the `Teamworxai/campus-ai` repo.
@@ -8,7 +8,7 @@ earlier graph-RAG academic advisor prototype (hybrid vector + fulltext
 retrieval over Neo4j, graph expansion, RAGAS evaluation), but no code is
 copied from it.
 
-| | Course Access Agent | Research Bridge |
+| | Course Access Agent | Research Assistant |
 |---|---|---|
 | Problem | Course materials (PDF, slides, docs, video) fail accessibility rules; accommodation requests pile up | BC researchers can now join Horizon Europe Pillar II, but finding the right EU partners is slow and network-dependent |
 | Regulatory driver | Accessible British Columbia Act (post-secondary now covered), EU Web Accessibility Directive / EN 301 549, WCAG 2.2 AA | Canada's association to Horizon Europe Pillar II; consortium eligibility rules |
@@ -50,6 +50,7 @@ Status: draft for iteration. Open decisions are listed in section 8.
 |---|---|---|
 | LLM router | One interface with Claude (in-region cloud) and Ollama (local) backends; route by task (vision, reasoning, cheap classification) and by data region | `campus_ai/core/llm/` |
 | Graph core | Neo4j writer, vector + fulltext indexing, hybrid retriever with graph expansion | `campus_ai/core/graph/` |
+| Embedder | EmbeddingGemma 2 (open, Apache 2.0, runs locally): text, images, audio and video in one vector space; 128-dim vectors for fast candidate search, 768-dim for reranking. Behind one interface so it can be swapped (decision D7) | `campus_ai/core/embed/` |
 | Agent loop | Claude Agent SDK for the agentic steps (tool use, subagents, structured outputs); plain Python for deterministic steps | `campus_ai/<product>/agent.py` |
 | Skills | Domain procedures as Agent Skills (`SKILL.md` + scripts): WCAG remediation playbook, Horizon call analysis | `.claude/skills/` and `campus_ai/<product>/skills/` |
 | MCP servers | One per product, thin wrappers over the product's functions | `campus_ai/<product>/mcp_server.py` |
@@ -67,7 +68,7 @@ Layout:
 campus_ai/
   core/                 # llm router, graph, eval, tracing, review UI, region config
   course_access/        # Course Access Agent
-  research_bridge/      # Research Bridge
+  research_assistant/      # Research Assistant
 evals/                  # gold sets and eval reports per product
 tests/                  # unittest, external services mocked
 docs/plans/             # this plan and per-product specs
@@ -127,7 +128,7 @@ Key rules for the workers:
 - Lisbon target: 90%+ of automatically checkable issues fixed, 0 content
   changes, alt-text average 4+/5 on the gold set.
 
-## 4. Product B: Research Bridge
+## 4. Product B: Research Assistant
 
 ### 4.1 Scope for Lisbon
 
@@ -138,7 +139,7 @@ add a research statement, say whether they are accepting graduate students,
 and tag the UN Sustainable Development Goals (SDGs) their work supports. It
 is run by SFU's Research Intelligence team (RIO).
 
-Research Bridge adds an AI layer on top of REE rather than replacing it:
+Research Assistant adds an AI layer on top of REE rather than replacing it:
 - Ask in plain language ("who at SFU works on wildfire smoke and health?").
 - Find EU partners and open Horizon Europe calls for an SFU researcher.
 - Help prospective graduate students (including from the EU) find
@@ -161,6 +162,9 @@ Data sources:
   3. "Draft a consortium for this call" (research office).
   4. "Find an SFU expert or supervisor for this topic" (public, students,
      industry): natural-language search over REE.
+  5. "Find sources on this topic across BC and European collections"
+     (researchers, students, librarians): multimodal search over Arca and
+     Europeana (section 4.2b).
 
 ### 4.2 Graph schema (Neo4j)
 
@@ -178,11 +182,45 @@ Topics come from OpenAlex's topic taxonomy so both sides share one
 vocabulary. Embeddings on Researcher, Project and Call text use the graph core's
 indexing.
 
+### 4.2b Content layer: Arca and Europeana (multimodal)
+
+The assistant also searches the scholarly and heritage record, not just
+people:
+- **Arca** (BC): BC ELN's network of digital repositories for 50+ BC
+  post-secondary institutions, libraries, museums and archives, built on
+  Islandora. Holds theses, images, books, newspapers, video and sound
+  recordings.
+- **Europeana** (EU): the EU's cultural-heritage aggregator, with an open
+  API.
+
+One question searches both, side by side, and links results to living
+researchers in REE ("who at SFU works on this today?").
+
+Pipeline:
+1. Harvest metadata and media through each source's standard interfaces
+   (for Arca, the Islandora harvesting endpoints BC ELN agrees to; for
+   Europeana, its API). Store each item's rights statement.
+2. Split media into search units: text chunks up to 8K tokens, images,
+   audio segments, video clips.
+3. Embed every unit with EmbeddingGemma 2 into the shared vector space.
+4. Graph links: `(Item)-[:IN]->(Collection)-[:HELD_BY]->(Institution)`,
+   `(Item)-[:CREATED_BY]->(Creator)`, `(Item)-[:ABOUT]->(Topic)<-[:ABOUT]-(Publication)<-[:AUTHORED]-(Researcher)`.
+5. Answers cite the item, with timestamps for audio and video and image
+   regions for photos.
+
+Lisbon scope: one Arca collection plus one thematically matching Europeana
+collection. Full Arca coverage after Lisbon.
+
+Link to Course Access Agent: its alt-text and captioning workers draft
+descriptions for Arca items with thin metadata, for librarians to approve.
+
 ### 4.3 Agent design
 
 ```mermaid
 flowchart TD
-    Q[User request] --> RT{Router: journey 1-4}
+    Q[User request] --> RT{Router: journey 1-5}
+    RT --> MM[Collections search - multimodal retrieval over Arca + Europeana]
+    MM --> EV
     RT --> CA[Call analyst - extract topics, expected outcomes, consortium rules]
     CA --> PS[Partner scout - hybrid retrieval + graph expansion]
     PS --> CS[Complementarity scorer - what each partner adds]
@@ -203,6 +241,9 @@ citations, human approval before outreach.
 - Rank by fit to the call, never by personal attributes. Show the evidence
   for every match.
 - No automated emails. The product drafts; people send.
+- Collections: index only what each institution approves; honour every
+  item's rights statement; exclude restricted items. Indigenous materials
+  follow OCAP® principles and the holding community's protocols.
 
 ### 4.5 Evaluation
 - Back-test: take past Horizon projects with a Canadian participant, hide
@@ -210,14 +251,18 @@ citations, human approval before outreach.
 - Call-fit: research officers rate 20 shortlists (1-5).
 - Citation precision: share of claims backed by a valid ID (target 100%).
 - RAGAS faithfulness metrics from the shared eval harness.
+- Collections search: recall@10 on 50 labelled queries across text, image,
+  audio and video; cross-modal hits (text query finds a photo or clip).
+- Embedder bake-off (week 1): EmbeddingGemma 2 vs a text-only baseline on
+  the same queries, including French and other EU-language queries.
 
 ## 5. Four-week schedule
 
 Assumes Web Summit Lisbon is in early November; week 4 ends about Oct 30.
 
-| Week | Shared platform | Course Access Agent | Research Bridge |
+| Week | Shared platform | Course Access Agent | Research Assistant |
 |---|---|---|---|
-| 0 (Oct 3-4) | Harness setup (section 6); confirm hosting and tools; decisions D1-D6 | Collect 40 gold documents | Download CORDIS and OpenAlex samples |
+| 0 (Oct 3-4) | Harness setup (section 6); confirm hosting and tools; decisions D1-D7 | Collect 40 gold documents | Download CORDIS and OpenAlex samples; contact BC ELN about Arca |
 | 1 (Oct 5-9) | Skeleton, LLM router, graph core, eval harness; tracing; review UI skeleton | Parser + deterministic audit; WCAG report | Loaders and graph schema; ingest SFU + CORDIS |
 | 2 (Oct 12-16) | MCP server template | Workers + rebuild; first end-to-end run | Router, call analyst, partner scout; first shortlist |
 | 3 (Oct 19-23) | Eval dashboards in CI | Verify loop, review queue, eval tuning | Network worker, eligibility, evaluator; back-test |
@@ -288,6 +333,11 @@ Each card is sized for one cloud session and one PR.
 | R4 | Router + call analyst + partner scout + expert search (journey 4) | R3, P1 |
 | R5 | Network worker, eligibility rules, citation evaluator | R4 |
 | R6 | Back-test eval (recall@10) | R3, P6 |
+| P7 | Embedder module with EmbeddingGemma 2 + bake-off vs text baseline (D7) | P0, P6 |
+| R0b | Collections data agreement with BC ELN (Arca) and pick the pilot collection | - |
+| R7 | Arca harvester + media splitter (text, image, audio, video units) with rights statements | P5, P7, R0b |
+| R8 | Europeana loader for the matching collection | P5, P7 |
+| R9 | Collections search: multimodal retrieval, citations with timestamps and image regions | R7, R8 |
 
 Kickoff prompt template for a card:
 
@@ -310,7 +360,8 @@ Commit, push to your branch, and open a PR with the eval results.
 | D3 | Pilot partner for gold data | SFU accessibility services (A); SFU Research Intelligence team (RIO), owner of REE (R). Needs a data-sharing agreement for REE profiles before any REE data enters this repo |
 | D4 | Product names | Working names here; Teamworx branding to decide |
 | D5 | Demo hosting at Lisbon | Pre-loaded laptop with local fallback; do not rely on venue Wi-Fi |
-| D6 | Who labels gold sets | One accessibility specialist (A); two research officers (R) |
+| D6 | Who labels gold sets | One accessibility specialist (A); two research officers (R); one librarian for collections search |
+| D7 | Default embedder | **Decided, pending bake-off:** EmbeddingGemma 2 (released Oct 6, 2026), local and in-region. Keep the text baseline if it loses on our gold set |
 
 ## 9. Risks
 
@@ -322,4 +373,6 @@ Commit, push to your branch, and open a PR with the eval results.
 | Calls data changes or API limits | Cache snapshots; weekly refresh routine |
 | GDPR complaints about profiling | Public data only, removal process, evidence shown for every match |
 | REE data access not agreed in time | Build and demo on public OpenAlex/ORCID data for SFU authors; swap in REE data once RIO agrees. Respect REE profile choices (e.g. not accepting students) |
+| Arca rights or cultural protocols block indexing | Start with one openly licensed collection agreed with BC ELN; rights checked per item |
+| EmbeddingGemma 2 is brand new | Bake-off in week 1; embedder behind one interface so it can be swapped |
 | Max usage limits slow the build | Cap parallel heavy sessions at 3; push bulk work to subagents and off-peak routines |

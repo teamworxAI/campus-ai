@@ -8,7 +8,7 @@ update it in the same PR when a decision changes.
 ## Structure
 - `campus_ai/core/`: shared modules (LLM router, graph, eval, tracing,
   review UI, region config).
-- `campus_ai/course_access/`, `campus_ai/research_bridge/`: one package per
+- `campus_ai/course_access/`, `campus_ai/research_assistant/`: one package per
   product.
 - `evals/`: gold sets and eval reports. `tests/`: unit tests.
 
