@@ -1,12 +1,33 @@
-# docker compose run --rm app                         unit tests
-# docker compose run --rm app python scripts/...      scripts
-# Models are served on the host by vLLM or Ollama and shared across projects;
-# EMBED_BASE_URL points at the OpenAI-compatible endpoint (default: Ollama).
+# docker compose run --rm test            unit tests (no models)
+# docker compose run --rm fetch-models    one-time download into MODELS_DIR (needs network)
+# docker compose run --rm embed ...       local models, networking disabled
+#
+# MODELS_DIR is a host directory that several projects can share.
+x-models: &models
+  build:
+    context: .
+    args:
+      EXTRAS: embed
+  image: campus-ai:embed
+
 services:
-  app:
+  test:
     build: .
-    image: campus-ai:app
+    image: campus-ai:test
+
+  embed:
+    <<: *models
+    network_mode: none
+    volumes:
+      - ${MODELS_DIR:-./models}:/models:ro
+    command: ["python", "scripts/embed_bakeoff.py", "evals/embed/sample_bakeoff.jsonl"]
+
+  fetch-models:
+    <<: *models
+    profiles: [fetch]
     environment:
-      EMBED_BASE_URL: ${EMBED_BASE_URL:-http://host.docker.internal:11434/v1}
-    extra_hosts:
-      - host.docker.internal:host-gateway
+      HF_HUB_OFFLINE: "0"
+      HF_TOKEN: ${HF_TOKEN:-}
+    volumes:
+      - ${MODELS_DIR:-./models}:/models
+    command: ["python", "scripts/fetch_models.py"]

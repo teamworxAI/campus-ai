@@ -41,9 +41,9 @@ Status: draft for iteration. Open decisions are listed in section 8.
 6. **Capabilities exposed as MCP servers.** The same tools then work from
    the Streamlit demo, from Claude apps, and from the Teamworx HR assistant
    platform, with no extra integration work.
-7. **Portable by default.** App code runs in Docker and rebuilds from the
-   repo on any machine. Models run on the host, served by vLLM or Ollama and
-   shared across projects; the app reaches them by URL.
+7. **Portable and offline by default.** Everything runs in Docker and
+   rebuilds from the repo on any machine. Models run in containers from
+   local weights (a shared host directory) with networking disabled.
 8. **Simple codebase.** Per `AGENTS.md`: build small shared modules in
    `campus_ai/core/` and add only what is strictly needed.
 
@@ -53,7 +53,7 @@ Status: draft for iteration. Open decisions are listed in section 8.
 |---|---|---|
 | LLM router | One interface with Claude (in-region cloud) and Ollama (local) backends; route by task (vision, reasoning, cheap classification) and by data region | `campus_ai/core/llm/` |
 | Graph core | Neo4j writer, vector + fulltext indexing, hybrid retriever with graph expansion | `campus_ai/core/graph/` |
-| Embedder | EmbeddingGemma 2 (open, Apache 2.0, served on the host by vLLM or Ollama and shared across projects): text, images, audio and video in one vector space; 128-dim vectors for fast candidate search, 768-dim for reranking. Behind one interface so it can be swapped (decision D7) | `campus_ai/core/embed/` |
+| Embedder | EmbeddingGemma 2 (open, Apache 2.0, runs offline from local weights): text, images, audio and video in one vector space; 128-dim vectors for fast candidate search, 768-dim for reranking. Behind one interface so it can be swapped (decision D7) | `campus_ai/core/embed/` |
 | Agent loop | Claude Agent SDK for the agentic steps (tool use, subagents, structured outputs); plain Python for deterministic steps | `campus_ai/<product>/agent.py` |
 | Skills | Domain procedures as Agent Skills (`SKILL.md` + scripts): WCAG remediation playbook, Horizon call analysis | `.claude/skills/` and `campus_ai/<product>/skills/` |
 | MCP servers | One per product, thin wrappers over the product's functions | `campus_ai/<product>/mcp_server.py` |
@@ -364,7 +364,7 @@ Commit, push to your branch, and open a PR with the eval results.
 | D4 | Product names | Working names here; Teamworx branding to decide |
 | D5 | Demo hosting at Lisbon | Pre-loaded laptop with local fallback; do not rely on venue Wi-Fi |
 | D6 | Who labels gold sets | One accessibility specialist (A); two research officers (R); one librarian for collections search |
-| D7 | Default embedder | **Decided, pending bake-off:** EmbeddingGemma 2 (`google/embeddinggemma-2`, released Oct 6, 2026, Apache 2.0, not gated; Matryoshka dims 768/512/256/128), served on the host by Ollama or vLLM. Text baseline: `intfloat/multilingual-e5-small`. Keep the baseline if it loses on our gold set. Image, audio and video wait on server support: vLLM 0.31.0 lacks the model (PR #60254 adds all four modalities); Ollama lists text and image |
+| D7 | Default embedder | **Decided, pending bake-off:** EmbeddingGemma 2 (`google/embeddinggemma-2`, released Oct 6, 2026, Apache 2.0, not gated; Matryoshka dims 768/512/256/128), run offline in the `embed` Docker image from local weights, text, image, audio and video. vLLM (0.31.0) does not support it yet and Ollama lists only text and image, so neither serves it for now. Text baseline: `intfloat/multilingual-e5-small`. Keep the baseline if it loses on our gold set |
 
 ## 9. Risks
 

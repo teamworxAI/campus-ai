@@ -1,14 +1,28 @@
-# Claude Code cloud sessions only: build through the session's TLS-inspecting
-# proxy. Elsewhere use compose.yaml alone.
-#   docker compose -f compose.yaml -f .claude/compose.cloud.yaml run --rm app
+# Claude Code cloud sessions only: route builds and the one-time model fetch
+# through the session's TLS-inspecting proxy. Elsewhere use compose.yaml alone.
+#   docker compose -f compose.yaml -f .claude/compose.cloud.yaml run --rm fetch-models
+x-build: &build
+  network: host
+  secrets: [ca]
+  args:
+    HTTPS_PROXY: ${HTTPS_PROXY:-}
+    NO_PROXY: ${NO_PROXY:-}
+
 services:
-  app:
-    build:
-      network: host
-      secrets: [ca]
-      args:
-        HTTPS_PROXY: ${HTTPS_PROXY:-}
-        NO_PROXY: ${NO_PROXY:-}
+  test:
+    build: *build
+  embed:
+    build: *build
+  fetch-models:
+    build: *build
+    network_mode: host
+    environment:
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-}
+      SSL_CERT_FILE: /ca.crt
+      REQUESTS_CA_BUNDLE: /ca.crt
+    volumes:
+      - /root/.ccr/ca-bundle.crt:/ca.crt:ro
 
 secrets:
   ca:

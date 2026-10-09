@@ -222,3 +222,6 @@ __marimo__/
 # campus-ai
 data/private/
 evals/**/raw/
+
+# Local model weights (MODELS_DIR default)
+/models/

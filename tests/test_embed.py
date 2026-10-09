@@ -1,15 +1,15 @@
 import importlib.util
-import json
+import math
+import sys
 import tempfile
-import threading
 import unittest
-from http.server import BaseHTTPRequestHandler, HTTPServer
+import wave
 from pathlib import Path
 from unittest import mock
 
 import numpy as np
 
-from campus_ai.core.embed import BACKENDS, embedder as embedder_module, get_embedder, truncate
+from campus_ai.core.embed import BACKENDS, get_embedder, media, truncate
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -21,39 +21,12 @@ def load_bakeoff():
     return module
 
 
-class FakeServer:
-    """A local OpenAI-compatible /v1/embeddings endpoint that records requests.
-
-    `vector(text)` decides each embedding. Rows come back in reverse order to
-    check the client sorts by index.
-    """
-
-    def __init__(self, vector):
-        self.requests = []
-        server = self
-
-        class Handler(BaseHTTPRequestHandler):
-            def do_POST(self):
-                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-                server.requests.append((self.path, body))
-                data = [{"index": i, "embedding": vector(text)} for i, text in enumerate(body["input"])]
-                payload = json.dumps({"data": data[::-1]}).encode()
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(payload)))
-                self.end_headers()
-                self.wfile.write(payload)
-
-            def log_message(self, *args):
-                pass
-
-        self.httpd = HTTPServer(("127.0.0.1", 0), Handler)
-        self.base_url = f"http://127.0.0.1:{self.httpd.server_port}/v1"
-        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
-
-    def close(self):
-        self.httpd.shutdown()
-        self.httpd.server_close()
+def fake_model(dim):
+    model = mock.Mock()
+    model.encode.side_effect = lambda inputs, **kwargs: np.arange(len(inputs) * dim, dtype=np.float32).reshape(
+        len(inputs), dim
+    ) + 1
+    return model
 
 
 class TruncateTests(unittest.TestCase):
@@ -65,69 +38,143 @@ class TruncateTests(unittest.TestCase):
 
 
 class EmbedderTests(unittest.TestCase):
-    def setUp(self):
-        self.server = FakeServer(lambda text: [float(len(text))] + [1.0] * 767)
-        self.addCleanup(self.server.close)
-
-    def test_gemma_query_prefix_and_matryoshka_dim(self):
-        out = get_embedder(base_url=self.server.base_url).embed(["smoke", "salmon rivers"], kind="query", dim=128)
-        self.assertEqual(out.shape, (2, 128))
+    def test_gemma_query_prompt_and_matryoshka_dim(self):
+        model = fake_model(768)
+        embedder = get_embedder("embeddinggemma-2", model=model)
+        out = embedder.embed(["wildfire smoke"], kind="query", dim=128)
+        self.assertEqual(out.shape, (1, 128))
         np.testing.assert_allclose(np.linalg.norm(out, axis=1), 1.0, rtol=1e-6)
-        path, body = self.server.requests[0]
-        self.assertEqual(path, "/v1/embeddings")
-        self.assertEqual(body["model"], "embeddinggemma-2")
-        self.assertEqual(
-            body["input"], ["task: search result | query: smoke", "task: search result | query: salmon rivers"]
-        )
-        # Rows are matched to inputs by index, not response order.
-        self.assertLess(out[0, 0], out[1, 0])
+        model.encode.assert_called_once_with(["wildfire smoke"], convert_to_numpy=True, prompt_name="SearchQuery")
 
-    def test_document_prefixes(self):
-        get_embedder(base_url=self.server.base_url).embed(["a"])
-        get_embedder("e5-small", base_url=self.server.base_url).embed(["b"], kind="query")
-        get_embedder("e5-small", base_url=self.server.base_url).embed(["c"])
-        inputs = [body["input"] for _, body in self.server.requests]
-        self.assertEqual(inputs, [["title: none | text: a"], ["query: b"], ["passage: c"]])
+    def test_gemma_document_prompt_full_dim(self):
+        model = fake_model(768)
+        out = get_embedder(model=model).embed(["a", "b"])
+        self.assertEqual(out.shape, (2, 768))
+        self.assertEqual(model.encode.call_args.kwargs["prompt_name"], "Document")
 
-    def test_batches_large_inputs(self):
-        with mock.patch.object(embedder_module, "BATCH_SIZE", 2):
-            out = get_embedder(base_url=self.server.base_url).embed(["a", "b", "c"])
-        self.assertEqual(out.shape, (3, 768))
-        self.assertEqual([len(body["input"]) for _, body in self.server.requests], [2, 1])
-
-    def test_base_url_from_environment(self):
-        with mock.patch.dict("os.environ", {"EMBED_BASE_URL": "http://gpu-box:8000/v1/"}):
-            self.assertEqual(get_embedder().base_url, "http://gpu-box:8000/v1")
-        with mock.patch.dict("os.environ", {}, clear=True):
-            self.assertEqual(get_embedder().base_url, "http://host.docker.internal:11434/v1")
+    def test_baseline_prompts(self):
+        model = fake_model(384)
+        embedder = get_embedder("e5-small", model=model)
+        embedder.embed(["q"], kind="query")
+        self.assertEqual(model.encode.call_args.kwargs["prompt"], "query: ")
+        embedder.embed(["d"])
+        self.assertEqual(model.encode.call_args.kwargs["prompt"], "passage: ")
 
     def test_rejects_unsupported_dim_modality_and_kind(self):
-        embedder = get_embedder(base_url=self.server.base_url)
+        embedder = get_embedder(model=fake_model(768))
         with self.assertRaises(ValueError):
             embedder.embed(["a"], dim=100)
         with self.assertRaises(NotImplementedError):
-            embedder.embed(["img.png"], modality="image")
+            get_embedder("e5-small", model=fake_model(384)).embed(["img.png"], modality="image")
         with self.assertRaises(ValueError):
             embedder.embed(["a"], kind="passage")
         with self.assertRaises(ValueError):
             get_embedder("nope")
-        self.assertEqual(self.server.requests, [])
 
-    def test_empty_input_skips_server(self):
-        out = get_embedder(base_url=self.server.base_url).embed([], dim=256)
+    def test_media_goes_in_bare_keyed_by_modality(self):
+        model = fake_model(768)
+        embedder = get_embedder(model=model)
+        embedder.embed([Path("a.png")], modality="image", kind="query", dim=256)
+        model.encode.assert_called_once_with([{"image": "a.png"}], convert_to_numpy=True)
+
+        samples = np.zeros(16000, dtype=np.float32)
+        with mock.patch.object(media, "load_audio", return_value=samples) as load_audio:
+            embedder.embed(["a.wav"], modality="audio")
+        load_audio.assert_called_once_with("a.wav")
+        audio = model.encode.call_args.args[0][0]["audio"]
+        self.assertEqual(audio["sampling_rate"], 16000)
+        self.assertIs(audio["array"], samples)
+
+        video = {"array": np.zeros((2, 4, 4, 3)), "video_metadata": {}}
+        with mock.patch.object(media, "load_video", return_value=video):
+            embedder.embed(["a.mp4"], modality="video")
+        self.assertEqual(model.encode.call_args.args[0], [{"video": video}])
+
+        decoded = {"array": samples, "sampling_rate": 16000}
+        embedder.embed([decoded], modality="audio")
+        self.assertEqual(model.encode.call_args.args[0], [{"audio": decoded}])
+
+    def test_loads_only_from_local_models_dir(self):
+        st, torch = mock.Mock(), mock.Mock()
+        torch.cuda.is_available.return_value = False
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch.dict("os.environ", {"MODELS_DIR": tmp}),
+            mock.patch.dict(sys.modules, {"sentence_transformers": st, "torch": torch}),
+        ):
+            embedder = get_embedder("e5-small")
+            with self.assertRaises(FileNotFoundError):
+                embedder.model
+            path = Path(tmp) / "intfloat" / "multilingual-e5-small"
+            path.mkdir(parents=True)
+            self.assertIs(embedder.model, st.SentenceTransformer.return_value)
+        args, kwargs = st.SentenceTransformer.call_args
+        self.assertEqual(args, (str(path),))
+        self.assertTrue(kwargs["local_files_only"])
+        self.assertIs(kwargs["model_kwargs"]["dtype"], torch.float32)
+
+    def test_empty_input_skips_model(self):
+        model = fake_model(768)
+        out = get_embedder(model=model).embed([], dim=256)
         self.assertEqual(out.shape, (0, 256))
-        self.assertEqual(self.server.requests, [])
+        model.encode.assert_not_called()
+
+    def test_model_loads_lazily(self):
+        embedder = get_embedder("e5-small")
+        self.assertIsNone(embedder._model)
         self.assertEqual(set(BACKENDS), {"embeddinggemma-2", "e5-small"})
+
+
+@unittest.skipUnless(importlib.util.find_spec("av"), "PyAV is only in the embed image")
+class MediaTests(unittest.TestCase):
+    def test_load_audio_resamples_to_16k(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "tone.wav"
+            rate = 44100
+            tone = (0.5 * np.sin(2 * math.pi * 440 * np.arange(rate) / rate) * 32767).astype("<i2")
+            with wave.open(str(path), "wb") as out:
+                out.setnchannels(1)
+                out.setsampwidth(2)
+                out.setframerate(rate)
+                out.writeframes(tone.tobytes())  # 1 s at 44.1 kHz
+            samples = media.load_audio(path)
+        self.assertEqual(samples.dtype, np.float32)
+        self.assertAlmostEqual(len(samples), 16000, delta=200)
+        self.assertAlmostEqual(float(np.abs(samples).max()), 0.5, delta=0.05)
+
+    def test_load_video_samples_one_frame_per_second(self):
+        import av
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "clip.mp4"
+            with av.open(str(path), "w") as out:
+                stream = out.add_stream("libx264", rate=8)
+                stream.width = stream.height = 64
+                stream.pix_fmt = "yuv420p"
+                for _ in range(24):  # 3 s at 8 fps
+                    frame = av.VideoFrame.from_ndarray(np.zeros((64, 64, 3), dtype=np.uint8), format="rgb24")
+                    for packet in stream.encode(frame):
+                        out.mux(packet)
+                for packet in stream.encode():
+                    out.mux(packet)
+            video = media.load_video(path)
+        self.assertEqual(video["array"].shape, (3, 64, 64, 3))
+        self.assertEqual(video["video_metadata"]["fps"], 1.0)
 
 
 class BakeoffTests(unittest.TestCase):
     def test_recall_at_k(self):
         bakeoff = load_bakeoff()
         vocab = ["smoke", "salmon", "saumon", "photo"]
-        # Bag-of-words vectors so the ranking is predictable.
-        server = FakeServer(lambda text: [float(word in text.lower()) for word in vocab] + [0.01] * 380)
-        self.addCleanup(server.close)
-        embedder = bakeoff.get_embedder("e5-small", base_url=server.base_url)
+
+        def encode(inputs, **kwargs):
+            # Bag-of-words vectors so the ranking is predictable.
+            return np.array([[float(word in text.lower()) for word in vocab] + [0.01] for text in inputs])
+
+        model = mock.Mock()
+        model.encode.side_effect = encode
+        embedder = bakeoff.get_embedder("e5-small", model=model)
+        embedder.dims = (5,)
 
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "set.jsonl"

@@ -7,10 +7,9 @@ Each line is either an item or a query:
     {"query": "...", "lang": "fr", "relevant": ["d1"]}
 
 Media paths are relative to the JSONL file. Reports recall@k (default 10)
-per backend, overall and per query language. Backends are served on the host
-(vLLM or Ollama) at EMBED_BASE_URL or --base-url.
+per backend, overall and per query language.
 
-    docker compose run --rm app python scripts/embed_bakeoff.py evals/embed/sample_bakeoff.jsonl
+    docker compose run --rm embed python scripts/embed_bakeoff.py evals/embed/sample_bakeoff.jsonl
 """
 
 from __future__ import annotations
@@ -67,13 +66,12 @@ def main() -> None:
     parser.add_argument("path", type=Path)
     parser.add_argument("--backends", nargs="+", default=list(BACKENDS), choices=list(BACKENDS))
     parser.add_argument("-k", type=int, default=10)
-    parser.add_argument("--base-url", help="OpenAI-compatible endpoint, default EMBED_BASE_URL")
     args = parser.parse_args()
 
     items, queries = load(args.path)
     print(f"{len(items)} items, {len(queries)} queries")
     for name in args.backends:
-        scores = recall_at_k(get_embedder(name, base_url=args.base_url), items, queries, args.k)
+        scores = recall_at_k(get_embedder(name), items, queries, args.k)
         detail = ", ".join(f"{lang}={value:.3f}" for lang, value in sorted(scores.items()))
         print(f"{name}: recall@{args.k} {detail}")
 
