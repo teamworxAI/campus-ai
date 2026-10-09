@@ -3,12 +3,13 @@
 Each line is either an item or a query:
 
     {"id": "d1", "modality": "text", "content": "..."}
+    {"id": "d2", "modality": "image", "content": "media/photo.jpg"}
     {"query": "...", "lang": "fr", "relevant": ["d1"]}
 
-Reports recall@k (default 10) per backend, overall and per query language.
+Media paths are relative to the JSONL file. Reports recall@k (default 10)
+per backend, overall and per query language.
 
-    uv sync --extra embed
-    uv run python scripts/embed_bakeoff.py evals/embed/sample_bakeoff.jsonl
+    docker compose run --rm embed python scripts/embed_bakeoff.py evals/embed/sample_bakeoff.jsonl
 """
 
 from __future__ import annotations
@@ -28,7 +29,12 @@ def load(path: Path) -> tuple[list[dict], list[dict]]:
     for line in path.read_text(encoding="utf-8").splitlines():
         if line.strip():
             record = json.loads(line)
-            (queries if "query" in record else items).append(record)
+            if "query" in record:
+                queries.append(record)
+            else:
+                if record.get("modality", "text") != "text":
+                    record["content"] = str(path.parent / record["content"])
+                items.append(record)
     return items, queries
 
 

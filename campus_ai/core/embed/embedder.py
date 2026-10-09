@@ -1,15 +1,22 @@
 """Embed text, image, audio and video into vectors behind one interface.
 
-Backends load local open models through sentence-transformers (install with
-`uv sync --extra embed`). Models load lazily on first use and run locally,
-so data stays in region.
+Backends load local open models through sentence-transformers, in the
+`embed` Docker image (`docker compose build embed`). Models load lazily on
+first use and run locally, so data stays in region.
+
+Inputs per modality: text as strings; images as file paths or PIL images;
+audio and video as file paths (decoded with `media`), or already-decoded
+{"array": ..., "sampling_rate": ...} audio and {"array": ...} video.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Sequence
 
 import numpy as np
+
+from campus_ai.core.embed import media
 
 MODALITIES = ("text", "image", "audio", "video")
 KINDS = ("query", "document")
@@ -54,9 +61,12 @@ class Embedder:
             try:
                 from sentence_transformers import SentenceTransformer
             except ImportError as error:
-                raise ImportError("run `uv sync --extra embed` to install sentence-transformers") from error
+                raise ImportError("embedding models run in the embed image: `docker compose build embed`") from error
+            import torch
 
-            self._model = SentenceTransformer(self.model_id)
+            # bfloat16 on GPUs that support it, float32 elsewhere; never float16 (EmbeddingGemma 2 overflows).
+            dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float32
+            self._model = SentenceTransformer(self.model_id, model_kwargs={"dtype": dtype})
         return self._model
 
     def embed(
@@ -76,24 +86,38 @@ class Embedder:
             raise ValueError(f"{self.name} supports dims {self.dims}, got {dim}")
         if not inputs:
             return np.zeros((0, dim), dtype=np.float32)
-        kwargs = {}
         if modality == "text":
-            kwargs = self.query_kwargs if kind == "query" else self.document_kwargs
-        vectors = self.model.encode(list(inputs), convert_to_numpy=True, **kwargs)
+            inputs, kwargs = list(inputs), self.query_kwargs if kind == "query" else self.document_kwargs
+        else:
+            # Task prompts apply to text only; media goes in bare, keyed by modality.
+            inputs, kwargs = [{modality: prepare(value, modality)} for value in inputs], {}
+        vectors = self.model.encode(inputs, convert_to_numpy=True, **kwargs)
         return truncate(vectors, dim)
+
+
+def prepare(value: Any, modality: str) -> Any:
+    """Decode audio and video file paths; pass everything else through."""
+    if isinstance(value, (str, Path)):
+        if modality == "audio":
+            return {"array": media.load_audio(value), "sampling_rate": media.AUDIO_RATE}
+        if modality == "video":
+            return media.load_video(value)
+        return str(value)
+    return value
 
 
 def embeddinggemma2(model: Any = None) -> Embedder:
     """Google EmbeddingGemma 2 (Apache 2.0), the default backend (decision D7).
 
-    Only text is enabled: the image, audio and video input formats are not
-    yet verified against the model card.
+    Text, images, audio and video share one 768-d space. Context is 8,192
+    tokens per input: about 29 images, 58 video frames (58 s at 1 fps) or
+    327 s of audio, so split longer media before embedding.
     """
     return Embedder(
         name="embeddinggemma-2",
         model_id="google/embeddinggemma-2",
         dims=(768, 512, 256, 128),
-        modalities=("text",),
+        modalities=MODALITIES,
         query_kwargs={"prompt_name": "SearchQuery"},
         document_kwargs={"prompt_name": "Document"},
         model=model,

@@ -1,12 +1,14 @@
 import importlib.util
+import math
 import tempfile
 import unittest
+import wave
 from pathlib import Path
 from unittest import mock
 
 import numpy as np
 
-from campus_ai.core.embed import BACKENDS, get_embedder, truncate
+from campus_ai.core.embed import BACKENDS, get_embedder, media, truncate
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -62,11 +64,34 @@ class EmbedderTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             embedder.embed(["a"], dim=100)
         with self.assertRaises(NotImplementedError):
-            embedder.embed(["img.png"], modality="image")
+            get_embedder("e5-small", model=fake_model(384)).embed(["img.png"], modality="image")
         with self.assertRaises(ValueError):
             embedder.embed(["a"], kind="passage")
         with self.assertRaises(ValueError):
             get_embedder("nope")
+
+    def test_media_goes_in_bare_keyed_by_modality(self):
+        model = fake_model(768)
+        embedder = get_embedder(model=model)
+        embedder.embed([Path("a.png")], modality="image", kind="query", dim=256)
+        model.encode.assert_called_once_with([{"image": "a.png"}], convert_to_numpy=True)
+
+        samples = np.zeros(16000, dtype=np.float32)
+        with mock.patch.object(media, "load_audio", return_value=samples) as load_audio:
+            embedder.embed(["a.wav"], modality="audio")
+        load_audio.assert_called_once_with("a.wav")
+        audio = model.encode.call_args.args[0][0]["audio"]
+        self.assertEqual(audio["sampling_rate"], 16000)
+        self.assertIs(audio["array"], samples)
+
+        video = {"array": np.zeros((2, 4, 4, 3)), "video_metadata": {}}
+        with mock.patch.object(media, "load_video", return_value=video):
+            embedder.embed(["a.mp4"], modality="video")
+        self.assertEqual(model.encode.call_args.args[0], [{"video": video}])
+
+        decoded = {"array": samples, "sampling_rate": 16000}
+        embedder.embed([decoded], modality="audio")
+        self.assertEqual(model.encode.call_args.args[0], [{"audio": decoded}])
 
     def test_empty_input_skips_model(self):
         model = fake_model(768)
@@ -78,6 +103,43 @@ class EmbedderTests(unittest.TestCase):
         embedder = get_embedder("e5-small")
         self.assertIsNone(embedder._model)
         self.assertEqual(set(BACKENDS), {"embeddinggemma-2", "e5-small"})
+
+
+@unittest.skipUnless(importlib.util.find_spec("av"), "PyAV is only in the embed image")
+class MediaTests(unittest.TestCase):
+    def test_load_audio_resamples_to_16k(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "tone.wav"
+            rate = 44100
+            tone = (0.5 * np.sin(2 * math.pi * 440 * np.arange(rate) / rate) * 32767).astype("<i2")
+            with wave.open(str(path), "wb") as out:
+                out.setnchannels(1)
+                out.setsampwidth(2)
+                out.setframerate(rate)
+                out.writeframes(tone.tobytes())  # 1 s at 44.1 kHz
+            samples = media.load_audio(path)
+        self.assertEqual(samples.dtype, np.float32)
+        self.assertAlmostEqual(len(samples), 16000, delta=200)
+        self.assertAlmostEqual(float(np.abs(samples).max()), 0.5, delta=0.05)
+
+    def test_load_video_samples_one_frame_per_second(self):
+        import av
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "clip.mp4"
+            with av.open(str(path), "w") as out:
+                stream = out.add_stream("libx264", rate=8)
+                stream.width = stream.height = 64
+                stream.pix_fmt = "yuv420p"
+                for _ in range(24):  # 3 s at 8 fps
+                    frame = av.VideoFrame.from_ndarray(np.zeros((64, 64, 3), dtype=np.uint8), format="rgb24")
+                    for packet in stream.encode(frame):
+                        out.mux(packet)
+                for packet in stream.encode():
+                    out.mux(packet)
+            video = media.load_video(path)
+        self.assertEqual(video["array"].shape, (3, 64, 64, 3))
+        self.assertEqual(video["video_metadata"]["fps"], 1.0)
 
 
 class BakeoffTests(unittest.TestCase):

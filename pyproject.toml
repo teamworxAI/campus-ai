@@ -10,7 +10,8 @@ dependencies = [
 
 [project.optional-dependencies]
 embed = [
-    "sentence-transformers>=6.1.0",
+    "av>=18.1.0",
+    "sentence-transformers[image,video]>=6.1.0",
 ]
 
 [build-system]

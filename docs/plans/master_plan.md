@@ -41,7 +41,9 @@ Status: draft for iteration. Open decisions are listed in section 8.
 6. **Capabilities exposed as MCP servers.** The same tools then work from
    the Streamlit demo, from Claude apps, and from the Teamworx HR assistant
    platform, with no extra integration work.
-7. **Simple codebase.** Per `AGENTS.md`: build small shared modules in
+7. **Portable by default.** Everything runs in Docker and rebuilds from the
+   repo on any machine; models run locally in containers.
+8. **Simple codebase.** Per `AGENTS.md`: build small shared modules in
    `campus_ai/core/` and add only what is strictly needed.
 
 ## 2. Shared platform (built once, used by both)
@@ -361,7 +363,7 @@ Commit, push to your branch, and open a PR with the eval results.
 | D4 | Product names | Working names here; Teamworx branding to decide |
 | D5 | Demo hosting at Lisbon | Pre-loaded laptop with local fallback; do not rely on venue Wi-Fi |
 | D6 | Who labels gold sets | One accessibility specialist (A); two research officers (R); one librarian for collections search |
-| D7 | Default embedder | **Decided, pending bake-off:** EmbeddingGemma 2 (`google/embeddinggemma-2`, released Oct 6, 2026, Matryoshka dims 768/512/256/128), local and in-region. Text baseline: `intfloat/multilingual-e5-small`. Keep the baseline if it loses on our gold set. P7 ships text only; image, audio and video inputs follow once their API is verified against the model card |
+| D7 | Default embedder | **Decided, pending bake-off:** EmbeddingGemma 2 (`google/embeddinggemma-2`, released Oct 6, 2026, Apache 2.0, not gated; Matryoshka dims 768/512/256/128), run locally in the `embed` Docker image, text, image, audio and video. Text baseline: `intfloat/multilingual-e5-small`. Keep the baseline if it loses on our gold set |
 
 ## 9. Risks
 
