@@ -1,15 +1,11 @@
-# One image for tests, scripts and local models. Rebuild anywhere with:
-#   docker compose build
+# One image for tests and scripts. Models are served on the host (vLLM or
+# Ollama), not in this image. Rebuild anywhere with: docker compose build
 FROM python:3.13-slim
-
-# Optional extras from pyproject.toml, e.g. "embed".
-ARG EXTRAS=""
 
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
     UV_LINK_MODE=copy \
     UV_COMPILE_BYTECODE=1 \
     PATH=/opt/venv/bin:$PATH \
-    HF_HOME=/cache/huggingface \
     PYTHONUNBUFFERED=1
 
 WORKDIR /app
@@ -22,11 +18,11 @@ RUN --mount=type=secret,id=ca,required=false \
 COPY pyproject.toml uv.lock README.md ./
 RUN --mount=type=cache,target=/root/.cache/uv --mount=type=secret,id=ca,required=false \
     if [ -f /run/secrets/ca ]; then export SSL_CERT_FILE=/run/secrets/ca; fi; \
-    uv sync --frozen --no-install-project $(for e in $EXTRAS; do printf -- '--extra %s ' "$e"; done)
+    uv sync --frozen --no-install-project
 
 COPY . .
 RUN --mount=type=cache,target=/root/.cache/uv --mount=type=secret,id=ca,required=false \
     if [ -f /run/secrets/ca ]; then export SSL_CERT_FILE=/run/secrets/ca; fi; \
-    uv sync --frozen $(for e in $EXTRAS; do printf -- '--extra %s ' "$e"; done)
+    uv sync --frozen
 
 CMD ["python", "-m", "unittest", "discover", "-s", "tests", "-v"]

@@ -1,21 +1,12 @@
-# docker compose run --rm test        unit tests (no models)
-# docker compose run --rm embed ...   anything that needs local embedding models
+# docker compose run --rm app                         unit tests
+# docker compose run --rm app python scripts/...      scripts
+# Models are served on the host by vLLM or Ollama and shared across projects;
+# EMBED_BASE_URL points at the OpenAI-compatible endpoint (default: Ollama).
 services:
-  test:
+  app:
     build: .
-    image: campus-ai:test
-
-  embed:
-    build:
-      context: .
-      args:
-        EXTRAS: embed
-    image: campus-ai:embed
+    image: campus-ai:app
     environment:
-      HF_TOKEN: ${HF_TOKEN:-}
-    volumes:
-      - hf-cache:/cache/huggingface
-    command: ["python", "scripts/embed_bakeoff.py", "evals/embed/sample_bakeoff.jsonl"]
-
-volumes:
-  hf-cache:
+      EMBED_BASE_URL: ${EMBED_BASE_URL:-http://host.docker.internal:11434/v1}
+    extra_hosts:
+      - host.docker.internal:host-gateway
