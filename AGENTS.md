@@ -30,6 +30,9 @@ docker compose run --rm fetch-models       # one-time: weights into MODELS_DIR
 docker compose run --rm embed              # bake-off on local models, offline
 ```
 
+On machines with an NVIDIA GPU, add `compose.gpu.yaml` (e.g. set
+`COMPOSE_FILE` in `.env`, see `.env.example`); models then run in bfloat16.
+
 To change dependencies, run `uv add` / `uv lock` in a container, e.g.
 `docker run --rm -v "$PWD":/app -w /app python:3.13-slim sh -c "pip install uv && uv lock"`.
 In Claude Code cloud sessions add `-f compose.yaml -f .claude/compose.cloud.yaml`.

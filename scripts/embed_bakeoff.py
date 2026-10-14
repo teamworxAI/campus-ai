@@ -71,9 +71,11 @@ def main() -> None:
     items, queries = load(args.path)
     print(f"{len(items)} items, {len(queries)} queries")
     for name in args.backends:
-        scores = recall_at_k(get_embedder(name), items, queries, args.k)
+        embedder = get_embedder(name)
+        scores = recall_at_k(embedder, items, queries, args.k)
         detail = ", ".join(f"{lang}={value:.3f}" for lang, value in sorted(scores.items()))
-        print(f"{name}: recall@{args.k} {detail}")
+        model = embedder.model
+        print(f"{name}: recall@{args.k} {detail} (device {model.device}, {next(model.parameters()).dtype})")
 
 
 if __name__ == "__main__":
