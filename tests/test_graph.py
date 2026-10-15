@@ -104,7 +104,7 @@ class StoreTests(unittest.TestCase):
 
     def test_ensure_schema_refuses_other_vector_size(self):
         options = {"indexConfig": {"vector.dimensions": 384}}
-        driver = FakeDriver(lambda query, params: [{"options": options}] if "SHOW" in query else [])
+        driver = FakeDriver(lambda query, params: [{"options": options, "properties": ["vec_fast", "kind"]}] if "SHOW" in query else [])
         with self.assertRaisesRegex(RuntimeError, "rebuild the graph"):
             GraphStore(driver, gemma()).ensure_schema()
 
@@ -113,7 +113,16 @@ class StoreTests(unittest.TestCase):
         GraphStore(driver, gemma()).ensure_schema()
         vector = next(params for query, params in driver.calls if "VECTOR INDEX" in query and "CREATE" in query)
         self.assertEqual(vector["size"], 128)
+        self.assertTrue(any("WITH [n.kind]" in query for query, _ in driver.calls))
         self.assertTrue(any("FULLTEXT INDEX" in query for query, _ in driver.calls))
+
+    def test_ensure_schema_adds_kind_to_older_graphs(self):
+        options = {"indexConfig": {"vector.dimensions": 128}}
+        driver = FakeDriver(lambda query, params: [{"options": options, "properties": ["vec_fast"]}] if "SHOW" in query else [])
+        GraphStore(driver, gemma()).ensure_schema()
+        queries = [query for query, _ in driver.calls]
+        self.assertTrue(any("SET n.kind" in query for query in queries))
+        self.assertLess(queries.index(f"DROP INDEX entity_vec"), next(i for i, q in enumerate(queries) if "CREATE VECTOR" in q))
 
 
 class RetrieverTests(unittest.TestCase):
@@ -202,6 +211,13 @@ class Neo4jTests(unittest.TestCase):
              "text": "North Pacific fisheries collection"}
         ])
         self.assertTrue(all("TestItem" in hit.labels for hit in hits))
+
+    def test_rare_label_is_found_past_many_closer_nodes(self):
+        crowd = [Node(f"test:item{i}", "TestItem", f"ocean salmon note {i}") for i in range(60)]
+        self.store.upsert(crowd + [Node("test:pic", "TestPicture", "harbour photograph")])
+        self.driver.execute_query("CALL db.awaitIndexes(60)")
+        hits = HybridRetriever(self.driver, self.embedder).search("ocean salmon", k=3, labels=["TestPicture"])
+        self.assertEqual([hit.id for hit in hits], ["test:pic"])
 
 
 if __name__ == "__main__":
