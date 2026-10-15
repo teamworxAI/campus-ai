@@ -3,7 +3,7 @@
 Needs the network and EUROPEANA_API_KEY, like `fetch-models`; indexing then
 runs offline in the embed service:
 
-    docker compose run --rm fetch-europeana --query salmon --rows 300
+    docker compose run --rm fetch-europeana --rows 300
     docker compose run --rm embed python scripts/graph_search.py index data/europeana/salmon/items.jsonl
 
 Writes data/europeana/<name>/items.jsonl and media/ (thumbnails, 400 px wide,
@@ -23,6 +23,13 @@ from pathlib import Path
 from campus_ai.research_assistant.europeana import is_open, slug, to_records
 
 SEARCH = "https://api.europeana.eu/record/v2/search.json"
+# Pilot theme (R8): salmon in item titles in 10 languages, plus the salmon
+# genera. Broader fields pull in noise: `salmon` alone matches creators named
+# Salmon, and `what:lax` matches plants such as "lax hornpod".
+DEFAULT_QUERY = (
+    "title:(salmon OR lachs OR saumon OR salmón OR salmone OR salmão OR zalm OR lax OR laxfiske OR lohi "
+    "OR lohenpyynti) OR what:(Salmo OR Oncorhynchus)"
+)
 PAGE = 100  # the API's maximum
 
 
@@ -67,7 +74,7 @@ def thumbnail(item: dict, media: Path) -> Path | None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--query", default="salmon")
+    parser.add_argument("--query", default=DEFAULT_QUERY, help="Europeana query (default: salmon titles in 10 languages)")
     parser.add_argument("--qf", action="append", default=[], help="extra filter, e.g. TYPE:IMAGE")
     parser.add_argument("--rows", type=int, default=300)
     parser.add_argument("--name", help="output folder under data/europeana (default: from the query)")
@@ -77,7 +84,7 @@ def main() -> None:
     if not key:
         raise SystemExit("set EUROPEANA_API_KEY in .env")
 
-    folder = args.out / (args.name or slug(args.query))
+    folder = args.out / (args.name or ("salmon" if args.query == DEFAULT_QUERY else slug(args.query)))
     media = folder / "media"
     media.mkdir(parents=True, exist_ok=True)
     records, items, images = {}, 0, 0
