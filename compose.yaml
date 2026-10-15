@@ -2,6 +2,7 @@
 # docker compose run --rm fetch-models    one-time download into MODELS_DIR (needs network)
 # docker compose run --rm fetch-europeana  Europeana items into ./data (needs network)
 # docker compose run --rm embed ...       local models + Neo4j, no internet access
+# docker compose up web                    collections search UI on http://localhost:8080
 #
 # MODELS_DIR is a host directory that several projects can share.
 x-models: &models
@@ -33,6 +34,38 @@ services:
       - ${MODELS_DIR:-./models}:/models:ro
       - ./data:/app/data:ro
     command: ["python", "scripts/embed_bakeoff.py", "evals/embed/sample_bakeoff.jsonl"]
+
+  # Collections search API (R9): same image and isolation as embed.
+  api:
+    <<: *models
+    networks: [graph]
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    environment: *neo4j-env
+    volumes:
+      - ${MODELS_DIR:-./models}:/models:ro
+      - ./data:/app/data:ro
+    command: ["uvicorn", "campus_ai.research_assistant.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 10s
+      start_period: 120s
+      retries: 30
+
+  # Static UI + reverse proxy. The only service with a published port; it holds
+  # no model or data, and joins `edge` because an internal network can't publish.
+  web:
+    image: nginx:1.30.6-alpine
+    networks: [graph, edge]
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8080}:80"
+    volumes:
+      - ./web/static:/usr/share/nginx/html:ro
+      - ./web/nginx.conf:/etc/nginx/conf.d/default.conf:ro
 
   neo4j:
     image: neo4j:2026.09.0-community
@@ -70,6 +103,7 @@ services:
 networks:
   graph:
     internal: true
+  edge: {}
 
 volumes:
   neo4j-data:

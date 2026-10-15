@@ -91,6 +91,8 @@ class StoreTests(unittest.TestCase):
         self.assertIn("SET n:Researcher", query)
         row = params["rows"][0]
         self.assertEqual((len(row["fast"]), len(row["full"])), (128, 768))
+        self.assertIsNone(row["file"])
+        self.assertEqual(driver.calls[1][1]["rows"][0]["file"], "/media/p.jpg")
         self.assertAlmostEqual(float(np.linalg.norm(row["fast"])), 1.0, places=5)
         self.assertEqual(embedder._model.encode.call_args_list[0].args[0], ["salmon ecology", "wildfire smoke"])
         self.assertEqual(driver.calls[1][1]["rows"][0]["text"], "a photo")
@@ -147,6 +149,7 @@ class RetrieverTests(unittest.TestCase):
         hits = HybridRetriever(driver, embedder).search("salmon ocean", k=2, labels=["Item"])
         # "word" is in both rankings so fusion puts it first; the full-size rerank lifts "close" above "far".
         self.assertEqual([hit.id for hit in hits], ["word", "close"])
+        self.assertEqual([hit.found_by for hit in hits], [["words"], ["meaning"]])
         self.assertEqual(hits[1].neighbors[0]["id"], "c1")
         self.assertEqual(driver.calls[0][1]["labels"], ["Item"])
         self.assertEqual(len(driver.calls[0][1]["vector"]), 128)

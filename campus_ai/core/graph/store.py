@@ -118,6 +118,8 @@ class GraphStore:
                     "id": node.id,
                     "kind": label,
                     "text": node.text,
+                    # Media nodes keep their file path so apps can show and cite the original.
+                    "file": None if node.modality == "text" else str(node.content),
                     "modality": node.modality,
                     "props": node.props,
                     "fast": truncate(vector[None], fast)[0].tolist(),
@@ -127,7 +129,7 @@ class GraphStore:
             ]
             self.run(
                 f"UNWIND $rows AS row MERGE (n:{LABEL} {{id: row.id}}) SET n:{label}, n += row.props, "
-                "n.kind = row.kind, n.text = row.text, n.modality = row.modality, n.vec_fast = row.fast, n.vec_full = row.full",
+                "n.kind = row.kind, n.file = row.file, n.text = row.text, n.modality = row.modality, n.vec_fast = row.fast, n.vec_full = row.full",
                 rows=rows,
             )
 

@@ -13,6 +13,8 @@ services:
     build: *build
   embed:
     build: *build
+  api:
+    build: *build
   fetch-models:
     build: *build
     network_mode: host
