@@ -21,12 +21,12 @@ You need `EUROPEANA_API_KEY` in `.env` (free key from
 https://pro.europeana.eu/page/get-api).
 
 ```bash
-docker compose run --rm fetch-europeana --query salmon --rows 300
+docker compose run --rm fetch-europeana --rows 300
 ```
 
 | Option | Default | Meaning |
 |---|---|---|
-| `--query` | `salmon` | Europeana search query; supports its syntax, e.g. `"fishing OR fisheries"` |
+| `--query` | salmon in titles (10 languages) plus the genera *Salmo* and *Oncorhynchus* | Europeana query in its own syntax, e.g. `"title:(fishing OR fisheries)"` |
 | `--qf` | none | Extra filter, repeatable: `--qf TYPE:IMAGE --qf LANGUAGE:en` |
 | `--rows` | 300 | Maximum items to read (open-licence items with media) |
 | `--name` | from the query | Output folder name under `data/europeana/` |
@@ -39,7 +39,12 @@ data/europeana/salmon/
   media/*.jpg        400 px thumbnails
 ```
 
-It prints `300 items (280 with thumbnails) -> data/europeana/salmon/items.jsonl`.
+It prints `300 items (295 with thumbnails) -> data/europeana/salmon/items.jsonl`.
+
+**Write precise queries.** A bare word searches every field, so `salmon` also
+finds works by people named Salmon, and broad subject searches (`what:`) pull
+in look-alikes such as the plant "lax hornpod" for Swedish *lax*. Searching
+`title:` was 99% on topic for the pilot, against about 50% for the bare word.
 Only items under CC0, the Public Domain Mark, CC BY or CC BY-SA are kept.
 Re-running reuses thumbnails already downloaded.
 
@@ -51,8 +56,8 @@ docker compose run --rm embed python scripts/graph_search.py index data/european
 
 This starts Neo4j if needed, embeds every node with EmbeddingGemma 2 and
 writes nodes and links. Indexing the same file again updates it in place.
-Indexing runs on the CPU unless you enable a GPU (see the build guide), and
-is much faster on one.
+On CPU, expect about 45 minutes for 300 items with images on 4 cores; a GPU
+(see the build guide) is much faster.
 
 ### Index your own data
 
@@ -103,6 +108,9 @@ Output shape (ids shortened):
 
 ### Search tips
 
+- To find sources rather than people or collections, add
+  `--label Item --label Image`. Otherwise a creator whose name matches your
+  words can rank high.
 - Query in any language. Meaning-based matching works across languages, and
   keyword matching ignores common words such as "the", "de" or "und".
 - Search pictures by what they show: `search "boats on a river" --label Image`.

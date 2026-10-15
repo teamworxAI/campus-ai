@@ -173,7 +173,7 @@ sequenceDiagram
     participant EMB as embed (offline)
     participant NEO as Neo4j
 
-    Op->>FE: --query salmon --rows 300
+    Op->>FE: --rows 300 (default query: salmon titles)
     loop pages of 100 (cursor)
         FE->>API: search.json (X-Api-Key header, reusability=open, media=true)
         API-->>FE: items (profile=rich)

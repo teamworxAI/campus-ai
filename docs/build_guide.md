@@ -168,7 +168,7 @@ docker compose run --rm embed python -c "import socket; socket.create_connection
 ## 8. Harvest a Europeana collection
 
 ```bash
-docker compose run --rm fetch-europeana --query salmon --rows 300
+docker compose run --rm fetch-europeana --rows 300
 ```
 
 This takes about 2 minutes and writes `data/europeana/salmon/items.jsonl`
@@ -182,7 +182,8 @@ docker compose run --rm embed python scripts/graph_search.py search "salmon fish
 docker compose run --rm embed python scripts/graph_search.py search "a fish on a plate" --label Image -k 5
 ```
 
-Indexing time depends on the hardware (see the user guide). Results list
+Indexing 300 items with 295 images (about 620 nodes) took about 45 minutes
+on 4 CPU cores without a GPU; a GPU cuts this to minutes. Results list
 items and images with their linked collection, institution and creator.
 
 ## 10. Optional: NVIDIA GPU
