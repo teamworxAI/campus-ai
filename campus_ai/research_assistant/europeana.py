@@ -62,7 +62,8 @@ def to_records(item: dict, image: str | None = None) -> list[dict]:
     text = "\n".join(unique(item.get("title", []) + item.get("dcDescription", [])))[:MAX_TEXT]
     props = {
         "source": SOURCE,
-        "url": item.get("guid", f"https://www.europeana.eu/item{item['id']}"),
+        # The API's guid carries tracking parameters, the API key among them: keep the bare page URL.
+        "url": item.get("guid", f"https://www.europeana.eu/item{item['id']}").split("?")[0],
         "rights": rights,
         "type": item.get("type", ""),
         "provider": first(item, "provider"),
