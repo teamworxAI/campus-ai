@@ -231,6 +231,8 @@ discover -s tests` also runs the Neo4j integration tests.
 - **Thumbnails only** for Europeana images. Full-size media, audio and video
   need each provider's host (and network allowlisting). VIDEO and SOUND
   items are indexed as text.
+- **Mixed-modality ranking.** A text query scores text nodes higher than
+  images, so search pictures and texts as separate lists (`labels`).
 - **Item text mixes languages** when Europeana returns translated titles.
   This is fine for the multilingual embedder, but noisy for fulltext.
 - **Fulltext label filter after top-n** (section 3) can drop keyword matches

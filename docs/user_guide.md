@@ -97,15 +97,22 @@ docker compose run --rm embed python scripts/graph_search.py search "salmon fish
 
 ### Reading results
 
-Output shape (ids shortened):
+Real output on the salmon pilot (ids shortened):
 
 ```text
- 1. europeana:/<dataset>/<record> [Item] 0.0328  <title and description>
-      -> IN europeana:collection:<dataset>  <dataset name>
-      -> CREATED_BY europeana:creator:<name>  <creator>
-      <- PART_OF europeana:/<dataset>/<record>#image  
- 2. europeana:/<dataset>/<record>#image [Image] 0.0164  (no caption)
-      -> PART_OF europeana:/<dataset>/<record>  <title of the item it belongs to>
+$ graph_search.py search "salmon fishing on rivers" --label Image -k 3
+ 1. europeana:/2021012/_BBE3…#image [Image] 0.0164  (no caption)
+      -> PART_OF europeana:/2021012/_BBE3…  Salmon Fishing Laxfiske Lohenpyynti technique: öljy puulle …
+ 2. europeana:/90402/RP_P_1954_64#image [Image] 0.0161  (no caption)
+      -> PART_OF europeana:/90402/RP_P_1954_64  Zalmvisserij Salmon Fishing Jachtpartijen …
+ 3. europeana:/2021009/_00B6…#image [Image] 0.0159  (no caption)
+      -> PART_OF europeana:/2021009/_00B6…  painokuva Gunnar Berndtsonin maalauksesta Lohenpyynti …
+
+$ graph_search.py search "salmon in Canada" --label Item -k 2
+ 1. europeana:/08711/…_item_75914 [Item] 0.0328  Salmon-fishing in Canada
+      -> IN europeana:collection:08711_Biodiversity_Heritage_Library  08711_Biodiversity_Heritage_Library
+ 2. europeana:/08711/…_item_116883 [Item] 0.0323  Salmon-fishing in Canada, by a resident
+      -> CREATED_BY europeana:creator:adamson-w-agar-william-agar-1800-1868  Adamson, W. Agar …
 ```
 
 - **Rank, id, [label], score, text.** The score is a reciprocal-rank-fusion
@@ -126,6 +133,10 @@ Output shape (ids shortened):
 - Query in any language. Meaning-based matching works across languages, and
   keyword matching ignores common words such as "the", "de" or "und".
 - Search pictures by what they show: `search "boats on a river" --label Image`.
+- **Search pictures and texts separately.** In a mixed search, text items
+  outrank pictures, because a text query is always closer to text than to an
+  image. `--label Image` and `--label Item` give two good lists; a user
+  interface should show them side by side rather than merged.
 - Search by example image:
   `search data/europeana/salmon/media/<file>.jpg --modality image --label Image`.
 - Lucene syntax (`AND`, quotes, `*`) is ignored on purpose. Just type words.
