@@ -1,5 +1,6 @@
 # docker compose run --rm test            unit tests (no models, no database)
 # docker compose run --rm fetch-models    one-time download into MODELS_DIR (needs network)
+# docker compose run --rm fetch-europeana  Europeana items into ./data (needs network)
 # docker compose run --rm embed ...       local models + Neo4j, no internet access
 #
 # MODELS_DIR is a host directory that several projects can share.
@@ -30,6 +31,7 @@ services:
     environment: *neo4j-env
     volumes:
       - ${MODELS_DIR:-./models}:/models:ro
+      - ./data:/app/data:ro
     command: ["python", "scripts/embed_bakeoff.py", "evals/embed/sample_bakeoff.jsonl"]
 
   neo4j:
@@ -53,6 +55,17 @@ services:
     volumes:
       - ${MODELS_DIR:-./models}:/models
     command: ["python", "scripts/fetch_models.py"]
+
+  fetch-europeana:
+    build: .
+    image: campus-ai:test
+    profiles: [fetch]
+    environment:
+      EUROPEANA_API_KEY: ${EUROPEANA_API_KEY:-}
+    volumes:
+      - ./data:/app/data
+    entrypoint: ["python", "scripts/fetch_europeana.py"]
+    command: []
 
 networks:
   graph:

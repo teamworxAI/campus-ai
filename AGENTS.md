@@ -31,7 +31,12 @@ docker compose run --rm fetch-models       # one-time: weights into MODELS_DIR
 docker compose run --rm embed              # bake-off on local models, offline
 docker compose run --rm embed python scripts/graph_search.py index evals/embed/sample_bakeoff.jsonl
 docker compose run --rm embed python scripts/graph_search.py search "ocean warming"
+docker compose run --rm fetch-europeana --query salmon --rows 300   # needs EUROPEANA_API_KEY
+docker compose run --rm embed python scripts/graph_search.py index data/europeana/salmon/items.jsonl
 ```
+
+Harvested collections go in `data/` (mounted read-only into `embed`, never
+committed).
 
 `embed` starts Neo4j on first use; its data persists in the `neo4j-data`
 volume (`docker compose down -v` wipes it).
