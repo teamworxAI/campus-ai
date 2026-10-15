@@ -1,5 +1,6 @@
 import importlib.util
 import os
+import tempfile
 import unittest
 import zlib
 from pathlib import Path
@@ -62,6 +63,11 @@ class HelperTests(unittest.TestCase):
     def test_fulltext_query_strips_lucene_syntax(self):
         self.assertEqual(fulltext_query('salmon AND "ocean" (temp*) OR fr:été'), "salmon ocean temp fr été")
 
+    def test_fulltext_query_drops_function_words(self):
+        self.assertEqual(fulltext_query("incendies de forêt et santé"), "incendies forêt santé")
+        self.assertEqual(fulltext_query("Photographies d'archives of the BC coast"), "photographies archives bc coast")
+        self.assertEqual(fulltext_query("de la"), "")
+
     def test_fuse_rewards_agreement(self):
         scores = fuse([["a", "b", "c"], ["b"]])
         self.assertEqual(max(scores, key=scores.get), "b")
@@ -117,7 +123,7 @@ class RetrieverTests(unittest.TestCase):
         close, far = query_vector.tolist(), (-query_vector).tolist()
 
         def answer(query, params):
-            if "vector.queryNodes" in query:  # fast index ranks the far node first
+            if "VECTOR INDEX" in query:  # fast index ranks the far node first
                 return [
                     {"id": "far", "labels": ["Entity", "Item"], "text": "far", "vec": far, "score": 0.9},
                     {"id": "close", "labels": ["Entity", "Item"], "text": "close", "vec": close, "score": 0.8},
@@ -145,14 +151,23 @@ class RetrieverTests(unittest.TestCase):
 
 
 class ScriptTests(unittest.TestCase):
-    def test_load_items_links_and_queries(self):
+    def setUp(self):
         spec = importlib.util.spec_from_file_location("graph_search", ROOT / "scripts" / "graph_search.py")
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        self.module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.module)
+
+    def test_load_items_links_and_queries(self):
         path = ROOT / "evals" / "embed" / "sample_bakeoff.jsonl"
-        nodes, links, queries = module.load(path)
+        nodes, links, queries = self.module.load(path)
         self.assertEqual((len(nodes), len(links), len(queries)), (6, 0, 5))
         self.assertTrue(all(node.label == "Item" and node.text for node in nodes))
+
+    def test_media_text_is_caption_not_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "items.jsonl"
+            path.write_text('{"id": "p", "modality": "image", "content": "red.png"}\n', encoding="utf-8")
+            (node,), _, _ = self.module.load(path)
+        self.assertEqual((node.text, node.content), ("", str(Path(tmp) / "red.png")))
 
 
 @unittest.skipUnless(os.environ.get("NEO4J_URI"), "needs Neo4j: run in the embed service")

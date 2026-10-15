@@ -37,20 +37,19 @@ def load(path: Path) -> tuple[list[Node], list[Link], list[dict]]:
         elif "src" in record:
             links.append(Link(record["src"], record["type"], record["dst"], record.get("props", {})))
         else:
-            modality = record.get("modality", "text")
-            text, content = record.get("text"), record["content"]
-            if modality != "text":
-                text, content = text or "", str(path.parent / content)
-            nodes.append(
-                Node(record["id"], record.get("label", "Item"), text or content, modality, content, record.get("props", {}))
-            )
+            modality, content = record.get("modality", "text"), record["content"]
+            if modality == "text":
+                text = record.get("text") or content
+            else:  # media: index only a real caption, never the file path
+                text, content = record.get("text", ""), str(path.parent / content)
+            nodes.append(Node(record["id"], record.get("label", "Item"), text, modality, content, record.get("props", {})))
     return nodes, links, queries
 
 
 def show(hits) -> None:
     for rank, hit in enumerate(hits, start=1):
         label = next((label for label in hit.labels if label != "Entity"), "Entity")
-        print(f"{rank:2}. {hit.id} [{label}] {hit.score:.4f}  {hit.text[:100]}")
+        print(f"{rank:2}. {hit.id} [{label}] {hit.score:.4f}  {hit.text[:100] or '(no caption)'}")
         for neighbor in hit.neighbors:
             arrow = "->" if neighbor["outgoing"] else "<-"
             print(f"      {arrow} {neighbor['type']} {neighbor['id']}  {(neighbor['text'] or '')[:80]}")

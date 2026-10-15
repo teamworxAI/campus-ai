@@ -17,6 +17,7 @@ from typing import Any, Sequence
 import numpy as np
 
 from campus_ai.core.embed import Embedder, truncate
+from campus_ai.core.graph.stopwords import STOPWORDS
 from campus_ai.core.graph.store import LABEL, TEXT_INDEX, VECTOR_INDEX, dims, name
 
 RRF_K = 60  # standard reciprocal rank fusion constant
@@ -32,8 +33,12 @@ class Hit:
 
 
 def fulltext_query(text: str) -> str:
-    """Plain words OR-ed together, so user input can't break Lucene query syntax."""
-    words = [word for word in re.findall(r"\w+", text) if word not in ("AND", "OR", "NOT", "TO")]
+    """Content words OR-ed together, lower-cased so user input can't use Lucene syntax.
+
+    Drops function words and one-letter fragments ("d" from "d'archives"),
+    which would otherwise match nearly every document in that language.
+    """
+    words = [word for word in re.findall(r"\w+", text.lower()) if len(word) > 1 and word not in STOPWORDS]
     return " ".join(words)
 
 
@@ -74,10 +79,12 @@ class HybridRetriever:
         full = self.embedder.embed([query], modality=modality, kind="query")[0]
         wanted = [name(label) for label in labels or []]
         where = "WHERE any(label IN labels(node) WHERE label IN $labels)" if wanted else ""
+        # The label filter applies after the index returns its top n.
         returns = "RETURN node.id AS id, labels(node) AS labels, node.text AS text, node.vec_full AS vec, score"
 
         rows = self.run(
-            f"CALL db.index.vector.queryNodes('{VECTOR_INDEX}', $n, $vector) YIELD node, score {where} {returns}",
+            f"MATCH (node:{LABEL}) SEARCH node IN (VECTOR INDEX {VECTOR_INDEX} FOR $vector LIMIT $n) "
+            f"SCORE AS score {where} {returns}",
             n=self.candidates,
             vector=truncate(full[None], fast)[0].tolist(),
             labels=wanted,
