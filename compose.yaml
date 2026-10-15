@@ -1,6 +1,6 @@
-# docker compose run --rm test            unit tests (no models)
+# docker compose run --rm test            unit tests (no models, no database)
 # docker compose run --rm fetch-models    one-time download into MODELS_DIR (needs network)
-# docker compose run --rm embed ...       local models, networking disabled
+# docker compose run --rm embed ...       local models + Neo4j, no internet access
 #
 # MODELS_DIR is a host directory that several projects can share.
 x-models: &models
@@ -10,6 +10,11 @@ x-models: &models
       EXTRAS: embed
   image: campus-ai:embed
 
+x-neo4j-env: &neo4j-env
+  NEO4J_URI: bolt://neo4j:7687
+  NEO4J_USER: neo4j
+  NEO4J_PASSWORD: ${NEO4J_PASSWORD:-campus-ai-local}
+
 services:
   test:
     build: .
@@ -17,10 +22,27 @@ services:
 
   embed:
     <<: *models
-    network_mode: none
+    # The graph network is internal: it reaches Neo4j and nothing else.
+    networks: [graph]
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    environment: *neo4j-env
     volumes:
       - ${MODELS_DIR:-./models}:/models:ro
     command: ["python", "scripts/embed_bakeoff.py", "evals/embed/sample_bakeoff.jsonl"]
+
+  neo4j:
+    image: neo4j:2026.09.0-community
+    networks: [graph]
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-campus-ai-local}
+    volumes:
+      - neo4j-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:7474"]
+      interval: 5s
+      retries: 30
 
   fetch-models:
     <<: *models
@@ -31,3 +53,10 @@ services:
     volumes:
       - ${MODELS_DIR:-./models}:/models
     command: ["python", "scripts/fetch_models.py"]
+
+networks:
+  graph:
+    internal: true
+
+volumes:
+  neo4j-data:

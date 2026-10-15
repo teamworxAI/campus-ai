@@ -43,7 +43,8 @@ Status: draft for iteration. Open decisions are listed in section 8.
    platform, with no extra integration work.
 7. **Portable and offline by default.** Everything runs in Docker and
    rebuilds from the repo on any machine. Models run in containers from
-   local weights (a shared host directory) with networking disabled.
+   local weights (a shared host directory), on an internal Docker network
+   that reaches only Neo4j, never the internet.
 8. **Simple codebase.** Per `AGENTS.md`: build small shared modules in
    `campus_ai/core/` and add only what is strictly needed.
 
@@ -52,7 +53,7 @@ Status: draft for iteration. Open decisions are listed in section 8.
 | Component | What | Where |
 |---|---|---|
 | LLM router | One interface with Claude (in-region cloud) and Ollama (local) backends; route by task (vision, reasoning, cheap classification) and by data region | `campus_ai/core/llm/` |
-| Graph core | Neo4j writer, vector + fulltext indexing, hybrid retriever with graph expansion | `campus_ai/core/graph/` |
+| Graph core | Neo4j (`neo4j:2026.09.0-community` in compose) writer, vector + fulltext indexing, hybrid retriever with graph expansion. Every searchable node carries the `Entity` label, a 128-d vector (indexed, for candidates) and a 768-d vector (for reranking); vector and fulltext rankings are fused by reciprocal rank fusion | `campus_ai/core/graph/` |
 | Embedder | EmbeddingGemma 2 (open, Apache 2.0, runs offline from local weights): text, images, audio and video in one vector space; 128-dim vectors for fast candidate search, 768-dim for reranking. Behind one interface so it can be swapped (decision D7) | `campus_ai/core/embed/` |
 | Agent loop | Claude Agent SDK for the agentic steps (tool use, subagents, structured outputs); plain Python for deterministic steps | `campus_ai/<product>/agent.py` |
 | Skills | Domain procedures as Agent Skills (`SKILL.md` + scripts): WCAG remediation playbook, Horizon call analysis | `.claude/skills/` and `campus_ai/<product>/skills/` |
@@ -318,7 +319,7 @@ Each card is sized for one cloud session and one PR.
 |---|---|---|
 | P0 | Project skeleton: `pyproject.toml` (uv), `campus_ai/` package, unittest setup, SessionStart hook | - |
 | P1 | LLM router with Claude (in-region) and Ollama backends, with tests | P0 |
-| P5 | Graph core: Neo4j writer, vector + fulltext indexes, hybrid retriever | P0 |
+| P5 | Graph core: Neo4j writer, vector + fulltext indexes, hybrid retriever | P0, P7 |
 | P6 | Eval harness: gold-set format, RAGAS + deterministic metrics, report | P0 |
 | P2 | Tracing module: per-run JSONL log of tool calls, tokens, cost | P0 |
 | P3 | Review queue Streamlit component (approve/edit/reject) | P0 |

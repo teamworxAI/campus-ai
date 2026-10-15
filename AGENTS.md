@@ -19,7 +19,8 @@ Dependencies are managed with `uv` inside the image (`pyproject.toml` +
 
 Models are fully local. Weights live in a host directory (`MODELS_DIR`,
 default `./models`, shareable across projects) mounted read-only into the
-`embed` service, which runs with networking disabled. Only
+`embed` service. That service sits on an internal Docker network that
+reaches only Neo4j (the graph store), never the internet. Only
 `fetch-models` touches the network, once, to fill that directory; you can
 also copy weights in from another machine.
 
@@ -28,7 +29,12 @@ docker compose build                       # test image + embed image
 docker compose run --rm test               # unit tests
 docker compose run --rm fetch-models       # one-time: weights into MODELS_DIR
 docker compose run --rm embed              # bake-off on local models, offline
+docker compose run --rm embed python scripts/graph_search.py index evals/embed/sample_bakeoff.jsonl
+docker compose run --rm embed python scripts/graph_search.py search "ocean warming"
 ```
+
+`embed` starts Neo4j on first use; its data persists in the `neo4j-data`
+volume (`docker compose down -v` wipes it).
 
 On machines with an NVIDIA GPU, add `compose.gpu.yaml` (e.g. set
 `COMPOSE_FILE` in `.env`, see `.env.example`); models then run in bfloat16.
