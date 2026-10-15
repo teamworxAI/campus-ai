@@ -23,12 +23,15 @@ from pathlib import Path
 from campus_ai.research_assistant.europeana import is_open, slug, to_records
 
 SEARCH = "https://api.europeana.eu/record/v2/search.json"
-# Pilot theme (R8): salmon in item titles in 10 languages, plus the salmon
-# genera. Broader fields pull in noise: `salmon` alone matches creators named
-# Salmon, and `what:lax` matches plants such as "lax hornpod".
+# Pilot theme (R8): salmon as a subject (species and family) or as fishing in
+# titles, in 7 languages, without natural-history specimen photos. Looser
+# queries were half noise: people named Salmon or Lax, salmon-coloured
+# fashion, and herbarium sheets named after the botanist C.E. Salmon.
 DEFAULT_QUERY = (
-    "title:(salmon OR lachs OR saumon OR salmón OR salmone OR salmão OR zalm OR lax OR laxfiske OR lohi "
-    "OR lohenpyynti) OR what:(Salmo OR Oncorhynchus)"
+    'what:("Salmo salar" OR Salmo OR Oncorhynchus OR "Atlantic salmon" OR "Pacific salmon" OR salmonidae) '
+    'OR title:("salmon fishing" OR "salmon fishery" OR "salmon cannery" OR "salmon river" OR laxfiske '
+    'OR lohenpyynti OR lohenkalastus OR Lachsfang OR Lachsfischerei OR "pêche au saumon" '
+    'OR "pesca del salmón" OR "pesca del salmon") NOT what:(specimen)'
 )
 PAGE = 100  # the API's maximum
 
@@ -74,7 +77,7 @@ def thumbnail(item: dict, media: Path) -> Path | None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--query", default=DEFAULT_QUERY, help="Europeana query (default: salmon titles in 10 languages)")
+    parser.add_argument("--query", default=DEFAULT_QUERY, help="Europeana query (default: the salmon pilot theme)")
     parser.add_argument("--qf", action="append", default=[], help="extra filter, e.g. TYPE:IMAGE")
     parser.add_argument("--rows", type=int, default=300)
     parser.add_argument("--name", help="output folder under data/europeana (default: from the query)")
