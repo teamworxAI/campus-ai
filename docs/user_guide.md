@@ -26,7 +26,7 @@ docker compose run --rm fetch-europeana --rows 300
 
 | Option | Default | Meaning |
 |---|---|---|
-| `--query` | salmon in titles (10 languages) plus the genera *Salmo* and *Oncorhynchus* | Europeana query in its own syntax, e.g. `"title:(fishing OR fisheries)"` |
+| `--query` | the salmon pilot query (below) | Europeana query in its own syntax, e.g. `'title:("cod fishing" OR torskfiske)'` |
 | `--qf` | none | Extra filter, repeatable: `--qf TYPE:IMAGE --qf LANGUAGE:en` |
 | `--rows` | 300 | Maximum items to read (open-licence items with media) |
 | `--name` | from the query | Output folder name under `data/europeana/` |
@@ -39,12 +39,24 @@ data/europeana/salmon/
   media/*.jpg        400 px thumbnails
 ```
 
-It prints `300 items (295 with thumbnails) -> data/europeana/salmon/items.jsonl`.
+It prints `151 items (94 with thumbnails) -> data/europeana/salmon/items.jsonl`;
+the default query has 151 matches in all.
 
-**Write precise queries.** A bare word searches every field, so `salmon` also
-finds works by people named Salmon, and broad subject searches (`what:`) pull
-in look-alikes such as the plant "lax hornpod" for Swedish *lax*. Searching
-`title:` was 99% on topic for the pilot, against about 50% for the bare word.
+**Write precise queries.** The default is salmon as a subject (`what:` *Salmo*,
+*Oncorhynchus*, salmonids) or salmon fishing in titles in 7 languages, without
+natural-history specimen photos (`NOT what:(specimen)`). By a full read of the
+titles, about 95% of its items are on topic. Looser queries were about half
+noise:
+
+| Query | Typical noise |
+|---|---|
+| `salmon` | Works by people named Salmon |
+| `what:(… OR lax …)` | The plant "lax hornpod" (Swedish *lax* = salmon) |
+| `title:(salmon OR saumon …)` | Herbarium sheets named after the botanist C.E. Salmon; salmon-*coloured* fashion; people named Lax or Salmón |
+| any species query | Hundreds of near-identical specimen photos from one museum |
+
+Prefer subject fields and multi-word phrases over single words, and check a
+sample of titles in `items.jsonl` before indexing.
 Only items under CC0, the Public Domain Mark, CC BY or CC BY-SA are kept.
 Re-running reuses thumbnails already downloaded.
 
@@ -173,6 +185,6 @@ Use your `NEO4J_PASSWORD` if you set one.
 | `/models/google/embeddinggemma-2 not found` | Run `docker compose run --rm fetch-models`, or check `MODELS_DIR` in `.env` |
 | `entity_vec holds 128-d vectors but … gives 384-d` | The graph was built with another backend. Use the same `--backend`, or wipe with `docker compose down -v` |
 | `Neo.ClientError.Security.Unauthorized` | `NEO4J_PASSWORD` changed after Neo4j's first start. Restore it, or wipe the volume |
-| Fewer results than `-k` with `--label` | The filter applies after the top 50 candidates. Raise `candidates` in code, or drop the filter |
+| `--label` returns nothing on a graph built before this version | Run any `index` command once: `ensure_schema` adds the `kind` filter to the old graph |
 | `does not support 'image' inputs` | `--backend e5-small` is text only |
 | Indexing is slow | Use a GPU (`compose.gpu.yaml`) or index fewer rows |

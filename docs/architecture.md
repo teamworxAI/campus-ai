@@ -173,7 +173,7 @@ sequenceDiagram
     participant EMB as embed (offline)
     participant NEO as Neo4j
 
-    Op->>FE: --rows 300 (default query: salmon titles)
+    Op->>FE: --rows 300 (default: salmon pilot query)
     loop pages of 100 (cursor)
         FE->>API: search.json (X-Api-Key header, reusability=open, media=true)
         API-->>FE: items (profile=rich)
@@ -212,7 +212,8 @@ flowchart TD
 ## 6. Graph model
 
 All searchable nodes share one label, `Entity`, which carries the unique `id`
-constraint and both indexes. Each node also has a domain label.
+constraint and both indexes. Each node also has a domain label, copied to its
+`kind` property so vector search can filter by it inside the index.
 
 ```mermaid
 erDiagram
@@ -223,6 +224,7 @@ erDiagram
     Item {
         string id "europeana:/dataset/record"
         string text "titles + descriptions"
+        string kind "Item"
         string modality "text"
         string rights "rights statement URL"
         string url "europeana.eu item page"
@@ -244,7 +246,7 @@ erDiagram
 | Index | Type | On | Used for |
 |---|---|---|---|
 | `entity_id` | uniqueness constraint | `Entity.id` | MERGE on re-index |
-| `entity_vec` | vector, cosine, 128-d | `Entity.vec_fast` | Candidate search |
+| `entity_vec` | vector, cosine, 128-d, filterable by `kind` | `Entity.vec_fast` | Candidate search, optionally within labels |
 | `entity_text` | fulltext (Lucene) | `Entity.text` | Keyword candidates |
 
 The planned research graph (section 4.2 of the master plan: Researcher,

@@ -85,8 +85,8 @@ class Link:
 
 | Method | What it does |
 |---|---|
-| `ensure_schema()` | Creates the `entity_id` constraint, the 128-d `entity_vec` vector index and the `entity_text` fulltext index if they don't exist, then waits for them to come online. Refuses if an existing vector index has another size |
-| `upsert(nodes)` | Groups nodes by `(label, modality)`, embeds each group once at full size, then `MERGE`s by `id` and sets the label, props, text, `vec_fast` (prefix) and `vec_full` |
+| `ensure_schema()` | Creates the `entity_id` constraint, the 128-d `entity_vec` vector index (with `kind` as a filter property) and the `entity_text` fulltext index if they don't exist, then waits for them to come online. Refuses if an existing vector index has another size |
+| `upsert(nodes)` | Groups nodes by `(label, modality)`, embeds each group once at full size, then `MERGE`s by `id` and sets the label, `kind`, props, text, `vec_fast` (prefix) and `vec_full` |
 | `link(links)` | Groups by type and `MERGE`s relationships between existing nodes. Links to unknown ids are skipped silently |
 
 Labels and relationship types can't be Cypher parameters, so `name()` accepts
@@ -105,7 +105,7 @@ sequenceDiagram
     participant N as Neo4j
     C->>R: search(query, k=10, modality, labels, neighbors=5)
     R->>E: embed([query], kind="query")  (768-d)
-    R->>N: SEARCH ... VECTOR INDEX entity_vec FOR vec[:128] LIMIT 50 (+ label filter)
+    R->>N: SEARCH ... VECTOR INDEX entity_vec FOR vec[:128] WHERE kind IN labels LIMIT 50
     alt text query with content words
         R->>N: db.index.fulltext.queryNodes(entity_text, words, limit 50)
     end
@@ -128,8 +128,13 @@ order the results but aren't probabilities.
 
 Media queries (`modality="image"` etc.) use only the vector side.
 
-**Label filter.** Applied after each index returns its top 50, so a narrow
-label on a large graph can return fewer than `k` hits.
+**Label filter.** Every node stores its label as `kind`, and the vector index
+includes `kind` as a filter property, so `SEARCH … WHERE node.kind IN $labels`
+returns the 50 nearest nodes *with* those labels. (An earlier version filtered
+after the index's top 50; on a mixed graph, text items filled every slot and
+`--label Image` came back empty.) Fulltext still filters after its top 50,
+which matters little because media nodes have no text. `ensure_schema`
+migrates graphs indexed before this change in place, without re-embedding.
 
 **Hit.**
 
@@ -228,7 +233,8 @@ discover -s tests` also runs the Neo4j integration tests.
   items are indexed as text.
 - **Item text mixes languages** when Europeana returns translated titles.
   This is fine for the multilingual embedder, but noisy for fulltext.
-- **Label filter after top-n** (section 3) can under-fill results.
+- **Fulltext label filter after top-n** (section 3) can drop keyword matches
+  for a rare label; vector candidates are unaffected.
 - **No Europeana gold set yet.** Recall on collections search waits for the
   labelled queries in master plan section 4.5.
 - **Re-index on model change.** The vector index has one fixed size.
