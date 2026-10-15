@@ -95,11 +95,28 @@ Edit `.env`:
 |---|---|---|
 | `MODELS_DIR` | all model work | Host folder for weights. Empty means `./models`. Share it across projects, e.g. `C:/models` on Windows or `/srv/models` on Linux |
 | `HF_TOKEN` | optional | Only if Hugging Face rate-limits you. The models aren't gated |
+| `DATA_DIR`, `NEO4J_DATA` | optional | Put harvests and the graph on another drive; see below |
 | `NEO4J_PASSWORD` | optional | Set it **before** Neo4j first starts; empty means `campus-ai-local`. Neo4j has no published ports |
 | `EUROPEANA_API_KEY` | step 8 | Free from https://pro.europeana.eu/page/get-api |
 | `COMPOSE_FILE` | step 10 | GPU overlay; leave commented on machines without NVIDIA |
 
 `.env` is gitignored. Never commit it.
+
+### Keep large files on another drive (e.g. D:)
+
+Everything big can live off the system drive:
+
+| What | Size | Where it goes |
+|---|---|---|
+| Docker images, build cache, the Neo4j volume | ~12 GB and growing | Docker Desktop > Settings > Resources > Advanced > **Disk image location**, e.g. `D:\Docker`. Do this first: it moves all three at once and keeps Neo4j at full speed |
+| Model weights | ~2 GB | `MODELS_DIR=D:/models` |
+| Harvested collections and thumbnails | grows per collection | `DATA_DIR=D:/campus-ai/data` |
+| Neo4j data, if you want it outside Docker | grows with the index | `NEO4J_DATA=D:/campus-ai/neo4j` (optional; a folder on a Windows drive is slower than the volume) |
+
+Use forward slashes in `.env`. Create the folders first. Changing `DATA_DIR`
+means harvesting again or copying the old `data/` folder over; changing
+`NEO4J_DATA` starts an empty graph, so index again. On Linux, Docker's data
+moves with `data-root` in `/etc/docker/daemon.json`.
 
 ## 4. Build the images
 

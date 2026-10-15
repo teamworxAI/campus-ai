@@ -1,10 +1,11 @@
 # docker compose run --rm test            unit tests (no models, no database)
 # docker compose run --rm fetch-models    one-time download into MODELS_DIR (needs network)
-# docker compose run --rm fetch-europeana  Europeana items into ./data (needs network)
+# docker compose run --rm fetch-europeana  Europeana items into DATA_DIR (needs network)
 # docker compose run --rm embed ...       local models + Neo4j, no internet access
 # docker compose up web                    collections search UI on http://localhost:8080
 #
-# MODELS_DIR is a host directory that several projects can share.
+# MODELS_DIR is a host directory that several projects can share. MODELS_DIR, DATA_DIR
+# and NEO4J_DATA can point at another drive (e.g. D:) to keep large files off C:.
 x-models: &models
   build:
     context: .
@@ -32,7 +33,7 @@ services:
     environment: *neo4j-env
     volumes:
       - ${MODELS_DIR:-./models}:/models:ro
-      - ./data:/app/data:ro
+      - ${DATA_DIR:-./data}:/app/data:ro
     command: ["python", "scripts/embed_bakeoff.py", "evals/embed/sample_bakeoff.jsonl"]
 
   # Collections search API (R9): same image and isolation as embed.
@@ -45,7 +46,7 @@ services:
     environment: *neo4j-env
     volumes:
       - ${MODELS_DIR:-./models}:/models:ro
-      - ./data:/app/data:ro
+      - ${DATA_DIR:-./data}:/app/data:ro
     command: ["uvicorn", "campus_ai.research_assistant.api:app", "--host", "0.0.0.0", "--port", "8000"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
@@ -73,7 +74,8 @@ services:
     environment:
       NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-campus-ai-local}
     volumes:
-      - neo4j-data:/data
+      # A volume name (default) or a host folder, e.g. NEO4J_DATA=D:/campus-ai/neo4j
+      - ${NEO4J_DATA:-neo4j-data}:/data
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:7474"]
       interval: 5s
@@ -96,7 +98,7 @@ services:
     environment:
       EUROPEANA_API_KEY: ${EUROPEANA_API_KEY:-}
     volumes:
-      - ./data:/app/data
+      - ${DATA_DIR:-./data}:/app/data
     entrypoint: ["python", "scripts/fetch_europeana.py"]
     command: []
 

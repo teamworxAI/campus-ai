@@ -35,8 +35,9 @@ docker compose run --rm fetch-europeana --rows 300   # needs EUROPEANA_API_KEY
 docker compose run --rm embed python scripts/graph_search.py index data/europeana/salmon/items.jsonl
 ```
 
-Harvested collections go in `data/` (mounted read-only into `embed`, never
-committed).
+Harvested collections go in `DATA_DIR` (default `data/`, mounted read-only
+into `embed` and `api`, never committed). `MODELS_DIR`, `DATA_DIR` and
+`NEO4J_DATA` can point at another drive; see the build guide.
 
 `embed` starts Neo4j on first use; its data persists in the `neo4j-data`
 volume (`docker compose down -v` wipes it).
