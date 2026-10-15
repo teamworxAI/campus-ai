@@ -78,7 +78,9 @@ function filters(results) {
     h("input", { type: "checkbox", checked, disabled, onchange }), label);
   const flip = (key) => (e) => { state.show[key] = e.target.checked; renderResults(); };
   const lic = (g) => (e) => { e.target.checked ? state.licences.add(g) : state.licences.delete(g); renderResults(); };
-  return h("aside", { class: "filters", "aria-label": "Filters" },
+  // Open on wide screens; on phones a "Filters" disclosure keeps results near the top.
+  return h("details", { class: "filters", open: matchMedia("(min-width: 701px)").matches },
+    h("summary", { text: "Filters" }),
     h("fieldset", {}, h("legend", { text: "Source" }),
       box("Europeana (EU)", true, null, true), box("Arca (BC) · coming soon", false, null, true)),
     h("fieldset", {}, h("legend", { text: "Show" }),
@@ -135,14 +137,15 @@ function renderResults() {
   const pictures = state.show.pictures ? state.results.pictures.filter(keep) : [];
   const texts = state.show.texts ? state.results.texts.filter(keep) : [];
   const label = state.results.byImage ? `Pictures like “${state.results.query}”` : "European collections";
-  area.replaceChildren(
+  area.replaceChildren(...[
     h("div", { class: "head-row" },
       h("h2", { id: "eu-heading" }, label, h("span", { class: "sub", text: " · Europeana" })),
       h("span", { class: "muted", text: "Best matches first" })),
     pictures.length ? h("ol", { class: "grid", "aria-label": "Pictures" }, pictures.map(pictureCard)) : null,
     texts.length ? h("h2", { text: "Books, reports and film" }) : null,
     texts.length ? h("ol", { class: "list" }, texts.map(textRow)) : null,
-    !pictures.length && !texts.length ? h("div", { class: "state", text: "Nothing matches. Try other words, another language, or fewer filters." }) : null);
+    !pictures.length && !texts.length ? h("div", { class: "state", text: "Nothing matches. Try other words, another language, or fewer filters." }) : null,
+  ].filter(Boolean));
 }
 
 function renderSearch(status) {

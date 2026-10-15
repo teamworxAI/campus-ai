@@ -56,6 +56,8 @@ h1 { margin: 0; font-family: var(--serif); font-weight: 500; font-size: 34px; li
 
 .layout { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; padding-top: 28px; padding-bottom: 56px; }
 .filters { flex: 1 1 220px; max-width: 260px; display: flex; flex-direction: column; gap: 22px; font-size: 15px; }
+.filters summary { font-weight: 600; min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+.filters[open] summary { display: none; }
 .filters fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .filters legend { font-weight: 600; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); margin-bottom: 10px; }
 .filters label { display: flex; gap: 10px; align-items: center; min-height: 28px; }
@@ -124,13 +126,20 @@ dialog { border: 0; border-radius: 14px; padding: 0; max-width: 640px; width: ca
 dialog::backdrop { background: rgba(20, 35, 43, 0.45); }
 .cite-box { padding: 22px; display: flex; flex-direction: column; gap: 14px; }
 .cite-box h2 { font-size: 20px; }
+.cite-box .seg { align-self: flex-start; }
 
 @media (max-width: 700px) {
   .wrap { padding: 0 16px; }
   h1 { font-size: 26px; }
   .detail h1 { font-size: 30px; }
   .filters, .rail { max-width: none; }
-  .filters { flex-direction: row; flex-wrap: wrap; gap: 16px 28px; }
+  .filters { flex-basis: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 4px 16px; }
+  .filters[open] { padding: 16px; }
+  .filters[open] summary { display: flex; }
+  .nav { flex-wrap: nowrap; overflow-x: auto; width: 100%; }
+  .nav a { white-space: nowrap; }
+  .nav a.nav-off { display: none; }
+  .filters:not([open]) { gap: 0; }
   .search .seg { width: 100%; }
   .search .seg button { flex: 1; }
   .search .btn.primary { width: 100%; justify-content: center; }
