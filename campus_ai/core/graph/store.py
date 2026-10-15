@@ -1,9 +1,10 @@
 """Write embedded nodes and links to Neo4j, and keep the search indexes.
 
-Every node the store writes gets the `Entity` label plus its own label, a
-unique `id`, a `text` (indexed for fulltext search) and two vectors from the
-embedder: `vec_fast` (smallest Matryoshka size, vector-indexed, for candidate
-search) and `vec_full` (full size, for reranking). The embedding is computed
+Every node the store writes gets the `Entity` label plus its own label (also
+stored as `kind`, so vector search can filter on it), a unique `id`, a `text`
+(indexed for fulltext search) and two vectors from the embedder: `vec_fast`
+(smallest Matryoshka size, vector-indexed, for candidate search) and
+`vec_full` (full size, for reranking). The embedding is computed
 once at full size; `vec_fast` is its truncated prefix.
 
 Changing the embedder or its sizes means rebuilding the graph: the vector
@@ -81,7 +82,8 @@ class GraphStore:
     def ensure_schema(self) -> None:
         fast, _ = dims(self.embedder)
         existing = self.run(
-            "SHOW VECTOR INDEXES YIELD name, options WHERE name = $name RETURN options", name=VECTOR_INDEX
+            "SHOW VECTOR INDEXES YIELD name, options, properties WHERE name = $name RETURN options, properties",
+            name=VECTOR_INDEX,
         )
         if existing:
             size = existing[0]["options"]["indexConfig"]["vector.dimensions"]
@@ -89,9 +91,12 @@ class GraphStore:
                 raise RuntimeError(
                     f"{VECTOR_INDEX} holds {size}-d vectors but {self.embedder.name} gives {fast}-d; rebuild the graph"
                 )
+            if "kind" not in existing[0]["properties"]:  # graphs indexed before label filtering
+                self.run(f"MATCH (n:{LABEL}) SET n.kind = [label IN labels(n) WHERE label <> '{LABEL}'][0]")
+                self.run(f"DROP INDEX {VECTOR_INDEX}")
         self.run(f"CREATE CONSTRAINT entity_id IF NOT EXISTS FOR (n:{LABEL}) REQUIRE n.id IS UNIQUE")
         self.run(
-            f"CREATE VECTOR INDEX {VECTOR_INDEX} IF NOT EXISTS FOR (n:{LABEL}) ON n.vec_fast "
+            f"CREATE VECTOR INDEX {VECTOR_INDEX} IF NOT EXISTS FOR (n:{LABEL}) ON n.vec_fast WITH [n.kind] "
             "OPTIONS {indexConfig: {`vector.dimensions`: $size, `vector.similarity_function`: 'cosine'}}",
             size=fast,
         )
@@ -111,6 +116,7 @@ class GraphStore:
             rows = [
                 {
                     "id": node.id,
+                    "kind": label,
                     "text": node.text,
                     "modality": node.modality,
                     "props": node.props,
@@ -121,7 +127,7 @@ class GraphStore:
             ]
             self.run(
                 f"UNWIND $rows AS row MERGE (n:{LABEL} {{id: row.id}}) SET n:{label}, n += row.props, "
-                "n.text = row.text, n.modality = row.modality, n.vec_fast = row.fast, n.vec_full = row.full",
+                "n.kind = row.kind, n.text = row.text, n.modality = row.modality, n.vec_fast = row.fast, n.vec_full = row.full",
                 rows=rows,
             )
 
