@@ -5,8 +5,8 @@ modules, how data flows, and the decisions behind them. For the product scope
 and roadmap see [`plans/master_plan.md`](plans/master_plan.md); for module
 internals see [`design.md`](design.md).
 
-**Status (October 2026).** Built: the embedder (P7), the graph core (P5) and
-the Europeana loader (R8). Planned: LLM router, eval harness, tracing,
+**Status (October 2026).** Built: the embedder (P7), the graph core (P5),
+the Europeana loader (R8) and collections search with its web UI (R9). Planned: LLM router, eval harness, tracing,
 review UI, MCP servers, and both product agents. Diagrams mark planned parts
 with dashed lines.
 
@@ -78,8 +78,10 @@ flowchart TB
         end
         subgraph graphnet["graph network (internal: no internet)"]
             EMB[embed<br/>image campus-ai:embed<br/>EmbeddingGemma 2]
+            APIS[api<br/>image campus-ai:embed<br/>FastAPI + model]
             NEO[(neo4j<br/>2026.09.0-community)]
         end
+        WEB[web<br/>nginx 1.30.6<br/>UI + proxy]
         TEST[test<br/>image campus-ai:test<br/>no network needed]
         VOL[(volume neo4j-data)]
     end
@@ -90,9 +92,14 @@ flowchart TB
     MD -- read-only --> EMB
     DD -- read-only --> EMB
     EMB -- bolt 7687 --> NEO
+    APIS -- bolt 7687 --> NEO
+    MD -- read-only --> APIS
+    DD -- read-only --> APIS
+    WEB -- "/api, /media" --> APIS
     NEO --- VOL
     ENV -. compose reads .-> FE
     ENV -. compose reads .-> NEO
+    BR[Browser] -- "127.0.0.1:8080 (edge network)" --> WEB
 ```
 
 | Service | Image | Network | Mounts | Purpose |
@@ -102,6 +109,12 @@ flowchart TB
 | `neo4j` | `neo4j:2026.09.0-community` | `graph` (internal) | volume `neo4j-data` | Graph, vector and fulltext indexes |
 | `fetch-models` | `campus-ai:embed` | default | `MODELS_DIR:/models` (rw) | One-time weight download (profile `fetch`) |
 | `fetch-europeana` | `campus-ai:test` | default | `./data:/app/data` (rw) | Harvest Europeana items and thumbnails (profile `fetch`) |
+| `api` | `campus-ai:embed` | `graph` (internal) | `MODELS_DIR:/models:ro`, `./data:/app/data:ro` | Collections search API (FastAPI, port 8000 inside the network only) |
+| `web` | `nginx:1.30.6-alpine` | `graph` + `edge` | `web/static`, `web/nginx.conf` (ro) | Serves the UI and proxies `/api` and `/media` to `api`; the only published port, `127.0.0.1:${WEB_PORT:-8080}` |
+
+`web` joins the ordinary `edge` network because a container on an internal
+network can't publish a port. It runs only nginx, with no model, key or data,
+so the services that hold them stay without internet access.
 
 Overlay files:
 - `compose.gpu.yaml` gives `embed` the host's NVIDIA GPUs (opt in per machine).
@@ -120,6 +133,11 @@ campus_ai/
     graph/        GraphStore (writer + indexes), HybridRetriever, stop words            (P5)
   research_assistant/
     europeana.py  Europeana record -> graph records                                     (R8)
+    collections.py  search service: cards, citations, similar pictures                  (R9)
+    api.py        FastAPI app for collections search                                    (R9)
+web/
+  static/         UI: index.html, app.js, styles.css (no build step)                    (R9)
+  nginx.conf      static files + proxy to api                                           (R9)
   course_access/  (planned)
 scripts/
   fetch_models.py      download weights into MODELS_DIR
@@ -272,8 +290,15 @@ retriever searches people, projects and collections together.
 - **Secrets.** `EUROPEANA_API_KEY`, `HF_TOKEN` and `NEO4J_PASSWORD` live in
   `.env`, which git ignores. The Europeana key travels only in the
   `X-Api-Key` header to `api.europeana.eu`.
-- **Network.** Only the two `fetch-*` services reach the internet. `embed`
-  and `neo4j` are on an internal network; Neo4j has no published ports.
+- **Network.** Only the two `fetch-*` services and the `web` proxy reach a
+  non-internal network. `embed`, `api` and `neo4j` are internal only; Neo4j
+  has no published ports, and `web` publishes on localhost only.
+- **Web.** The UI sets a strict Content-Security-Policy (same-origin scripts,
+  styles and images only), renders record text with `textContent` only, and
+  loads no fonts or scripts from CDNs. `/media` serves only image files in a
+  harvest's `media/` folder, never JSONL or other data. Image uploads are
+  limited to 10 MB and to JPEG, PNG, WebP and GIF, and are deleted after the
+  search.
 - **Rights.** The loader keeps only CC0, Public Domain Mark, CC BY and
   CC BY-SA items, and stores each item's rights URL and source page on the
   node so answers can attribute them.

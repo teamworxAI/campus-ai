@@ -187,6 +187,12 @@ images, 376 nodes) took 17 minutes; 300 items with 295 images took 45. A GPU
 is much faster. Results list
 items and images with their linked collection, institution and creator.
 
+Then start the web app and open http://localhost:8080:
+
+```bash
+docker compose up -d web
+```
+
 ## 10. Optional: NVIDIA GPU
 
 1. Install the NVIDIA driver and the NVIDIA Container Toolkit
@@ -210,6 +216,7 @@ macOS has no GPU passthrough to Docker, so models run on the CPU there.
 - [ ] Sample eval → `recall@10 all=1.000`
 - [ ] `data/europeana/<name>/items.jsonl` exists after a harvest
 - [ ] `search` returns Items and Images with linked evidence
+- [ ] http://localhost:8080 shows pictures for "salmon fishing on rivers"
 - [ ] `git status` shows no `.env`, `models/` or `data/europeana/` files
 
 ## Updating and cleaning up

@@ -21,7 +21,8 @@ Agentic AI products for higher education in BC, Canada and the EU.
 ## Status
 
 Built: offline multimodal embedder with EmbeddingGemma 2 (P7), Neo4j graph
-core with hybrid retrieval (P5), Europeana loader (R8). Next: LLM router,
+core with hybrid retrieval (P5), Europeana loader (R8), collections search API
+and web UI (R9). Next: LLM router,
 eval harness, and the product agents.
 
 ## Quick start
@@ -33,4 +34,5 @@ docker compose run --rm test
 docker compose run --rm fetch-models     # one time, needs internet
 docker compose run --rm embed python scripts/graph_search.py index evals/embed/sample_bakeoff.jsonl
 docker compose run --rm embed python scripts/graph_search.py search "ocean warming"
+docker compose up -d web                 # collections search UI on http://localhost:8080
 ```

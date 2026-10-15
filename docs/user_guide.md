@@ -10,10 +10,42 @@ All commands run from the repo root. In Claude Code cloud sessions, add
 ```mermaid
 flowchart LR
     A[1. Harvest<br/>fetch-europeana] --> B[2. Index<br/>graph_search.py index]
+    B --> W[Web app<br/>docker compose up web]
     B --> C[3. Search<br/>graph_search.py search]
     B --> D[4. Measure<br/>graph_search.py eval]
     S[Your own JSONL] --> B
 ```
+
+## The web app
+
+```bash
+docker compose up -d web       # starts neo4j, api and web; first start loads the model (~20 s)
+# open http://localhost:8080   (WEB_PORT in .env changes the port)
+docker compose stop web api    # stop
+```
+
+- **Words / By image.** Type a question in any language, or switch to *By
+  image* and drop a picture to find similar ones.
+- **Results.** Pictures and books, reports and film come as two lists: a text
+  query always sits closer to text than to pictures, so one merged list would
+  bury the pictures. Each card shows how it matched: *Picture*, *Meaning*,
+  *Words*, or a combination.
+- **Filters** (left) narrow by kind and licence without a new search.
+- **Cite** opens APA, Chicago and BibTeX citations, built from the record:
+  creator, title, holder, source URL and licence.
+- **Item pages** show the record, its licence, linked records (creator,
+  collection, holder) and similar pictures.
+- **BC collections (Arca)** and **SFU experts (REE)** have panels marked as
+  not yet connected.
+
+The same data is available as JSON:
+
+| Endpoint | Returns |
+|---|---|
+| `GET /api/search?q=…&k=12` | `pictures` and `texts` lists of cards |
+| `POST /api/search/image` (form field `file`) | `pictures` similar to the upload |
+| `GET /api/items/{id}` | one card plus `citations` and `similar` |
+| `GET /api/health` | status and item count |
 
 ## 1. Harvest from Europeana
 
