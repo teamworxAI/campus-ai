@@ -78,13 +78,15 @@ class HybridRetriever:
         fast, _ = dims(self.embedder)
         full = self.embedder.embed([query], modality=modality, kind="query")[0]
         wanted = [name(label) for label in labels or []]
-        where = "WHERE any(label IN labels(node) WHERE label IN $labels)" if wanted else ""
-        # The label filter applies after the index returns its top n.
+        # Vector search filters inside the index, so a rare label still gets n candidates;
+        # fulltext filters its top n afterwards.
+        within = "WHERE node.kind IN $labels " if wanted else ""
+        where = "WHERE node.kind IN $labels" if wanted else ""
         returns = "RETURN node.id AS id, labels(node) AS labels, node.text AS text, node.vec_full AS vec, score"
 
         rows = self.run(
-            f"MATCH (node:{LABEL}) SEARCH node IN (VECTOR INDEX {VECTOR_INDEX} FOR $vector LIMIT $n) "
-            f"SCORE AS score {where} {returns}",
+            f"MATCH (node:{LABEL}) SEARCH node IN (VECTOR INDEX {VECTOR_INDEX} FOR $vector {within}LIMIT $n) "
+            f"SCORE AS score {returns}",
             n=self.candidates,
             vector=truncate(full[None], fast)[0].tolist(),
             labels=wanted,
