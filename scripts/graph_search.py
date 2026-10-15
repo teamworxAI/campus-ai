@@ -46,13 +46,17 @@ def load(path: Path) -> tuple[list[Node], list[Link], list[dict]]:
     return nodes, links, queries
 
 
+def line(text: str | None, width: int) -> str:
+    return " ".join((text or "").split())[:width]
+
+
 def show(hits) -> None:
     for rank, hit in enumerate(hits, start=1):
         label = next((label for label in hit.labels if label != "Entity"), "Entity")
-        print(f"{rank:2}. {hit.id} [{label}] {hit.score:.4f}  {hit.text[:100] or '(no caption)'}")
+        print(f"{rank:2}. {hit.id} [{label}] {hit.score:.4f}  {line(hit.text, 100) or '(no caption)'}")
         for neighbor in hit.neighbors:
             arrow = "->" if neighbor["outgoing"] else "<-"
-            print(f"      {arrow} {neighbor['type']} {neighbor['id']}  {(neighbor['text'] or '')[:80]}")
+            print(f"      {arrow} {neighbor['type']} {neighbor['id']}  {line(neighbor['text'], 80)}")
 
 
 def main() -> None:
