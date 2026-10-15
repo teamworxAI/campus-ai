@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 ITEM = {
     "id": "/916105/bhm_photo_1",
-    "guid": "https://www.europeana.eu/item/916105/bhm_photo_1",
+    "guid": "https://www.europeana.eu/item/916105/bhm_photo_1?utm_source=api&utm_campaign=secret",
     "type": "IMAGE",
     "title": ["Fartyg på varvet", "Shipyard", "shipyard "],
     "dcDescription": ["Norse Lady,  Nov 1961."],
@@ -47,7 +47,8 @@ class RecordTests(unittest.TestCase):
         item = nodes["europeana:/916105/bhm_photo_1"]
         self.assertEqual(item["content"], "Fartyg på varvet\nShipyard\nNorse Lady, Nov 1961.")
         self.assertEqual(item["props"]["rights"], ITEM["rights"][0])
-        self.assertEqual(item["props"]["url"], ITEM["guid"])
+        self.assertEqual(item["props"]["url"], "https://www.europeana.eu/item/916105/bhm_photo_1")
+        self.assertNotIn("secret", json.dumps(records))
         self.assertEqual(nodes["europeana:/916105/bhm_photo_1#image"]["content"], "media/a.jpg")
         self.assertEqual(
             links,
