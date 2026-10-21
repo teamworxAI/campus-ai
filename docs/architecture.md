@@ -5,10 +5,12 @@ modules, how data flows, and the decisions behind them. For the product scope
 and roadmap see [`plans/master_plan.md`](plans/master_plan.md); for module
 internals see [`design.md`](design.md).
 
-**Status (October 2026).** Built: the embedder (P7), the graph core (P5),
-the Europeana loader (R8) and collections search with its web UI (R9). Planned: LLM router, eval harness, tracing,
-review UI, MCP servers, and both product agents. Diagrams mark planned parts
-with dashed lines.
+**Status (October 2026).** Research Assistant: built the embedder (P7), the
+graph core (P5), the Europeana loader (R8) and collections search with its
+web UI (R9). Course Access Agent: the document parser (A1) is built on its own
+branch; the rest is planned (section 11). Shared and still planned: eval
+harness, tracing, review UI, MCP servers; the LLM router (P1) is on an
+unmerged branch. Diagrams mark planned parts with dashed lines.
 
 ## 1. System context
 
@@ -340,3 +342,79 @@ retriever searches people, projects and collections together.
 - Changing the embedder or its vector sizes means rebuilding the graph;
   `ensure_schema` refuses a mismatched index.
 - See [`design.md`](design.md) section 7 for known limitations.
+
+## 11. Course Access Agent
+
+The second product. It takes a course document (PDF, PPTX or DOCX), finds
+what fails WCAG 2.2 AA, fixes what it safely can, and sends the rest to a
+person. Output: an accessible DOCX or HTML version, an issue report mapped to
+WCAG success criteria, and a short conformance statement (master plan,
+section 3). It shares the LLM router, review queue, eval harness and tracing
+with the Research Assistant, but not the graph: course materials are never
+indexed into the shared graph.
+
+### 11.1 Status
+
+| Card | What | State |
+|---|---|---|
+| A1 | Document parser: PDF/PPTX/DOCX into one structure | Built on branch `a1-document-parser` (PR #4, 7 tests). **Not merged** into this line yet |
+| A2 | Deterministic audit + WCAG-mapped report | Planned |
+| A3 | Alt-text worker (vision model, confidence score) | Planned; needs the LLM router (P1, PR #2, not merged) |
+| A4 | Structure, table and text workers | Planned |
+| A5 | Rebuild accessible DOCX/HTML + verify loop | Planned |
+| A6 | Gold set (40 documents) and eval metrics | Planned; needs P6 and the documents |
+| P3 | Review queue (approve / edit / reject) | Planned |
+
+### 11.2 Pipeline
+
+Solid boxes exist; dashed boxes are planned.
+
+```mermaid
+flowchart TD
+    U[Upload: PDF, PPTX, DOCX] --> P[A1 Parse<br/>Document: headings, paragraphs,<br/>lists, tables, images, links]
+    P --> A[A2 Audit<br/>deterministic checks, WCAG-mapped]
+    A --> R{Route by issue type}
+    R --> W1[A3 Alt text<br/>vision model via LLM router]
+    R --> W2[A4 Structure: headings,<br/>lists, reading order]
+    R --> W3[A4 Tables: header rows, captions]
+    R --> W4[A4 Text: link text, language]
+    W1 & W2 & W3 & W4 --> B[A5 Rebuild DOCX / HTML]
+    B --> V[A5 Verify: re-run audit,<br/>max 2 loops]
+    V -->|issues remain| R
+    V --> H[P3 Review queue<br/>diagrams, charts, equations,<br/>low-confidence fixes]
+    H --> O[Accessible file + WCAG report<br/>+ conformance statement]
+    classDef planned stroke-dasharray: 5 5
+    class A,R,W1,W2,W3,W4,B,V,H,O planned
+```
+
+Principles specific to this product (master plan 3.2):
+- **Never change academic content**, only structure and descriptions.
+- **Checkable things are checked by code** (A2), and every fix is re-checked
+  by the same checker that found the issue (A5). LLMs are used only for
+  judgement: alt text, reading order, link wording.
+- **People approve meaning.** Every chart, diagram and equation, and every
+  fix below the confidence threshold, goes to the review queue; nothing is
+  published automatically.
+
+### 11.3 Runtime (planned)
+
+Following the rules in section 2, Course Access will be one more compose
+service in its own image. Parsing, auditing and rebuilding are local and
+deterministic. The only model calls are alt text and other judgement steps,
+and they go through the LLM router (P1): Claude in the customer's region
+(Canada for BC, EU for EU institutions) or a local model for sensitive
+material. Documents are processed and returned; the service keeps no copy
+beyond what the review queue needs, and nothing enters the search graph.
+
+### 11.4 Open items
+
+| Item | Why it matters |
+|---|---|
+| **PyMuPDF licence** | A1 reads PDFs with PyMuPDF, which is AGPL-3.0 or a paid Artifex licence. For a product sold to institutions this needs a decision: buy the licence, keep the service unexposed to AGPL obligations after legal review, or switch PDF libraries |
+| Scanned PDFs | A1 reads text layers only; image-only scans give no text. OCR is not in the plan yet |
+| Untagged PDFs | Carry no heading or list semantics, so A1 returns them as paragraphs; A4 must infer structure |
+| Checkers | The plan names axe-core (via Playwright) and veraPDF (Java). Both add large runtimes to the image; confirm before A2 |
+| Vision model and region | Depends on D2 and on which Claude models are available in-region (master plan section 2) |
+| Gold set | 40 real course documents labelled by an accessibility specialist (D6); none collected yet |
+
+Module details for A1 are in [`design.md`](design.md#9-course-access-agent).

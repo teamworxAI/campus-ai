@@ -22,8 +22,10 @@ Agentic AI products for higher education in BC, Canada and the EU.
 
 Built: offline multimodal embedder with EmbeddingGemma 2 (P7), Neo4j graph
 core with hybrid retrieval (P5), Europeana loader (R8), collections search API
-and web UI (R9). Next: LLM router,
-eval harness, and the product agents.
+and web UI (R9), all for the Research Assistant. Course Access Agent: the
+document parser (A1) is built on its own branch (PR #4); audit, fixing workers,
+rebuild and review are next (see [architecture](docs/architecture.md#11-course-access-agent)).
+Also next: LLM router (PR #2), eval harness.
 
 ## Quick start
 

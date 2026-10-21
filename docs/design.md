@@ -257,3 +257,73 @@ discover -s tests` also runs the Neo4j integration tests.
 **Add an embedder backend.** Add a factory to `BACKENDS` in
 `campus_ai/core/embed/embedder.py`, then fetch its weights. Run the bake-off.
 Switching the graph to it needs a fresh graph (`docker compose down -v`).
+
+## 9. Course Access Agent
+
+The system view and status are in [`architecture.md`](architecture.md#11-course-access-agent).
+Only A1 exists so far, on branch `a1-document-parser` (PR #4).
+
+### 9.1 Document parser (A1): `campus_ai/course_access/parser.py`
+
+```python
+from campus_ai.course_access.parser import parse
+
+doc = parse("lecture-03.pptx")      # .pdf, .pptx or .docx; anything else raises ValueError
+doc.source_format, doc.title, doc.language, doc.page_count
+for block in doc.blocks:            # in reading order
+    ...
+```
+
+The parser **only reads**. It never repairs: missing headings, alt text or
+language come back as `None` or as no block, so the audit (A2) can flag them.
+
+```mermaid
+classDiagram
+    class Document {
+        source_format: pdf | pptx | docx
+        title: str | None
+        language: str | None
+        page_count: int | None
+        blocks: list~Block~
+    }
+    class Heading { text; level }
+    class Paragraph { text }
+    class ListItem { text; level }
+    class Table { rows; has_header_row }
+    class Image { data; format; alt; decorative; nearby_text }
+    class Link { text; url }
+    Document --> Heading
+    Document --> Paragraph
+    Document --> ListItem
+    Document --> Table
+    Document --> Image
+    Document --> Link
+    note for Document "every block also carries page: 1-based page (PDF) or slide (PPTX); None for DOCX"
+```
+
+**Reading order per format** (the order a screen reader follows):
+
+| Format | Order | Headings and lists | Images | Document language |
+|---|---|---|---|---|
+| DOCX | Body order of paragraphs and tables | From `Heading N` styles; lists from numbering or `List` styles, with nesting level | Inline drawings, with `descr` alt text and Office's decorative flag | Core properties, else the default style's language |
+| PPTX | Slide order, then shape order on each slide; groups flattened | Title placeholders become level-1 headings; body placeholders are bullets unless `buNone` | Pictures, with `descr` alt text and decorative flag | Core properties, else the first text run's language |
+| PDF | Content-stream order of text and image blocks per page | None: untagged PDFs carry no semantics, so text is paragraphs | Embedded images, with no alt text (not read from tags) | The catalog's `/Lang` |
+
+Other rules:
+- **Tables**: DOCX marks a header row with `tblHeader`; PPTX with the
+  table's *first row* setting; PDF tables (found by PyMuPDF) never have one.
+  Text inside a PDF table is emitted once, as the table.
+- **Links** follow the block that contains them; PDF links come at the end
+  of their page.
+- **Images** get `nearby_text`: the text block just before and just after on
+  the same page, the context the alt-text worker (A3) needs.
+
+### 9.2 Limits that the next cards must handle
+
+| Limit | Handled by |
+|---|---|
+| No OCR: image-only (scanned) PDFs produce images and no text | Open item (architecture 11.4) |
+| Untagged PDF: no headings or lists; existing PDF tags and alt text are not read | A4 infers structure; A2 reports the PDF as untagged |
+| Reading order is the file's, which may be wrong (e.g. a PPTX text box added last) | A2 flags suspect order; A4 proposes a fix for review |
+| Equations, charts and SmartArt come through as images or plain text | Always routed to the review queue (master plan 3.2) |
+| PyMuPDF is AGPL-3.0 | Licence decision (architecture 11.4) |
