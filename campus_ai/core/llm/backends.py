@@ -1,36 +1,16 @@
-"""Provider backends. Only the router calls these."""
+"""Model backend: Ollama, local or on the team's inference box. Only the router calls this.
+
+Prime directive 2: there are no cloud backends.
+"""
 
 import json
 import urllib.request
-from functools import lru_cache
-
-from anthropic import AnthropicBedrockMantle
 
 from .response import LLMResponse
 
 
-@lru_cache(maxsize=None)
-def _bedrock_client(aws_region: str) -> AnthropicBedrockMantle:
-    return AnthropicBedrockMantle(aws_region=aws_region)
-
-
-def claude(messages, model, max_tokens, aws_region, system=None) -> LLMResponse:
-    kwargs = {"model": model, "max_tokens": max_tokens, "messages": messages}
-    if system:
-        kwargs["system"] = system
-    response = _bedrock_client(aws_region).messages.create(**kwargs)
-    text = "".join(b.text for b in response.content if b.type == "text")
-    return LLMResponse(
-        text=text,
-        model=response.model,
-        input_tokens=response.usage.input_tokens,
-        output_tokens=response.usage.output_tokens,
-        stop_reason=response.stop_reason,
-    )
-
-
 def _to_ollama(message: dict) -> dict:
-    """Convert an Anthropic-style message (text and base64 image blocks)."""
+    """Convert a message with text and base64 image blocks to Ollama's format."""
     content = message["content"]
     if isinstance(content, str):
         return {"role": message["role"], "content": content}

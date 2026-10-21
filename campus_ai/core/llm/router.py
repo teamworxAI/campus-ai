@@ -1,22 +1,16 @@
-"""LLM router: the single entry point product code uses to call a model."""
+"""LLM router: the single entry point product code uses to call a model.
+
+Every call goes to a local open-weight model on Ollama (prime directive 2).
+"""
 
 from . import backends, config
 from .response import LLMResponse
 
 
-def generate(messages, task, region, system=None) -> LLMResponse:
-    """Run `messages` (Anthropic message format) on the model for `task`,
-    keeping data in `region`: `ca` and `eu` use Claude on in-region Bedrock,
-    `local` uses Ollama."""
+def generate(messages, task, system=None) -> LLMResponse:
+    """Run `messages` (text and base64 image blocks) on the local model for `task`."""
     if task not in config.TASKS:
         raise ValueError(f"Unknown task {task!r}; expected one of {config.TASKS}")
-    if region not in config.REGIONS:
-        raise ValueError(f"Unknown region {region!r}; expected one of {config.REGIONS}")
-    max_tokens = config.MAX_TOKENS[task]
-    if region == "local":
-        return backends.ollama(
-            messages, config.OLLAMA_MODELS[task], max_tokens, config.ollama_host(), system
-        )
-    return backends.claude(
-        messages, config.CLAUDE_MODELS[task], max_tokens, config.bedrock_region(region), system
+    return backends.ollama(
+        messages, config.model(task), config.MAX_TOKENS[task], config.ollama_host(), system
     )
