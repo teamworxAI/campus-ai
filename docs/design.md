@@ -220,6 +220,7 @@ One JSONL format feeds the indexer from any source, one record per line:
 |---|---|---|
 | `tests/test_embed*.py` | Backends, truncation, media decoding, bake-off | Model replaced by a deterministic fake |
 | `tests/test_graph.py` | Schema, upsert grouping, linking, fusion, fulltext query building, retriever flow, JSONL loading | `FakeDriver` records Cypher; a bag-of-words fake model. Integration tests run against a real Neo4j when `NEO4J_URI` is set and the embed image is used |
+| `tests/test_licences.py` | Prime directive 1: every installed package under an OSI licence (AGPL and proprietary fail; NVIDIA GPU runtimes are the named exception), every compose/Dockerfile image and every embedder model listed with an open licence | None; reads package metadata and repo files. Run in the `embed` image too, to cover PyTorch and CUDA |
 | `tests/test_europeana.py` | Rights filter, mapping, de-duplication, cursor paging, key in header, thumbnail caching | HTTP `get` mocked |
 
 `docker compose run --rm test` runs everything that needs no models (3
