@@ -18,7 +18,8 @@
    the only network steps are explicit one-time `fetch-*` jobs.
 
 Before adding any dependency, image or model, check its licence and that it
-runs offline. If a task can't be done within these rules, stop and say so;
+runs offline. `tests/test_licences.py` enforces this: a new image or model
+must be added to its licence table, and any non-open package fails the build. If a task can't be done within these rules, stop and say so;
 never trade a directive off. Using Claude Code to build the repo is the
 development process and is outside the product.
 

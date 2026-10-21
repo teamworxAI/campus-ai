@@ -361,7 +361,7 @@ Each card is sized for one cloud session and one PR.
 |---|---|---|
 | P0 | Project skeleton: `pyproject.toml` (uv), `campus_ai/` package, unittest setup, SessionStart hook | - |
 | P1 | LLM router over local open-weight models only, served in containers from local weights, with tests. PR #2 predates the prime directives and has Claude/Bedrock backends: those must be removed before merge | P0 |
-| P8 | Licence guard: a test that lists every Python package, image and model weight in the stack and fails on any licence that is not OSI-approved (the two named exceptions listed: free GPU vendor runtimes, Docker Desktop for Windows development) | P0 |
+| P8 | Licence guard: a test that lists every Python package, image and model weight in the stack and fails on any licence that is not OSI-approved (the two named exceptions listed: free GPU vendor runtimes, Docker Desktop for Windows development). **Built:** `tests/test_licences.py`, runs in both images | P0 |
 | P5 | Graph core: Neo4j writer, vector + fulltext indexes, hybrid retriever | P0, P7 |
 | P6 | Eval harness: gold-set format, RAGAS + deterministic metrics, report | P0 |
 | P2 | Tracing module: per-run JSONL log of tool calls, tokens, cost | P0 |
