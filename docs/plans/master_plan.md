@@ -18,6 +18,26 @@ copied from it.
 
 Status: draft for iteration. Open decisions are listed in section 8.
 
+> ## Prime directives (standing orders; they override everything else)
+>
+> 1. **Open source only. No paid licences, ever.** All code we write, every
+>    dependency, image, tool and model we ship or run must be under an
+>    OSI-approved open-source licence (model weights included: a "community"
+>    or usage-restricted licence does not qualify). Prefer permissive licences
+>    (Apache-2.0, MIT, BSD); avoid AGPL. campus-ai itself is Apache-2.0. The
+>    only allowance: free hardware-vendor drivers and runtimes needed to use a
+>    GPU (e.g. NVIDIA CUDA). They are optional; everything must also work on
+>    CPU without them.
+> 2. **Everything runs offline.** Every model (embeddings, language, vision,
+>    OCR) runs locally from open weights on hardware we control. No cloud
+>    model APIs (no Claude, OpenAI, Gemini or Bedrock) in the product, and
+>    nothing downloads at runtime. The only network steps are explicit,
+>    one-time `fetch-*` jobs for weights and permitted data.
+>
+> Scope: these govern the products: what they are made of and how they run.
+> Building them with Claude Code is the development process, outside the
+> product. Any change that would break a directive is rejected, not traded off.
+
 ---
 
 ## 1. Design principles
@@ -33,13 +53,14 @@ Status: draft for iteration. Open decisions are listed in section 8.
 3. **Human approval at decision points.** The agent proposes; an instructor
    approves meaning-bearing alt text, a research officer approves outreach.
    Nothing is sent or published automatically.
-4. **In-region by default.** Course materials and researcher data are
-   processed in Canada for BC customers and in the EU for EU customers. Local
-   models (Ollama) are the fallback for sensitive data.
+4. **Offline and on-premises.** All models run locally from open weights
+   (prime directive 2), so course materials and researcher data never leave
+   the machine or the institution's own servers; data residency (Canada for
+   BC, EU for EU) follows from where the institution runs it.
 5. **Evals before features.** Each product gets a gold set in week 1; every
    PR reports eval deltas.
 6. **Capabilities exposed as MCP servers.** The same tools then work from
-   the Streamlit demo, from Claude apps, and from the Teamworx HR assistant
+   the Streamlit demo, from any MCP client, and from the Teamworx HR assistant
    platform, with no extra integration work.
 7. **Portable and offline by default.** Everything runs in Docker and
    rebuilds from the repo on any machine. Models run in containers from
@@ -52,19 +73,19 @@ Status: draft for iteration. Open decisions are listed in section 8.
 
 | Component | What | Where |
 |---|---|---|
-| LLM router | One interface with Claude (in-region cloud) and Ollama (local) backends; route by task (vision, reasoning, cheap classification) and by data region | `campus_ai/core/llm/` |
+| LLM router | One interface over **local open-weight models only** (prime directive 2), run in containers from local weights; route by task (vision, reasoning, cheap classification). No cloud backends | `campus_ai/core/llm/` |
 | Graph core | Neo4j (`neo4j:2026.09.0-community` in compose) writer, vector + fulltext indexing, hybrid retriever with graph expansion. Every searchable node carries the `Entity` label, a 128-d vector (indexed, for candidates) and a 768-d vector (for reranking); vector and fulltext rankings are fused by reciprocal rank fusion | `campus_ai/core/graph/` |
 | Embedder | EmbeddingGemma 2 (open, Apache 2.0, runs offline from local weights): text, images, audio and video in one vector space; 128-dim vectors for fast candidate search, 768-dim for reranking. Behind one interface so it can be swapped (decision D7) | `campus_ai/core/embed/` |
-| Agent loop | Claude Agent SDK for the agentic steps (tool use, subagents, structured outputs); plain Python for deterministic steps | `campus_ai/<product>/agent.py` |
-| Skills | Domain procedures as Agent Skills (`SKILL.md` + scripts): WCAG remediation playbook, Horizon call analysis | `.claude/skills/` and `campus_ai/<product>/skills/` |
+| Agent loop | Plain Python workflows calling local models through the LLM router (tool use and structured outputs with open-weight models); deterministic steps in plain Python. No hosted agent SDKs | `campus_ai/<product>/agent.py` |
+| Skills | Domain procedures as plain files (`SKILL.md` + scripts) the local agent loop reads: WCAG remediation playbook, Horizon call analysis | `campus_ai/<product>/skills/` |
 | MCP servers | One per product, thin wrappers over the product's functions | `campus_ai/<product>/mcp_server.py` |
 | Review queue | One approval UI pattern (Streamlit) for both products: item, proposed change, evidence, approve/edit/reject | `campus_ai/core/review_ui.py` |
-| Evaluation | RAGAS + deterministic metrics, per-product gold sets | `campus_ai/core/eval/`, `evals/` |
+| Evaluation | RAGAS (Apache-2.0) + deterministic metrics, per-product gold sets; any LLM judge is a local model, never a hosted one | `campus_ai/core/eval/`, `evals/` |
 | Tracing | Log every run: inputs, tool calls, model, tokens, cost, latency, outcome | `campus_ai/core/tracing.py` |
 
-Hosting for Claude in-region: use Claude through a cloud provider's Canadian
-and EU regions (for example AWS Bedrock `ca-central-1` and an EU region).
-Confirm model availability per region in week 0 before committing.
+Hosting: everything, models included, runs in Docker on the institution's own
+machines or a laptop (prime directives). There is no cloud model hosting. GPU
+use is optional and needs only free vendor runtimes; the CPU path always works.
 
 Layout:
 
@@ -100,7 +121,7 @@ flowchart TD
     R --> W3[Table worker - header rows, captions]
     R --> W4[Text worker - link text, language, contrast]
     W1 & W2 & W3 & W4 --> B[Rebuild accessible document]
-    B --> V[Verify: re-run checkers + LLM judge on alt text]
+    B --> V[Verify: re-run checkers + local model judge on alt text]
     V -->|issues remain, max 2 loops| R
     V --> H[Human review queue: meaning-bearing images, low-confidence fixes]
     H --> O[Accessible file + WCAG report + statement]
@@ -118,16 +139,26 @@ Key rules for the workers:
   chart, diagram or equation, goes to the review queue.
 
 ### 3.3 Tools (candidates, confirm in week 0)
-- PDF parsing: `pymupdf`; PPTX/DOCX: `python-pptx`, `python-docx`.
+All tools must meet the prime directives: open source, no paid licences,
+running offline.
+- PDF parsing: permissively licensed libraries only (e.g. `pypdf`,
+  `pdfminer.six`; confirm each licence). **Not PyMuPDF**: it is AGPL-3.0 or
+  commercially licensed, so A1 must drop it (decision D8).
+  PPTX/DOCX: `python-pptx`, `python-docx` (MIT).
 - Checkers: `axe-core` (via Playwright) on the HTML output, `veraPDF` for
   PDF/UA reporting on inputs, plus custom rules for DOCX/PPTX structure.
+  Confirm each licence and that they run fully offline in the image.
+- Vision (alt text): a local open-weight vision-language model under an
+  OSI-approved licence, chosen by bake-off (decision D9). No hosted models.
+- OCR for scanned PDFs: **next phase** (card A7), with an open-source offline
+  engine (e.g. Tesseract, Apache-2.0).
 - Math: convert to MathML where detectable.
 
 ### 3.4 Evaluation
 - Gold set: 40 real course documents (mix of disciplines), with
   issues labelled by an accessibility specialist.
 - Metrics: checker issues fixed (%), new issues introduced (target 0),
-  alt-text quality (1-5 human rating, plus LLM judge agreement), share sent
+  alt-text quality (1-5 human rating, plus local model judge agreement), share sent
   to human review, time and cost per document.
 - Lisbon target: 90%+ of automatically checkable issues fixed, 0 content
   changes, alt-text average 4+/5 on the gold set.
@@ -283,6 +314,10 @@ sets. A week is not done until its eval report is committed.
 
 ## 6. How we build: the Claude Code harness
 
+This section is about the development process. Claude Code helps write the
+code; it is not part of either product, and nothing it uses ships. The prime
+directives apply to everything that does ship and run.
+
 ### 6.1 One-time setup (week 0)
 - `CLAUDE.md` at repo root pointing to `AGENTS.md` and this plan; one short
   `CLAUDE.md` per product folder with its spec and test commands.
@@ -324,18 +359,20 @@ Each card is sized for one cloud session and one PR.
 | ID | Card | Depends on |
 |---|---|---|
 | P0 | Project skeleton: `pyproject.toml` (uv), `campus_ai/` package, unittest setup, SessionStart hook | - |
-| P1 | LLM router with Claude (in-region) and Ollama backends, with tests | P0 |
+| P1 | LLM router over local open-weight models only, served in containers from local weights, with tests. PR #2 predates the prime directives and has Claude/Bedrock backends: those must be removed before merge | P0 |
+| P8 | Licence guard: a test that lists every Python package, image and model weight in the stack and fails on any licence that is not OSI-approved (free GPU vendor runtimes listed as the one allowance) | P0 |
 | P5 | Graph core: Neo4j writer, vector + fulltext indexes, hybrid retriever | P0, P7 |
 | P6 | Eval harness: gold-set format, RAGAS + deterministic metrics, report | P0 |
 | P2 | Tracing module: per-run JSONL log of tool calls, tokens, cost | P0 |
 | P3 | Review queue Streamlit component (approve/edit/reject) | P0 |
 | P4 | MCP server template wrapping a product's public functions | P1 |
-| A1 | Document parser (PDF/PPTX/DOCX -> common structure) | P0 |
+| A1 | Document parser (PDF/PPTX/DOCX -> common structure). Built (PR #4) on PyMuPDF; replace it with permissively licensed PDF libraries before merge (D8) | P0 |
 | A2 | Deterministic audit + WCAG-mapped report | A1 |
-| A3 | Alt-text worker with vision model and confidence score | A1, P1 |
+| A3 | Alt-text worker with a local open-weight vision model (D9) and confidence score | A1, P1 |
 | A4 | Structure, table and text workers | A1 |
 | A5 | Rebuild accessible DOCX/HTML + verify loop | A2-A4 |
 | A6 | Gold set + eval metrics in `evals/course_access/` | A2, P6 |
+| A7 | **Next phase:** OCR for scanned (image-only) PDFs with an open-source offline engine (e.g. Tesseract), feeding the same Document structure | A1 |
 | R0 | REE integration spec with RIO: fields, access method, refresh, consent | - |
 | R1 | OpenAlex loader (SFU authors, topics), REE loader once R0 is agreed | P5, R0 |
 | R2 | CORDIS loader (projects, participants) + calls loader | P5 |
@@ -366,12 +403,14 @@ Commit, push to your branch, and open a PR with the eval results.
 | ID | Decision | Recommendation |
 |---|---|---|
 | D1 | Same repo or new repo for the products | **Decided:** new private repo `Teamworxai/campus-ai`, clean build, no code copied from the SFU prototype |
-| D2 | Model hosting | **Decided:** Claude via in-region cloud (Canada + EU) for reasoning and vision; Ollama for offline demo fallback. Confirm per-region model availability in week 0 |
+| D2 | Model hosting | **Decided (revised Oct 21, prime directive 2):** all models run locally from open weights, in Docker, on hardware we or the institution control. No cloud model APIs: Claude, OpenAI, Gemini, Bedrock and similar are out of the product. Replaces the earlier "Claude via in-region cloud" decision |
 | D3 | Pilot partner for gold data | SFU accessibility services (A); SFU Research Intelligence team (RIO), owner of REE (R). Needs a data-sharing agreement for REE profiles before any REE data enters this repo |
 | D4 | Product names | Working names here; Teamworx branding to decide |
 | D5 | Demo hosting at Lisbon | Pre-loaded laptop with local fallback; do not rely on venue Wi-Fi |
 | D6 | Who labels gold sets | One accessibility specialist (A); two research officers (R); one librarian for collections search |
 | D7 | Default embedder | **Decided, pending bake-off:** EmbeddingGemma 2 (`google/embeddinggemma-2`, released Oct 6, 2026, Apache 2.0, not gated; Matryoshka dims 768/512/256/128), run offline in the `embed` Docker image from local weights, text, image, audio and video. vLLM (0.31.0) does not support it yet and Ollama lists only text and image, so neither serves it for now. Text baseline: `intfloat/multilingual-e5-small`. Keep the baseline if it loses on our gold set |
+| D8 | Licences | **Decided (Oct 21, prime directive 1):** open source only, no paid licences. OSI-approved licences for all code, dependencies, images, tools and model weights; permissive preferred; no AGPL (so PyMuPDF is replaced). campus-ai is Apache-2.0. One allowance: free GPU vendor runtimes (NVIDIA CUDA), optional, with a CPU path that always works. Docs require only the open-source Docker Engine + Compose (or Podman), not Docker Desktop |
+| D9 | Vision model for alt text (A3) | **Open:** a local open-weight vision-language model under an OSI-approved licence (e.g. Apache-2.0 or MIT weights; "community" licences don't qualify), chosen by bake-off on the A6 gold set, running in a container from local weights |
 
 ## 9. Risks
 
@@ -385,4 +424,7 @@ Commit, push to your branch, and open a PR with the eval results.
 | REE data access not agreed in time | Build and demo on public OpenAlex/ORCID data for SFU authors; swap in REE data once RIO agrees. Respect REE profile choices (e.g. not accepting students) |
 | ArcaBC permission not granted in time, or rights and cultural protocols block indexing | Demo on Europeana with ArcaBC shown as pending; start ArcaBC with one openly licensed collection agreed with BC ELN; rights checked per item |
 | EmbeddingGemma 2 is brand new | Bake-off in week 1; embedder behind one interface so it can be swapped |
+| Local open-weight models are weaker than hosted ones for alt text and reasoning | Bake-off (D9); confidence scores; every chart, diagram, equation and low-confidence fix goes to human review |
+| Local models are slow on CPU-only machines | GPU optional via free vendor runtime; batch work (indexing, remediation) runs ahead of the demo; measured: pilot index 17 min on 4 CPU cores, 80 s on an RTX 2050 |
+| A dependency or model changes to a non-open licence | Licence guard test (P8) on every build; pin versions |
 | Max usage limits slow the build | Cap parallel heavy sessions at 3; push bulk work to subagents and off-peak routines |

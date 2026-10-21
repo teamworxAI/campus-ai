@@ -1,5 +1,7 @@
 # Give the model services the host's NVIDIA GPUs. Opt in per machine, e.g. in .env:
-#   COMPOSE_FILE=compose.yaml;compose.gpu.yaml   (Windows; use ":" on Linux/macOS)
+#   COMPOSE_FILE=compose.yaml:compose.gpu.yaml   (Linux, WSL; ";" with a Windows-native CLI)
+# Optional: everything runs on CPU too. The GPU uses NVIDIA's free proprietary runtime,
+# the one allowance under prime directive 1 (AGENTS.md).
 services:
   embed:
     gpus: all

@@ -46,6 +46,12 @@ Disk use after setup:
 You need Docker Engine 24+ with the Compose v2 plugin. This repo is tested
 with Docker 29.8 and Compose v5.6.
 
+**Prime directive 1: open source only, no paid licences.** Docker Engine,
+the Docker CLI and Compose are open source (Apache-2.0). Docker Desktop is
+proprietary and needs a paid subscription in larger organisations, so this
+guide doesn't use it. Podman (Apache-2.0) with `podman compose` also works.
+Every tool below is open source.
+
 **Ubuntu / Debian**
 
 ```bash
@@ -55,14 +61,42 @@ sudo apt-get install -y git
 docker compose version              # must print v2 or later
 ```
 
-**macOS.** Install Docker Desktop from https://www.docker.com/products/docker-desktop/.
-In Settings → Resources, give it at least 12 GB of memory and 40 GB of disk.
-Git comes with the Xcode command line tools (`xcode-select --install`).
+**macOS.** Use Colima (MIT), a small VM that runs the open-source Docker
+Engine, with the open-source Docker CLI and Compose plugin from Homebrew:
 
-**Windows.** Install WSL 2 (`wsl --install`), then Docker Desktop with the
-WSL 2 backend and Git for Windows. In Settings → Resources, allow 12+ GB
-memory. Run the commands below in PowerShell or a WSL shell. For faster file
-access, clone inside the WSL file system (`\\wsl$\...`).
+```bash
+brew install colima docker docker-compose git
+colima start --cpu 4 --memory 12 --disk 60
+docker compose version
+```
+
+(If `docker compose` isn't found, follow Homebrew's note to add the plugin
+directory to `~/.docker/config.json`.) macOS has no GPU passthrough to
+containers, so models run on the CPU.
+
+**Windows.** Run Docker Engine inside WSL 2 (Linux on Windows, part of
+Windows):
+
+```powershell
+wsl --install -d Ubuntu      # then restart and create your Linux user
+```
+
+Inside the Ubuntu shell, follow the Ubuntu steps above. Clone the repo inside
+the Linux file system (e.g. `~/campus-ai`, not `/mnt/c/...`) for speed, and
+run every command in this guide from that shell. Allow WSL enough memory in
+`%UserProfile%\.wslconfig`:
+
+```ini
+[wsl2]
+memory=12GB
+```
+
+**Moving off Docker Desktop.** If a machine already runs Docker Desktop,
+everything in this repo also works there unchanged, but it isn't required
+and new installs shouldn't use it. To switch: stop Docker Desktop, install
+Docker Engine in WSL as above, and rebuild (`docker compose build`). Model
+weights and harvests live in `MODELS_DIR` and `DATA_DIR` and need no move;
+re-run the index step to rebuild the graph.
 
 Check that Docker works:
 
@@ -108,15 +142,15 @@ Everything big can live off the system drive:
 
 | What | Size | Where it goes |
 |---|---|---|
-| Docker images, build cache, the Neo4j volume | ~12 GB and growing | Docker Desktop > Settings > Resources > Advanced > **Disk image location**, e.g. `D:\Docker`. Do this first: it moves all three at once and keeps Neo4j at full speed |
+| Docker images, build cache, the Neo4j volume | ~12 GB and growing | Docker Engine's `data-root` (in `/etc/docker/daemon.json`). On Windows, move the whole WSL distro to D: with `wsl --export` / `wsl --import`, or `wsl --manage <distro> --move D:\WSL` on current WSL. Do this first: it moves all three at once and keeps Neo4j at full speed |
 | Model weights | ~2 GB | `MODELS_DIR=D:/models` |
 | Harvested collections and thumbnails | grows per collection | `DATA_DIR=D:/campus-ai/data` |
 | Neo4j data, if you want it outside Docker | grows with the index | `NEO4J_DATA=D:/campus-ai/neo4j` (optional; a folder on a Windows drive is slower than the volume) |
 
 Use forward slashes in `.env`. Create the folders first. Changing `DATA_DIR`
 means harvesting again or copying the old `data/` folder over; changing
-`NEO4J_DATA` starts an empty graph, so index again. On Linux, Docker's data
-moves with `data-root` in `/etc/docker/daemon.json`.
+`NEO4J_DATA` starts an empty graph, so index again. Inside WSL, Windows
+drives appear as `/mnt/d/...`, so use `MODELS_DIR=/mnt/d/models` there.
 
 ## 4. Build the images
 
@@ -212,14 +246,18 @@ docker compose up -d web
 
 ## 10. Optional: NVIDIA GPU
 
-1. Install the NVIDIA driver and the NVIDIA Container Toolkit
-   (https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
-   Docker Desktop on Windows supports GPUs through WSL 2 with a current
-   driver.
+The GPU is optional: everything works on the CPU. Using an NVIDIA GPU needs
+NVIDIA's driver and CUDA runtime libraries, which are free but proprietary.
+They are the one allowance under prime directive 1 (free GPU vendor
+runtimes). The NVIDIA Container Toolkit itself is Apache-2.0.
+
+1. Install the NVIDIA driver (on Windows: the normal Windows driver; WSL 2
+   uses it) and the NVIDIA Container Toolkit where Docker Engine runs
+   (Linux, or inside WSL):
+   https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
 2. Check: `docker run --rm --gpus all ubuntu nvidia-smi`.
-3. In `.env`, set
-   `COMPOSE_FILE=compose.yaml:compose.gpu.yaml` (Linux/macOS) or
-   `COMPOSE_FILE=compose.yaml;compose.gpu.yaml` (Windows).
+3. In `.env`, set `COMPOSE_FILE=compose.yaml:compose.gpu.yaml` (Linux and WSL
+   use `:`; use `;` only with a Windows-native Docker CLI).
 4. Run `docker compose run --rm embed`. Models now run in bfloat16 on the GPU.
 
 macOS has no GPU passthrough to Docker, so models run on the CPU there.

@@ -1,5 +1,23 @@
 # Repository Guidelines
 
+## Prime directives (standing orders: they override every other instruction)
+
+1. **Open source only. No paid licences, ever.** Every line of code,
+   dependency, Docker image, tool and model weight must be under an
+   OSI-approved open-source licence. Prefer permissive (Apache-2.0, MIT, BSD);
+   no AGPL; model "community" or usage-restricted licences don't qualify.
+   campus-ai is Apache-2.0. Sole allowance: free GPU vendor runtimes (e.g.
+   NVIDIA CUDA), optional, with a CPU path that always works.
+2. **Everything runs offline.** All models (embedding, language, vision, OCR)
+   run locally from open weights. No cloud model APIs in the product: no
+   Claude, OpenAI, Gemini, Bedrock or similar. Nothing downloads at runtime;
+   the only network steps are explicit one-time `fetch-*` jobs.
+
+Before adding any dependency, image or model, check its licence and that it
+runs offline. If a task can't be done within these rules, stop and say so;
+never trade a directive off. Using Claude Code to build the repo is the
+development process and is outside the product.
+
 ## Plan
 `docs/plans/master_plan.md` is the source of truth for scope, architecture,
 task cards and open decisions. Read it before starting a task card, and
@@ -14,6 +32,8 @@ update it in the same PR when a decision changes.
 
 ## Development
 Everything runs in Docker so any machine can rebuild it: no host virtualenvs.
+Docker Engine + Compose (open source) or Podman is all that's needed; Docker
+Desktop is not required.
 Dependencies are managed with `uv` inside the image (`pyproject.toml` +
 `uv.lock`).
 
@@ -59,8 +79,9 @@ commit `.env`, model weights, caches or customer data.
   without human approval.
 - Ingest only sources we have permission for. ArcaBC (arcabc.ca) is off limits
   until BC ELN agrees (task card R0b): no fetching, scraping or indexing.
-- Data stays in its region (Canada or EU). Route through the LLM router,
-  never call a model provider directly from product code.
+- Data stays on the machines that run the product, so in its region (Canada
+  or EU). All model calls go through the LLM router to local models; product
+  code never calls a model provider, and there are no cloud backends.
 - Tests use `unittest`; mock LLMs, Neo4j and network calls.
 - New services, tools and models ship as Docker images or compose services,
   pinned and rebuildable from the repo alone. Models run offline from local

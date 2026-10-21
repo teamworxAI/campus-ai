@@ -261,7 +261,9 @@ Switching the graph to it needs a fresh graph (`docker compose down -v`).
 ## 9. Course Access Agent
 
 The system view and status are in [`architecture.md`](architecture.md#11-course-access-agent).
-Only A1 exists so far, on branch `a1-document-parser` (PR #4).
+Only A1 exists so far, on branch `a1-document-parser` (PR #4). Everything
+here is bound by the prime directives (`AGENTS.md`): open-source libraries only,
+and any model (alt text, OCR) runs locally from open weights.
 
 ### 9.1 Document parser (A1): `campus_ai/course_access/parser.py`
 
@@ -322,8 +324,8 @@ Other rules:
 
 | Limit | Handled by |
 |---|---|
-| No OCR: image-only (scanned) PDFs produce images and no text | Open item (architecture 11.4) |
+| No OCR: image-only (scanned) PDFs produce images and no text | Next phase: card A7, open-source offline OCR |
 | Untagged PDF: no headings or lists; existing PDF tags and alt text are not read | A4 infers structure; A2 reports the PDF as untagged |
 | Reading order is the file's, which may be wrong (e.g. a PPTX text box added last) | A2 flags suspect order; A4 proposes a fix for review |
 | Equations, charts and SmartArt come through as images or plain text | Always routed to the review queue (master plan 3.2) |
-| PyMuPDF is AGPL-3.0 | Licence decision (architecture 11.4) |
+| PyMuPDF is AGPL-3.0, against prime directive 1 | Replaced with permissively licensed PDF libraries before A1 merges (decision D8); the PDF rows above describe current behaviour and must hold after the swap |

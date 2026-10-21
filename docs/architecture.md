@@ -61,6 +61,14 @@ arcabc.ca.
 
 ## 2. Principles that shape the architecture
 
+The two prime directives come first and override everything else (full text
+in [`AGENTS.md`](../AGENTS.md)):
+
+| Prime directive | Consequence in the code |
+|---|---|
+| **1. Open source only, no paid licences, ever** | Every Python package, image, tool and model weight is under an OSI-approved licence; permissive preferred, no AGPL. campus-ai is Apache-2.0. Checked: all 61 non-NVIDIA packages in the `embed` image are open source; the 16 NVIDIA CUDA packages are the one allowance (free GPU vendor runtime, optional). Docker Engine + Compose or Podman, never Docker Desktop, is what the build needs |
+| **2. Everything runs offline** | Every model runs locally from open weights in our containers; no cloud model APIs (no Claude, OpenAI, Gemini, Bedrock). The model containers can't reach the internet at all (internal network) |
+
 | Principle | Consequence in the code |
 |---|---|
 | Portable: rebuilds from the repo on any machine | Everything runs in Docker Compose; dependencies are locked in `uv.lock`; images and Neo4j are pinned |
@@ -284,6 +292,8 @@ retriever searches people, projects and collections together.
 
 | Decision | Choice | Why | Alternatives considered |
 |---|---|---|---|
+| Licences (D8) | OSI open source only; permissive preferred; campus-ai Apache-2.0 | Prime directive 1: no paid licences, ever | Commercial licences (e.g. PyMuPDF's Artifex licence), Docker Desktop: rejected |
+| Model hosting (D2) | Local open-weight models only, in containers | Prime directive 2: everything offline | Hosted APIs (Claude, Bedrock and others): rejected |
 | Embedder (D7) | EmbeddingGemma 2, local weights | One space for text, image, audio, video; Apache 2.0; Matryoshka sizes; multilingual | vLLM and Ollama don't serve it yet; e5-small kept as text baseline |
 | Vector sizes | 128-d indexed, 768-d stored | Small index for fast candidates, full precision for the final order | Index at 768-d: larger, slower; 128-d only: less accurate |
 | Fusion | Reciprocal rank fusion, k=60 | No score calibration between cosine and Lucene; robust | Weighted score sum needs tuning per corpus |
@@ -313,13 +323,15 @@ retriever searches people, projects and collections together.
   node so answers can attribute them.
 - **Data at rest.** Harvested data (`data/europeana/`), weights (`models/`)
   and `.env` are excluded from git and from Docker build contexts.
-- **Planned.** GDPR handling for EU researcher data, OCAP® for Indigenous
-  materials, and in-region LLM routing (master plan, sections 4.4 and 2).
+- **Models.** All local (prime directive 2), so no document, query or record
+  is ever sent to a model provider.
+- **Planned.** GDPR handling for EU researcher data and OCAP® for Indigenous
+  materials (master plan, section 4.4).
 
 ## 9. Resilience
 
 - `neo4j`, `api` and `web` have `restart: unless-stopped`: they come back
-  after a crash and when Docker starts (e.g. after a reboot, if Docker Desktop
+  after a crash and when Docker starts (e.g. after a reboot, if the Docker engine
   starts with Windows), until you stop them with `docker compose stop`.
 - Health checks on all three. `api` is restarted by Compose when Neo4j is, and
   its database driver also reconnects on its own.
@@ -374,7 +386,7 @@ flowchart TD
     U[Upload: PDF, PPTX, DOCX] --> P[A1 Parse<br/>Document: headings, paragraphs,<br/>lists, tables, images, links]
     P --> A[A2 Audit<br/>deterministic checks, WCAG-mapped]
     A --> R{Route by issue type}
-    R --> W1[A3 Alt text<br/>vision model via LLM router]
+    R --> W1[A3 Alt text<br/>local vision model via LLM router]
     R --> W2[A4 Structure: headings,<br/>lists, reading order]
     R --> W3[A4 Tables: header rows, captions]
     R --> W4[A4 Text: link text, language]
@@ -401,20 +413,23 @@ Principles specific to this product (master plan 3.2):
 Following the rules in section 2, Course Access will be one more compose
 service in its own image. Parsing, auditing and rebuilding are local and
 deterministic. The only model calls are alt text and other judgement steps,
-and they go through the LLM router (P1): Claude in the customer's region
-(Canada for BC, EU for EU institutions) or a local model for sensitive
-material. Documents are processed and returned; the service keeps no copy
-beyond what the review queue needs, and nothing enters the search graph.
+and they go through the LLM router (P1) to a local open-weight vision model
+running in its own container from local weights, on the internal network,
+like the embedder (prime directive 2; model chosen by bake-off, D9). No
+document ever leaves the machine. Documents are processed and returned; the
+service keeps no copy beyond what the review queue needs, and nothing enters
+the search graph.
 
 ### 11.4 Open items
 
 | Item | Why it matters |
 |---|---|
-| **PyMuPDF licence** | A1 reads PDFs with PyMuPDF, which is AGPL-3.0 or a paid Artifex licence. For a product sold to institutions this needs a decision: buy the licence, keep the service unexposed to AGPL obligations after legal review, or switch PDF libraries |
-| Scanned PDFs | A1 reads text layers only; image-only scans give no text. OCR is not in the plan yet |
+| **Replace PyMuPDF** (decided, D8) | A1 reads PDFs with PyMuPDF, which is AGPL-3.0 or paid. Under prime directive 1 it goes: A1's PDF path moves to permissively licensed libraries before merge |
+| Scanned PDFs | A1 reads text layers only; image-only scans give no text. **OCR is next phase** (card A7), with an open-source offline engine |
 | Untagged PDFs | Carry no heading or list semantics, so A1 returns them as paragraphs; A4 must infer structure |
-| Checkers | The plan names axe-core (via Playwright) and veraPDF (Java). Both add large runtimes to the image; confirm before A2 |
-| Vision model and region | Depends on D2 and on which Claude models are available in-region (master plan section 2) |
+| Checkers | The plan names axe-core (via Playwright) and veraPDF (Java). Confirm their licences and that they run offline; both add large runtimes to the image |
+| **Vision model** (D9) | A local open-weight vision-language model under an OSI-approved licence, chosen by bake-off on the gold set. Local models may describe complex figures less well than hosted ones, so confidence thresholds and human review matter more |
+| LLM router | PR #2 has Claude and Bedrock backends; they must be removed so only local models remain (P1) |
 | Gold set | 40 real course documents labelled by an accessibility specialist (D6); none collected yet |
 
 Module details for A1 are in [`design.md`](design.md#9-course-access-agent).
