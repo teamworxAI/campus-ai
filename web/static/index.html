@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Collections search · Research Assistant</title>
+<link rel="stylesheet" href="styles.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to results</a>
+<header class="top">
+  <div class="wrap top-row">
+    <a class="brand" href="#/"><span class="brand-name">Research Assistant</span><span class="brand-sub">campus-ai</span></a>
+    <nav aria-label="Main" class="nav">
+      <a href="#/" aria-disabled="true" class="nav-off">Experts</a>
+      <a href="#/" aria-disabled="true" class="nav-off">EU partners</a>
+      <a href="#/" aria-disabled="true" class="nav-off">Horizon calls</a>
+      <a href="#/" aria-current="page">Collections</a>
+    </nav>
+  </div>
+</header>
+<div id="app"></div>
+<dialog id="cite" aria-labelledby="cite-title">
+  <form method="dialog" class="cite-box">
+    <h2 id="cite-title">Cite this item</h2>
+    <div role="group" aria-label="Citation style" class="seg small" id="cite-styles"></div>
+    <pre id="cite-text" class="cite-text"></pre>
+    <div class="row">
+      <button type="button" class="btn primary" id="cite-copy">Copy citation</button>
+      <button class="btn" value="close">Close</button>
+      <span id="cite-status" role="status" class="muted"></span>
+    </div>
+  </form>
+</dialog>
+</body>
+</html>

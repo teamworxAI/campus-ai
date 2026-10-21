@@ -1,15 +1,19 @@
+# docker compose build                    build the images (always first)
 # docker compose run --rm test            unit tests (no models, no database)
 # docker compose run --rm fetch-models    one-time download into MODELS_DIR (needs network)
-# docker compose run --rm fetch-europeana  Europeana items into ./data (needs network)
+# docker compose run --rm fetch-europeana  Europeana items into DATA_DIR (needs network)
 # docker compose run --rm embed ...       local models + Neo4j, no internet access
+# docker compose up -d web                collections search UI on http://localhost:8080
 #
-# MODELS_DIR is a host directory that several projects can share.
-x-models: &models
-  build:
-    context: .
-    args:
-      EXTRAS: embed
+# MODELS_DIR is a host directory that several projects can share. MODELS_DIR, DATA_DIR
+# and NEO4J_DATA can point at another drive (e.g. D:) to keep large files off C:.
+#
+# Each image is built by exactly one service (`test`, `embed`); the others reuse it
+# with `pull_policy: never`. Two services building one image in parallel corrupts it.
+
+x-model-image: &model-image
   image: campus-ai:embed
+  pull_policy: never
 
 x-neo4j-env: &neo4j-env
   NEO4J_URI: bolt://neo4j:7687
@@ -22,7 +26,11 @@ services:
     image: campus-ai:test
 
   embed:
-    <<: *models
+    build:
+      context: .
+      args:
+        EXTRAS: embed
+    image: campus-ai:embed
     # The graph network is internal: it reaches Neo4j and nothing else.
     networks: [graph]
     depends_on:
@@ -31,23 +39,66 @@ services:
     environment: *neo4j-env
     volumes:
       - ${MODELS_DIR:-./models}:/models:ro
-      - ./data:/app/data:ro
+      - ${DATA_DIR:-./data}:/app/data:ro
     command: ["python", "scripts/embed_bakeoff.py", "evals/embed/sample_bakeoff.jsonl"]
+
+  # Collections search API (R9): same image and isolation as embed.
+  api:
+    <<: *model-image
+    restart: unless-stopped
+    networks: [graph]
+    depends_on:
+      neo4j:
+        condition: service_healthy
+        restart: true
+    environment: *neo4j-env
+    volumes:
+      - ${MODELS_DIR:-./models}:/models:ro
+      - ${DATA_DIR:-./data}:/app/data:ro
+    command: ["uvicorn", "campus_ai.research_assistant.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=5)"]
+      interval: 10s
+      timeout: 10s
+      start_period: 120s
+      retries: 6
+
+  # Static UI + reverse proxy. The only service with a published port; it holds
+  # no model or data, and joins `edge` because an internal network can't publish.
+  web:
+    image: nginx:1.30.6-alpine
+    restart: unless-stopped
+    networks: [graph, edge]
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8080}:80"
+    volumes:
+      - ./web/static:/usr/share/nginx/html:ro
+      - ./web/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
   neo4j:
     image: neo4j:2026.09.0-community
+    restart: unless-stopped
     networks: [graph]
     environment:
       NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-campus-ai-local}
     volumes:
-      - neo4j-data:/data
+      # A volume name (default) or a host folder, e.g. NEO4J_DATA=D:/campus-ai/neo4j
+      - ${NEO4J_DATA:-neo4j-data}:/data
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:7474"]
       interval: 5s
       retries: 30
 
   fetch-models:
-    <<: *models
+    <<: *model-image
     profiles: [fetch]
     environment:
       HF_HUB_OFFLINE: "0"
@@ -57,19 +108,20 @@ services:
     command: ["python", "scripts/fetch_models.py"]
 
   fetch-europeana:
-    build: .
     image: campus-ai:test
+    pull_policy: never
     profiles: [fetch]
     environment:
       EUROPEANA_API_KEY: ${EUROPEANA_API_KEY:-}
     volumes:
-      - ./data:/app/data
+      - ${DATA_DIR:-./data}:/app/data
     entrypoint: ["python", "scripts/fetch_europeana.py"]
     command: []
 
 networks:
   graph:
     internal: true
+  edge: {}
 
 volumes:
   neo4j-data:

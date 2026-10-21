@@ -14,7 +14,6 @@ services:
   embed:
     build: *build
   fetch-models:
-    build: *build
     network_mode: host
     environment:
       HTTPS_PROXY: ${HTTPS_PROXY:-}
@@ -25,7 +24,6 @@ services:
       - /root/.ccr/ca-bundle.crt:/ca.crt:ro
 
   fetch-europeana:
-    build: *build
     network_mode: host
     environment:
       HTTPS_PROXY: ${HTTPS_PROXY:-}

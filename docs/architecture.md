@@ -5,10 +5,12 @@ modules, how data flows, and the decisions behind them. For the product scope
 and roadmap see [`plans/master_plan.md`](plans/master_plan.md); for module
 internals see [`design.md`](design.md).
 
-**Status (October 2026).** Built: the embedder (P7), the graph core (P5) and
-the Europeana loader (R8). Planned: LLM router, eval harness, tracing,
-review UI, MCP servers, and both product agents. Diagrams mark planned parts
-with dashed lines.
+**Status (October 2026).** Research Assistant: built the embedder (P7), the
+graph core (P5), the Europeana loader (R8) and collections search with its
+web UI (R9). Course Access Agent: the document parser (A1) is built on its own
+branch; the rest is planned (section 11). Shared and still planned: eval
+harness, tracing, review UI, MCP servers; the LLM router (P1) is on an
+unmerged branch. Diagrams mark planned parts with dashed lines.
 
 ## 1. System context
 
@@ -16,7 +18,7 @@ campus-ai is two products on one shared core:
 
 - **Course Access Agent**: makes course materials accessible (WCAG 2.2).
 - **Research Assistant**: finds experts, EU partners, Horizon calls and
-  sources across BC (Arca) and EU (Europeana) collections.
+  sources across BC (ArcaBC) and EU (Europeana) collections.
 
 ```mermaid
 flowchart LR
@@ -32,7 +34,7 @@ flowchart LR
     end
     subgraph sources[External sources, harvested once]
         EU[Europeana API]
-        ARCA[Arca / BC ELN]
+        ARCA[ArcaBC arcabc.ca, BC ELN<br/>no access until R0b]
         REE[SFU REE, OpenAlex, CORDIS]
         HF[Hugging Face: model weights]
     end
@@ -43,14 +45,29 @@ flowchart LR
     CA --> CORE
     EU -. fetch-europeana .-> campus
     HF -. fetch-models .-> campus
-    ARCA -. planned .-> campus
+    ARCA -. planned: fetch-arcabc, blocked .-> campus
     REE -. planned .-> campus
 ```
 
 Every external source is reached only by a dedicated **fetch** step that
 writes to local disk. Everything that processes data afterwards runs offline.
 
+**ArcaBC** (https://arcabc.ca) is BC ELN's collection site, the BC counterpart
+of Europeana: one aggregated source, not many repositories. Its loader (R7)
+will mirror the Europeana loader, a single `fetch-arcabc` step writing the same
+JSONL records, so indexing, search and the UI need no changes for it. Until BC
+ELN grants permission (R0b), nothing in this repo may fetch, scrape or index
+arcabc.ca.
+
 ## 2. Principles that shape the architecture
+
+The two prime directives come first and override everything else (full text
+in [`AGENTS.md`](../AGENTS.md)):
+
+| Prime directive | Consequence in the code |
+|---|---|
+| **1. Open source only, no paid licences, ever** | Every Python package, image, tool and model weight is under an OSI-approved licence; permissive preferred, no AGPL. campus-ai is Apache-2.0. Checked: all 61 non-NVIDIA packages in the `embed` image are open source; the 16 NVIDIA CUDA packages are a named exception (free GPU vendor runtime, optional). Deployments need only Docker Engine + Compose or Podman; Docker Desktop is the other named exception, as a developer tool on Windows workstations |
+| **2. Everything runs offline** | Every model runs locally from open weights in our containers; no cloud model APIs (no Claude, OpenAI, Gemini, Bedrock). The model containers can't reach the internet at all (internal network) |
 
 | Principle | Consequence in the code |
 |---|---|
@@ -78,8 +95,10 @@ flowchart TB
         end
         subgraph graphnet["graph network (internal: no internet)"]
             EMB[embed<br/>image campus-ai:embed<br/>EmbeddingGemma 2]
+            APIS[api<br/>image campus-ai:embed<br/>FastAPI + model]
             NEO[(neo4j<br/>2026.09.0-community)]
         end
+        WEB[web<br/>nginx 1.30.6<br/>UI + proxy]
         TEST[test<br/>image campus-ai:test<br/>no network needed]
         VOL[(volume neo4j-data)]
     end
@@ -90,9 +109,14 @@ flowchart TB
     MD -- read-only --> EMB
     DD -- read-only --> EMB
     EMB -- bolt 7687 --> NEO
+    APIS -- bolt 7687 --> NEO
+    MD -- read-only --> APIS
+    DD -- read-only --> APIS
+    WEB -- "/api, /media" --> APIS
     NEO --- VOL
     ENV -. compose reads .-> FE
     ENV -. compose reads .-> NEO
+    BR[Browser] -- "127.0.0.1:8080 (edge network)" --> WEB
 ```
 
 | Service | Image | Network | Mounts | Purpose |
@@ -102,6 +126,12 @@ flowchart TB
 | `neo4j` | `neo4j:2026.09.0-community` | `graph` (internal) | volume `neo4j-data` | Graph, vector and fulltext indexes |
 | `fetch-models` | `campus-ai:embed` | default | `MODELS_DIR:/models` (rw) | One-time weight download (profile `fetch`) |
 | `fetch-europeana` | `campus-ai:test` | default | `./data:/app/data` (rw) | Harvest Europeana items and thumbnails (profile `fetch`) |
+| `api` | `campus-ai:embed` | `graph` (internal) | `MODELS_DIR:/models:ro`, `./data:/app/data:ro` | Collections search API (FastAPI, port 8000 inside the network only) |
+| `web` | `nginx:1.30.6-alpine` | `graph` + `edge` | `web/static`, `web/nginx.conf` (ro) | Serves the UI and proxies `/api` and `/media` to `api`; the only published port, `127.0.0.1:${WEB_PORT:-8080}` |
+
+`web` joins the ordinary `edge` network because a container on an internal
+network can't publish a port. It runs only nginx, with no model, key or data,
+so the services that hold them stay without internet access.
 
 Overlay files:
 - `compose.gpu.yaml` gives `embed` the host's NVIDIA GPUs (opt in per machine).
@@ -120,6 +150,11 @@ campus_ai/
     graph/        GraphStore (writer + indexes), HybridRetriever, stop words            (P5)
   research_assistant/
     europeana.py  Europeana record -> graph records                                     (R8)
+    collections.py  search service: cards, citations, similar pictures                  (R9)
+    api.py        FastAPI app for collections search                                    (R9)
+web/
+  static/         UI: index.html, app.js, styles.css (no build step)                    (R9)
+  nginx.conf      static files + proxy to api                                           (R9)
   course_access/  (planned)
 scripts/
   fetch_models.py      download weights into MODELS_DIR
@@ -257,6 +292,8 @@ retriever searches people, projects and collections together.
 
 | Decision | Choice | Why | Alternatives considered |
 |---|---|---|---|
+| Licences (D8) | OSI open source only; permissive preferred; campus-ai Apache-2.0 | Prime directive 1: no paid licences, ever | Commercial licences (e.g. PyMuPDF's Artifex licence): rejected. Docker Desktop: allowed only as a Windows developer tool, never required to run the product |
+| Model hosting (D2) | Local open-weight models only, in containers | Prime directive 2: everything offline | Hosted APIs (Claude, Bedrock and others): rejected |
 | Embedder (D7) | EmbeddingGemma 2, local weights | One space for text, image, audio, video; Apache 2.0; Matryoshka sizes; multilingual | vLLM and Ollama don't serve it yet; e5-small kept as text baseline |
 | Vector sizes | 128-d indexed, 768-d stored | Small index for fast candidates, full precision for the final order | Index at 768-d: larger, slower; 128-d only: less accurate |
 | Fusion | Reciprocal rank fusion, k=60 | No score calibration between cosine and Lucene; robust | Weighted score sum needs tuning per corpus |
@@ -272,17 +309,43 @@ retriever searches people, projects and collections together.
 - **Secrets.** `EUROPEANA_API_KEY`, `HF_TOKEN` and `NEO4J_PASSWORD` live in
   `.env`, which git ignores. The Europeana key travels only in the
   `X-Api-Key` header to `api.europeana.eu`.
-- **Network.** Only the two `fetch-*` services reach the internet. `embed`
-  and `neo4j` are on an internal network; Neo4j has no published ports.
+- **Network.** Only the two `fetch-*` services and the `web` proxy reach a
+  non-internal network. `embed`, `api` and `neo4j` are internal only; Neo4j
+  has no published ports, and `web` publishes on localhost only.
+- **Web.** The UI sets a strict Content-Security-Policy (same-origin scripts,
+  styles and images only), renders record text with `textContent` only, and
+  loads no fonts or scripts from CDNs. `/media` serves only image files in a
+  harvest's `media/` folder, never JSONL or other data. Image uploads are
+  limited to 10 MB and to JPEG, PNG, WebP and GIF, and are deleted after the
+  search.
 - **Rights.** The loader keeps only CC0, Public Domain Mark, CC BY and
   CC BY-SA items, and stores each item's rights URL and source page on the
   node so answers can attribute them.
 - **Data at rest.** Harvested data (`data/europeana/`), weights (`models/`)
   and `.env` are excluded from git and from Docker build contexts.
-- **Planned.** GDPR handling for EU researcher data, OCAP® for Indigenous
-  materials, and in-region LLM routing (master plan, sections 4.4 and 2).
+- **Models.** All local (prime directive 2), so no document, query or record
+  is ever sent to a model provider.
+- **Planned.** GDPR handling for EU researcher data and OCAP® for Indigenous
+  materials (master plan, section 4.4).
 
-## 9. Scaling and limits
+## 9. Resilience
+
+- `neo4j`, `api` and `web` have `restart: unless-stopped`: they come back
+  after a crash and when Docker starts (e.g. after a reboot, if the Docker engine
+  starts with Windows), until you stop them with `docker compose stop`.
+- Health checks on all three. `api` is restarted by Compose when Neo4j is, and
+  its database driver also reconnects on its own.
+- nginx looks up `api` through Docker's DNS on every request (cached 10 s), so
+  a recreated `api` container with a new address is found without restarting
+  `web`.
+- Each image is built by one service only (`test`, `embed`); `api`,
+  `fetch-models` and `fetch-europeana` reuse the image with
+  `pull_policy: never`. Building one image from two services in parallel
+  corrupted it, so run `docker compose build` before `up`.
+- Measured: a crashed `api` serves again in about 25 s (model reload); after a
+  Neo4j restart, search works again within seconds.
+
+## 10. Scaling and limits
 
 - Indexing is CPU-bound without a GPU. Add `compose.gpu.yaml` on NVIDIA
   machines; models then run in bfloat16.
@@ -291,3 +354,82 @@ retriever searches people, projects and collections together.
 - Changing the embedder or its vector sizes means rebuilding the graph;
   `ensure_schema` refuses a mismatched index.
 - See [`design.md`](design.md) section 7 for known limitations.
+
+## 11. Course Access Agent
+
+The second product. It takes a course document (PDF, PPTX or DOCX), finds
+what fails WCAG 2.2 AA, fixes what it safely can, and sends the rest to a
+person. Output: an accessible DOCX or HTML version, an issue report mapped to
+WCAG success criteria, and a short conformance statement (master plan,
+section 3). It shares the LLM router, review queue, eval harness and tracing
+with the Research Assistant, but not the graph: course materials are never
+indexed into the shared graph.
+
+### 11.1 Status
+
+| Card | What | State |
+|---|---|---|
+| A1 | Document parser: PDF/PPTX/DOCX into one structure | Built on branch `a1-document-parser` (PR #4, 7 tests). **Not merged** into this line yet |
+| A2 | Deterministic audit + WCAG-mapped report | Planned |
+| A3 | Alt-text worker (vision model, confidence score) | Planned; needs the LLM router (P1, PR #2, not merged) |
+| A4 | Structure, table and text workers | Planned |
+| A5 | Rebuild accessible DOCX/HTML + verify loop | Planned |
+| A6 | Gold set (40 documents) and eval metrics | Planned; needs P6 and the documents |
+| P3 | Review queue (approve / edit / reject) | Planned |
+
+### 11.2 Pipeline
+
+Solid boxes exist; dashed boxes are planned.
+
+```mermaid
+flowchart TD
+    U[Upload: PDF, PPTX, DOCX] --> P[A1 Parse<br/>Document: headings, paragraphs,<br/>lists, tables, images, links]
+    P --> A[A2 Audit<br/>deterministic checks, WCAG-mapped]
+    A --> R{Route by issue type}
+    R --> W1[A3 Alt text<br/>local vision model via LLM router]
+    R --> W2[A4 Structure: headings,<br/>lists, reading order]
+    R --> W3[A4 Tables: header rows, captions]
+    R --> W4[A4 Text: link text, language]
+    W1 & W2 & W3 & W4 --> B[A5 Rebuild DOCX / HTML]
+    B --> V[A5 Verify: re-run audit,<br/>max 2 loops]
+    V -->|issues remain| R
+    V --> H[P3 Review queue<br/>diagrams, charts, equations,<br/>low-confidence fixes]
+    H --> O[Accessible file + WCAG report<br/>+ conformance statement]
+    classDef planned stroke-dasharray: 5 5
+    class A,R,W1,W2,W3,W4,B,V,H,O planned
+```
+
+Principles specific to this product (master plan 3.2):
+- **Never change academic content**, only structure and descriptions.
+- **Checkable things are checked by code** (A2), and every fix is re-checked
+  by the same checker that found the issue (A5). LLMs are used only for
+  judgement: alt text, reading order, link wording.
+- **People approve meaning.** Every chart, diagram and equation, and every
+  fix below the confidence threshold, goes to the review queue; nothing is
+  published automatically.
+
+### 11.3 Runtime (planned)
+
+Following the rules in section 2, Course Access will be one more compose
+service in its own image. Parsing, auditing and rebuilding are local and
+deterministic. The only model calls are alt text and other judgement steps,
+and they go through the LLM router (P1) to a local open-weight vision model
+running in its own container from local weights, on the internal network,
+like the embedder (prime directive 2; model chosen by bake-off, D9). No
+document ever leaves the machine. Documents are processed and returned; the
+service keeps no copy beyond what the review queue needs, and nothing enters
+the search graph.
+
+### 11.4 Open items
+
+| Item | Why it matters |
+|---|---|
+| **Replace PyMuPDF** (decided, D8) | A1 reads PDFs with PyMuPDF, which is AGPL-3.0 or paid. Under prime directive 1 it goes: A1's PDF path moves to permissively licensed libraries before merge |
+| Scanned PDFs | A1 reads text layers only; image-only scans give no text. **OCR is next phase** (card A7), with an open-source offline engine |
+| Untagged PDFs | Carry no heading or list semantics, so A1 returns them as paragraphs; A4 must infer structure |
+| Checkers | The plan names axe-core (via Playwright) and veraPDF (Java). Confirm their licences and that they run offline; both add large runtimes to the image |
+| **Vision model** (D9) | A local open-weight vision-language model under an OSI-approved licence, chosen by bake-off on the gold set. Local models may describe complex figures less well than hosted ones, so confidence thresholds and human review matter more |
+| LLM router | PR #2 has Claude and Bedrock backends; they must be removed so only local models remain (P1) |
+| Gold set | 40 real course documents labelled by an accessibility specialist (D6); none collected yet |
+
+Module details for A1 are in [`design.md`](design.md#9-course-access-agent).

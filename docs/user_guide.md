@@ -10,10 +10,50 @@ All commands run from the repo root. In Claude Code cloud sessions, add
 ```mermaid
 flowchart LR
     A[1. Harvest<br/>fetch-europeana] --> B[2. Index<br/>graph_search.py index]
+    B --> W[Web app<br/>docker compose up web]
     B --> C[3. Search<br/>graph_search.py search]
     B --> D[4. Measure<br/>graph_search.py eval]
     S[Your own JSONL] --> B
 ```
+
+## The web app
+
+```bash
+docker compose up -d web       # starts neo4j, api and web; first start loads the model (~20 s)
+# open http://localhost:8080   (WEB_PORT in .env changes the port)
+docker compose stop web api    # stop
+```
+
+- **Words / By image.** Type a question in any language, or switch to *By
+  image* and drop a picture to find similar ones. Image search only knows the
+  indexed collections, so it always has *some* nearest pictures. The page shows
+  your picture and says whether it is **in the collection** (similarity ≥ 0.98),
+  has **similar pictures** (≥ 0.76), or has **no close match**, in which case
+  the list is only the nearest of what the index holds. The thresholds were
+  measured on the salmon pilot: unrelated pictures peaked at 0.68–0.72,
+  salmon and fishing pictures from outside the index at 0.80–0.86
+  (`SAME_PICTURE`, `CLOSE_PICTURE` in `collections.py`; recheck them when
+  collections change).
+- **Results.** Pictures and books, reports and film come as two lists: a text
+  query always sits closer to text than to pictures, so one merged list would
+  bury the pictures. Each card shows how it matched: *Picture*, *Meaning*,
+  *Words*, or a combination.
+- **Filters** (left) narrow by kind and licence without a new search.
+- **Cite** opens APA, Chicago and BibTeX citations, built from the record:
+  creator, title, holder, source URL and licence.
+- **Item pages** show the record, its licence, linked records (creator,
+  collection, holder) and similar pictures.
+- **BC collections (ArcaBC)** and **SFU experts (REE)** have panels marked as
+  not yet connected.
+
+The same data is available as JSON:
+
+| Endpoint | Returns |
+|---|---|
+| `GET /api/search?q=…&k=12` | `pictures` and `texts` lists of cards |
+| `POST /api/search/image` (form field `file`) | `pictures` similar to the upload |
+| `GET /api/items/{id}` | one card plus `citations` and `similar` |
+| `GET /api/health` | status and item count |
 
 ## 1. Harvest from Europeana
 
