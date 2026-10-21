@@ -6,8 +6,12 @@
    dependency, Docker image, tool and model weight must be under an
    OSI-approved open-source licence. Prefer permissive (Apache-2.0, MIT, BSD);
    no AGPL; model "community" or usage-restricted licences don't qualify.
-   campus-ai is Apache-2.0. Sole allowance: free GPU vendor runtimes (e.g.
-   NVIDIA CUDA), optional, with a CPU path that always works.
+   campus-ai is Apache-2.0. Two named exceptions, nothing else:
+   - free GPU vendor runtimes (e.g. NVIDIA CUDA), optional, with a CPU path
+     that always works;
+   - Docker Desktop as a developer tool on Windows workstations, where most
+     development happens. The product itself needs only the open-source
+     Docker Engine + Compose (or Podman), so deployments never require it.
 2. **Everything runs offline.** All models (embedding, language, vision, OCR)
    run locally from open weights. No cloud model APIs in the product: no
    Claude, OpenAI, Gemini, Bedrock or similar. Nothing downloads at runtime;
@@ -32,8 +36,9 @@ update it in the same PR when a decision changes.
 
 ## Development
 Everything runs in Docker so any machine can rebuild it: no host virtualenvs.
-Docker Engine + Compose (open source) or Podman is all that's needed; Docker
-Desktop is not required.
+Docker Engine + Compose (open source) or Podman is all a deployment needs.
+Docker Desktop is fine on Windows development workstations (named exception
+to prime directive 1), but nothing may depend on Desktop-only features.
 Dependencies are managed with `uv` inside the image (`pyproject.toml` +
 `uv.lock`).
 

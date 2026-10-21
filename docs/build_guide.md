@@ -47,10 +47,11 @@ You need Docker Engine 24+ with the Compose v2 plugin. This repo is tested
 with Docker 29.8 and Compose v5.6.
 
 **Prime directive 1: open source only, no paid licences.** Docker Engine,
-the Docker CLI and Compose are open source (Apache-2.0). Docker Desktop is
-proprietary and needs a paid subscription in larger organisations, so this
-guide doesn't use it. Podman (Apache-2.0) with `podman compose` also works.
-Every tool below is open source.
+the Docker CLI and Compose are open source (Apache-2.0), and they are all a
+deployment needs. Podman (Apache-2.0) with `podman compose` also works.
+Docker Desktop is proprietary; it is a named exception for development on
+Windows workstations only, and nothing in the repo may depend on
+Desktop-only features.
 
 **Ubuntu / Debian**
 
@@ -74,8 +75,14 @@ docker compose version
 directory to `~/.docker/config.json`.) macOS has no GPU passthrough to
 containers, so models run on the CPU.
 
-**Windows.** Run Docker Engine inside WSL 2 (Linux on Windows, part of
-Windows):
+**Windows development workstation: Docker Desktop.** Install WSL 2
+(`wsl --install`), then Docker Desktop with the WSL 2 backend, and Git for
+Windows. In Settings > Resources, allow 12+ GB memory. Run the commands in
+this guide from PowerShell in the repo folder. Docker Desktop passes an NVIDIA
+GPU through WSL 2 (step 10). This is how the project is mostly developed.
+
+**Windows without Docker Desktop** (servers, or if you prefer it): run the
+open-source Docker Engine inside WSL 2:
 
 ```powershell
 wsl --install -d Ubuntu      # then restart and create your Linux user
@@ -91,12 +98,8 @@ run every command in this guide from that shell. Allow WSL enough memory in
 memory=12GB
 ```
 
-**Moving off Docker Desktop.** If a machine already runs Docker Desktop,
-everything in this repo also works there unchanged, but it isn't required
-and new installs shouldn't use it. To switch: stop Docker Desktop, install
-Docker Engine in WSL as above, and rebuild (`docker compose build`). Model
-weights and harvests live in `MODELS_DIR` and `DATA_DIR` and need no move;
-re-run the index step to rebuild the graph.
+**Servers and deployments** use Docker Engine (Linux) or Podman, never Docker
+Desktop.
 
 Check that Docker works:
 
@@ -142,7 +145,7 @@ Everything big can live off the system drive:
 
 | What | Size | Where it goes |
 |---|---|---|
-| Docker images, build cache, the Neo4j volume | ~12 GB and growing | Docker Engine's `data-root` (in `/etc/docker/daemon.json`). On Windows, move the whole WSL distro to D: with `wsl --export` / `wsl --import`, or `wsl --manage <distro> --move D:\WSL` on current WSL. Do this first: it moves all three at once and keeps Neo4j at full speed |
+| Docker images, build cache, the Neo4j volume | ~12 GB and growing | Docker Desktop: Settings > Resources > Advanced > **Disk image location**, e.g. `D:\Docker`. Docker Engine on Linux: `data-root` in `/etc/docker/daemon.json`. Engine in WSL: move the whole WSL distro to D: with `wsl --export` / `wsl --import`, or `wsl --manage <distro> --move D:\WSL` on current WSL. Do this first: it moves all three at once and keeps Neo4j at full speed |
 | Model weights | ~2 GB | `MODELS_DIR=D:/models` |
 | Harvested collections and thumbnails | grows per collection | `DATA_DIR=D:/campus-ai/data` |
 | Neo4j data, if you want it outside Docker | grows with the index | `NEO4J_DATA=D:/campus-ai/neo4j` (optional; a folder on a Windows drive is slower than the volume) |
@@ -150,7 +153,8 @@ Everything big can live off the system drive:
 Use forward slashes in `.env`. Create the folders first. Changing `DATA_DIR`
 means harvesting again or copying the old `data/` folder over; changing
 `NEO4J_DATA` starts an empty graph, so index again. Inside WSL, Windows
-drives appear as `/mnt/d/...`, so use `MODELS_DIR=/mnt/d/models` there.
+drives appear as `/mnt/d/...`, so use `MODELS_DIR=/mnt/d/models` there; with Docker
+Desktop, use `D:/models` as usual.
 
 ## 4. Build the images
 
@@ -248,16 +252,16 @@ docker compose up -d web
 
 The GPU is optional: everything works on the CPU. Using an NVIDIA GPU needs
 NVIDIA's driver and CUDA runtime libraries, which are free but proprietary.
-They are the one allowance under prime directive 1 (free GPU vendor
+They are a named exception to prime directive 1 (free GPU vendor
 runtimes). The NVIDIA Container Toolkit itself is Apache-2.0.
 
 1. Install the NVIDIA driver (on Windows: the normal Windows driver; WSL 2
-   uses it) and the NVIDIA Container Toolkit where Docker Engine runs
-   (Linux, or inside WSL):
+   uses it). Docker Desktop then needs nothing more. For Docker Engine on
+   Linux or inside WSL, also install the NVIDIA Container Toolkit:
    https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
 2. Check: `docker run --rm --gpus all ubuntu nvidia-smi`.
-3. In `.env`, set `COMPOSE_FILE=compose.yaml:compose.gpu.yaml` (Linux and WSL
-   use `:`; use `;` only with a Windows-native Docker CLI).
+3. In `.env`, set `COMPOSE_FILE=compose.yaml;compose.gpu.yaml` with Docker
+   Desktop on Windows, or `compose.yaml:compose.gpu.yaml` on Linux and WSL.
 4. Run `docker compose run --rm embed`. Models now run in bfloat16 on the GPU.
 
 macOS has no GPU passthrough to Docker, so models run on the CPU there.

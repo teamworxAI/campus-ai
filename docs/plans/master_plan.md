@@ -24,10 +24,11 @@ Status: draft for iteration. Open decisions are listed in section 8.
 >    dependency, image, tool and model we ship or run must be under an
 >    OSI-approved open-source licence (model weights included: a "community"
 >    or usage-restricted licence does not qualify). Prefer permissive licences
->    (Apache-2.0, MIT, BSD); avoid AGPL. campus-ai itself is Apache-2.0. The
->    only allowance: free hardware-vendor drivers and runtimes needed to use a
->    GPU (e.g. NVIDIA CUDA). They are optional; everything must also work on
->    CPU without them.
+>    (Apache-2.0, MIT, BSD); avoid AGPL. campus-ai itself is Apache-2.0. Two
+>    named exceptions only: (a) free hardware-vendor drivers and runtimes
+>    needed to use a GPU (e.g. NVIDIA CUDA), optional, with everything also
+>    working on CPU; (b) Docker Desktop as a developer tool on Windows
+>    workstations. Deployments need only the open-source Docker Engine.
 > 2. **Everything runs offline.** Every model (embeddings, language, vision,
 >    OCR) runs locally from open weights on hardware we control. No cloud
 >    model APIs (no Claude, OpenAI, Gemini or Bedrock) in the product, and
@@ -360,7 +361,7 @@ Each card is sized for one cloud session and one PR.
 |---|---|---|
 | P0 | Project skeleton: `pyproject.toml` (uv), `campus_ai/` package, unittest setup, SessionStart hook | - |
 | P1 | LLM router over local open-weight models only, served in containers from local weights, with tests. PR #2 predates the prime directives and has Claude/Bedrock backends: those must be removed before merge | P0 |
-| P8 | Licence guard: a test that lists every Python package, image and model weight in the stack and fails on any licence that is not OSI-approved (free GPU vendor runtimes listed as the one allowance) | P0 |
+| P8 | Licence guard: a test that lists every Python package, image and model weight in the stack and fails on any licence that is not OSI-approved (the two named exceptions listed: free GPU vendor runtimes, Docker Desktop for Windows development) | P0 |
 | P5 | Graph core: Neo4j writer, vector + fulltext indexes, hybrid retriever | P0, P7 |
 | P6 | Eval harness: gold-set format, RAGAS + deterministic metrics, report | P0 |
 | P2 | Tracing module: per-run JSONL log of tool calls, tokens, cost | P0 |
@@ -409,7 +410,7 @@ Commit, push to your branch, and open a PR with the eval results.
 | D5 | Demo hosting at Lisbon | Pre-loaded laptop with local fallback; do not rely on venue Wi-Fi |
 | D6 | Who labels gold sets | One accessibility specialist (A); two research officers (R); one librarian for collections search |
 | D7 | Default embedder | **Decided, pending bake-off:** EmbeddingGemma 2 (`google/embeddinggemma-2`, released Oct 6, 2026, Apache 2.0, not gated; Matryoshka dims 768/512/256/128), run offline in the `embed` Docker image from local weights, text, image, audio and video. vLLM (0.31.0) does not support it yet and Ollama lists only text and image, so neither serves it for now. Text baseline: `intfloat/multilingual-e5-small`. Keep the baseline if it loses on our gold set |
-| D8 | Licences | **Decided (Oct 21, prime directive 1):** open source only, no paid licences. OSI-approved licences for all code, dependencies, images, tools and model weights; permissive preferred; no AGPL (so PyMuPDF is replaced). campus-ai is Apache-2.0. One allowance: free GPU vendor runtimes (NVIDIA CUDA), optional, with a CPU path that always works. Docs require only the open-source Docker Engine + Compose (or Podman), not Docker Desktop |
+| D8 | Licences | **Decided (Oct 21, prime directive 1):** open source only, no paid licences. OSI-approved licences for all code, dependencies, images, tools and model weights; permissive preferred; no AGPL (so PyMuPDF is replaced). campus-ai is Apache-2.0. Two named exceptions: free GPU vendor runtimes (NVIDIA CUDA), optional, with a CPU path that always works; and Docker Desktop as a developer tool on Windows workstations (Oct 21). Deployments need only the open-source Docker Engine + Compose (or Podman), and nothing may depend on Desktop-only features |
 | D9 | Vision model for alt text (A3) | **Open:** a local open-weight vision-language model under an OSI-approved licence (e.g. Apache-2.0 or MIT weights; "community" licences don't qualify), chosen by bake-off on the A6 gold set, running in a container from local weights |
 
 ## 9. Risks

@@ -66,7 +66,7 @@ in [`AGENTS.md`](../AGENTS.md)):
 
 | Prime directive | Consequence in the code |
 |---|---|
-| **1. Open source only, no paid licences, ever** | Every Python package, image, tool and model weight is under an OSI-approved licence; permissive preferred, no AGPL. campus-ai is Apache-2.0. Checked: all 61 non-NVIDIA packages in the `embed` image are open source; the 16 NVIDIA CUDA packages are the one allowance (free GPU vendor runtime, optional). Docker Engine + Compose or Podman, never Docker Desktop, is what the build needs |
+| **1. Open source only, no paid licences, ever** | Every Python package, image, tool and model weight is under an OSI-approved licence; permissive preferred, no AGPL. campus-ai is Apache-2.0. Checked: all 61 non-NVIDIA packages in the `embed` image are open source; the 16 NVIDIA CUDA packages are a named exception (free GPU vendor runtime, optional). Deployments need only Docker Engine + Compose or Podman; Docker Desktop is the other named exception, as a developer tool on Windows workstations |
 | **2. Everything runs offline** | Every model runs locally from open weights in our containers; no cloud model APIs (no Claude, OpenAI, Gemini, Bedrock). The model containers can't reach the internet at all (internal network) |
 
 | Principle | Consequence in the code |
@@ -292,7 +292,7 @@ retriever searches people, projects and collections together.
 
 | Decision | Choice | Why | Alternatives considered |
 |---|---|---|---|
-| Licences (D8) | OSI open source only; permissive preferred; campus-ai Apache-2.0 | Prime directive 1: no paid licences, ever | Commercial licences (e.g. PyMuPDF's Artifex licence), Docker Desktop: rejected |
+| Licences (D8) | OSI open source only; permissive preferred; campus-ai Apache-2.0 | Prime directive 1: no paid licences, ever | Commercial licences (e.g. PyMuPDF's Artifex licence): rejected. Docker Desktop: allowed only as a Windows developer tool, never required to run the product |
 | Model hosting (D2) | Local open-weight models only, in containers | Prime directive 2: everything offline | Hosted APIs (Claude, Bedrock and others): rejected |
 | Embedder (D7) | EmbeddingGemma 2, local weights | One space for text, image, audio, video; Apache 2.0; Matryoshka sizes; multilingual | vLLM and Ollama don't serve it yet; e5-small kept as text baseline |
 | Vector sizes | 128-d indexed, 768-d stored | Small index for fast candidates, full precision for the final order | Index at 768-d: larger, slower; 128-d only: less accurate |
