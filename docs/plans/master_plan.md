@@ -340,7 +340,7 @@ Each card is sized for one cloud session and one PR.
 | P7 | Embedder module with EmbeddingGemma 2 + bake-off vs text baseline (D7) | P0, P6 |
 | R0b | Collections data agreement with BC ELN (Arca) and pick the pilot collection | - |
 | R7 | Arca harvester + media splitter (text, image, audio, video units) with rights statements | P5, P7, R0b |
-| R8 | Europeana loader for the matching collection | P5, P7 |
+| R8 | Europeana loader for the matching collection. Pilot theme: salmon, as a subject (*Salmo*, *Oncorhynchus*, salmonids) or as salmon fishing in titles in 7 languages, without specimen photos: about 150 items, nearly all on topic (looser queries were half noise: people named Salmon, salmon-coloured fashion, herbarium sheets named after a botanist); open licences only (CC0, PDM, CC BY, CC BY-SA), until the Arca collection (R0b) fixes the theme. Images use Europeana's 400 px thumbnails; full-size media, audio and video need each provider's host and come later | P5, P7 |
 | R9 | Collections search: multimodal retrieval, citations with timestamps and image regions | R7, R8 |
 
 Kickoff prompt template for a card:
