@@ -57,6 +57,8 @@ commit `.env`, model weights, caches or customer data.
 - Deterministic code for anything checkable; LLM calls only for judgement.
 - Every agent output cites its evidence; nothing is sent or published
   without human approval.
+- Ingest only sources we have permission for. ArcaBC (arcabc.ca) is off limits
+  until BC ELN agrees (task card R0b): no fetching, scraping or indexing.
 - Data stays in its region (Canada or EU). Route through the LLM router,
   never call a model provider directly from product code.
 - Tests use `unittest`; mock LLMs, Neo4j and network calls.

@@ -43,7 +43,7 @@ docker compose stop web api    # stop
   creator, title, holder, source URL and licence.
 - **Item pages** show the record, its licence, linked records (creator,
   collection, holder) and similar pictures.
-- **BC collections (Arca)** and **SFU experts (REE)** have panels marked as
+- **BC collections (ArcaBC)** and **SFU experts (REE)** have panels marked as
   not yet connected.
 
 The same data is available as JSON:

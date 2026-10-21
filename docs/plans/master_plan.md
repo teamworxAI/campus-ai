@@ -167,7 +167,7 @@ Data sources:
   4. "Find an SFU expert or supervisor for this topic" (public, students,
      industry): natural-language search over REE.
   5. "Find sources on this topic across BC and European collections"
-     (researchers, students, librarians): multimodal search over Arca and
+     (researchers, students, librarians): multimodal search over ArcaBC and
      Europeana (section 4.2b).
 
 ### 4.2 Graph schema (Neo4j)
@@ -186,14 +186,18 @@ Topics come from OpenAlex's topic taxonomy so both sides share one
 vocabulary. Embeddings on Researcher, Project and Call text use the graph core's
 indexing.
 
-### 4.2b Content layer: Arca and Europeana (multimodal)
+### 4.2b Content layer: ArcaBC and Europeana (multimodal)
 
 The assistant also searches the scholarly and heritage record, not just
 people:
-- **Arca** (BC): BC ELN's network of digital repositories for 50+ BC
-  post-secondary institutions, libraries, museums and archives, built on
-  Islandora. Holds theses, images, books, newspapers, video and sound
-  recordings.
+- **ArcaBC** (BC, https://arcabc.ca): BC ELN's collection site, the BC
+  counterpart of Europeana. It brings together the digital collections of BC
+  post-secondary institutions, libraries, museums and archives (theses,
+  images, books, newspapers, video and sound recordings) in one place, so it
+  is one source with one loader and one data agreement, not a set of
+  repositories harvested one by one.
+  **Do not fetch, scrape or index anything from arcabc.ca until BC ELN grants
+  permission (task card R0b).** Permission is being worked through.
 - **Europeana** (EU): the EU's cultural-heritage aggregator, with an open
   API.
 
@@ -202,8 +206,9 @@ researchers in REE ("who at SFU works on this today?").
 
 Pipeline:
 1. Harvest metadata and media through each source's standard interfaces
-   (for Arca, the Islandora harvesting endpoints BC ELN agrees to; for
-   Europeana, its API). Store each item's rights statement.
+   (for ArcaBC, the interface BC ELN agrees to in R0b; for Europeana, its
+   API). Both loaders write the same JSONL records, so indexing, search and
+   the UI are shared. Store each item's rights statement.
 2. Split media into search units: text chunks up to 8K tokens, images,
    audio segments, video clips.
 3. Embed every unit with EmbeddingGemma 2 into the shared vector space.
@@ -212,18 +217,19 @@ Pipeline:
 5. Answers cite the item, with timestamps for audio and video and image
    regions for photos.
 
-Lisbon scope: one Arca collection plus one thematically matching Europeana
-collection. Full Arca coverage after Lisbon.
+Lisbon scope: one ArcaBC collection plus one thematically matching Europeana
+collection, if R0b is agreed in time; otherwise Europeana only, with ArcaBC
+shown as pending. Full ArcaBC coverage after Lisbon.
 
 Link to Course Access Agent: its alt-text and captioning workers draft
-descriptions for Arca items with thin metadata, for librarians to approve.
+descriptions for ArcaBC items with thin metadata, for librarians to approve.
 
 ### 4.3 Agent design
 
 ```mermaid
 flowchart TD
     Q[User request] --> RT{Router: journey 1-5}
-    RT --> MM[Collections search - multimodal retrieval over Arca + Europeana]
+    RT --> MM[Collections search - multimodal retrieval over ArcaBC + Europeana]
     MM --> EV
     RT --> CA[Call analyst - extract topics, expected outcomes, consortium rules]
     CA --> PS[Partner scout - hybrid retrieval + graph expansion]
@@ -266,7 +272,7 @@ Assumes Web Summit Lisbon is in early November; week 4 ends about Oct 30.
 
 | Week | Shared platform | Course Access Agent | Research Assistant |
 |---|---|---|---|
-| 0 (Oct 3-4) | Harness setup (section 6); confirm hosting and tools; decisions D1-D7 | Collect 40 gold documents | Download CORDIS and OpenAlex samples; contact BC ELN about Arca |
+| 0 (Oct 3-4) | Harness setup (section 6); confirm hosting and tools; decisions D1-D7 | Collect 40 gold documents | Download CORDIS and OpenAlex samples; contact BC ELN about ArcaBC |
 | 1 (Oct 5-9) | Skeleton, LLM router, graph core, eval harness; tracing; review UI skeleton | Parser + deterministic audit; WCAG report | Loaders and graph schema; ingest SFU + CORDIS |
 | 2 (Oct 12-16) | MCP server template | Workers + rebuild; first end-to-end run | Router, call analyst, partner scout; first shortlist |
 | 3 (Oct 19-23) | Eval dashboards in CI | Verify loop, review queue, eval tuning | Network worker, eligibility, evaluator; back-test |
@@ -338,9 +344,9 @@ Each card is sized for one cloud session and one PR.
 | R5 | Network worker, eligibility rules, citation evaluator | R4 |
 | R6 | Back-test eval (recall@10) | R3, P6 |
 | P7 | Embedder module with EmbeddingGemma 2 + bake-off vs text baseline (D7) | P0, P6 |
-| R0b | Collections data agreement with BC ELN (Arca) and pick the pilot collection | - |
-| R7 | Arca harvester + media splitter (text, image, audio, video units) with rights statements | P5, P7, R0b |
-| R8 | Europeana loader for the matching collection. Pilot theme: salmon, as a subject (*Salmo*, *Oncorhynchus*, salmonids) or as salmon fishing in titles in 7 languages, without specimen photos: about 150 items, nearly all on topic (looser queries were half noise: people named Salmon, salmon-coloured fashion, herbarium sheets named after a botanist); open licences only (CC0, PDM, CC BY, CC BY-SA), until the Arca collection (R0b) fixes the theme. Images use Europeana's 400 px thumbnails; full-size media, audio and video need each provider's host and come later | P5, P7 |
+| R0b | Data agreement with BC ELN for ArcaBC (arcabc.ca): permission to ingest, the interface to use, rights handling, and the pilot collection. **In progress; until signed, no code or session touches arcabc.ca** | - |
+| R7 | ArcaBC loader, the BC counterpart of R8: one fetch step through the interface agreed in R0b, writing the same JSONL records (items, media units, collections, holders, creators, rights statements). Blocked on R0b | P5, P7, R0b |
+| R8 | Europeana loader for the matching collection. Pilot theme: salmon, as a subject (*Salmo*, *Oncorhynchus*, salmonids) or as salmon fishing in titles in 7 languages, without specimen photos: about 150 items, nearly all on topic (looser queries were half noise: people named Salmon, salmon-coloured fashion, herbarium sheets named after a botanist); open licences only (CC0, PDM, CC BY, CC BY-SA), until the ArcaBC collection (R0b) fixes the theme. Images use Europeana's 400 px thumbnails; full-size media, audio and video need each provider's host and come later | P5, P7 |
 | R9 | Collections search: multimodal retrieval, citations with timestamps and image regions. First cut built: API (`campus_ai/research_assistant/api.py`) and web UI (`web/`) over Europeana; pictures and texts ranked separately; APA/Chicago/BibTeX citations. Timestamps and image regions wait on audio/video and region detection | R7, R8 |
 
 Kickoff prompt template for a card:
@@ -377,6 +383,6 @@ Commit, push to your branch, and open a PR with the eval results.
 | Calls data changes or API limits | Cache snapshots; weekly refresh routine |
 | GDPR complaints about profiling | Public data only, removal process, evidence shown for every match |
 | REE data access not agreed in time | Build and demo on public OpenAlex/ORCID data for SFU authors; swap in REE data once RIO agrees. Respect REE profile choices (e.g. not accepting students) |
-| Arca rights or cultural protocols block indexing | Start with one openly licensed collection agreed with BC ELN; rights checked per item |
+| ArcaBC permission not granted in time, or rights and cultural protocols block indexing | Demo on Europeana with ArcaBC shown as pending; start ArcaBC with one openly licensed collection agreed with BC ELN; rights checked per item |
 | EmbeddingGemma 2 is brand new | Bake-off in week 1; embedder behind one interface so it can be swapped |
 | Max usage limits slow the build | Cap parallel heavy sessions at 3; push bulk work to subagents and off-peak routines |

@@ -24,7 +24,7 @@ function h(tag, attrs, ...children) {
 const itemHref = (id) => "#/item/" + encodeURIComponent(id);
 const licenceGroup = (label) => LICENCE_GROUPS.slice().reverse().find((g) => label.startsWith(g)) || "Other";
 const sourceBadge = (card) => card.source === "europeana" ? h("span", { class: "badge eu", text: "EU · Europeana" })
-  : h("span", { class: "badge bc", text: "BC · " + (card.source || "Arca") });
+  : h("span", { class: "badge bc", text: "BC · " + (card.source || "ArcaBC") });
 const who = (card) => card.creators.length ? card.creators.join("; ") : "Creator not recorded";
 const credit = (card) => card.licence.startsWith("CC BY") ? `${card.licence} · credit ${card.creators[0] || card.holder}` : card.licence;
 
@@ -82,7 +82,7 @@ function filters(results) {
   return h("details", { class: "filters", open: matchMedia("(min-width: 701px)").matches },
     h("summary", { text: "Filters" }),
     h("fieldset", {}, h("legend", { text: "Source" }),
-      box("Europeana (EU)", true, null, true), box("Arca (BC) · coming soon", false, null, true)),
+      box("Europeana (EU)", true, null, true), box("ArcaBC (BC) · pending permission", false, null, true)),
     h("fieldset", {}, h("legend", { text: "Show" }),
       box("Pictures", state.show.pictures, flip("pictures")), box("Books, reports and film", state.show.texts, flip("texts"))),
     groups.length ? h("fieldset", {}, h("legend", { text: "Licence" }),
@@ -120,10 +120,10 @@ function textRow(card) {
 function rail() {
   return h("aside", { class: "rail", "aria-label": "BC collections and SFU experts" },
     h("section", { class: "panel" },
-      h("div", { class: "badges" }, h("span", { class: "badge bc", text: "BC · Arca" })),
+      h("div", { class: "badges" }, h("span", { class: "badge bc", text: "BC · ArcaBC" })),
       h("h2", { text: "BC collections" }),
-      h("p", { text: "Arca results will appear here, side by side with Europeana, once the pilot collection is agreed with BC ELN." }),
-      h("p", { class: "muted", text: "Status: data agreement in progress" })),
+      h("p", { text: "ArcaBC results will appear here, side by side with Europeana, once BC ELN grants permission to include its collections." }),
+      h("p", { class: "muted", text: "Status: permission in progress" })),
     h("section", { class: "panel" },
       h("h2", { text: "Who at SFU works on this today?" }),
       h("p", { text: "Matching researchers from SFU's Research Expertise Engine will be listed here, each with the publication behind the match." }),

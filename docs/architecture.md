@@ -16,7 +16,7 @@ campus-ai is two products on one shared core:
 
 - **Course Access Agent**: makes course materials accessible (WCAG 2.2).
 - **Research Assistant**: finds experts, EU partners, Horizon calls and
-  sources across BC (Arca) and EU (Europeana) collections.
+  sources across BC (ArcaBC) and EU (Europeana) collections.
 
 ```mermaid
 flowchart LR
@@ -32,7 +32,7 @@ flowchart LR
     end
     subgraph sources[External sources, harvested once]
         EU[Europeana API]
-        ARCA[Arca / BC ELN]
+        ARCA[ArcaBC arcabc.ca, BC ELN<br/>no access until R0b]
         REE[SFU REE, OpenAlex, CORDIS]
         HF[Hugging Face: model weights]
     end
@@ -43,12 +43,19 @@ flowchart LR
     CA --> CORE
     EU -. fetch-europeana .-> campus
     HF -. fetch-models .-> campus
-    ARCA -. planned .-> campus
+    ARCA -. planned: fetch-arcabc, blocked .-> campus
     REE -. planned .-> campus
 ```
 
 Every external source is reached only by a dedicated **fetch** step that
 writes to local disk. Everything that processes data afterwards runs offline.
+
+**ArcaBC** (https://arcabc.ca) is BC ELN's collection site, the BC counterpart
+of Europeana: one aggregated source, not many repositories. Its loader (R7)
+will mirror the Europeana loader, a single `fetch-arcabc` step writing the same
+JSONL records, so indexing, search and the UI need no changes for it. Until BC
+ELN grants permission (R0b), nothing in this repo may fetch, scrape or index
+arcabc.ca.
 
 ## 2. Principles that shape the architecture
 

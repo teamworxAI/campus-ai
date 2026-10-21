@@ -5,7 +5,7 @@ Agentic AI products for higher education in BC, Canada and the EU.
 | Product | What it does |
 |---|---|
 | Course Access Agent | Audits course materials (PDF, PPTX, DOCX) against WCAG 2.2, fixes what it can, and sends the rest to a human reviewer |
-| Research Assistant | AI layer over SFU's Research Expertise Engine and BC/EU collections (Arca, Europeana): find experts and supervisors, EU partners and Horizon calls, and multimodal sources, with evidence for every answer |
+| Research Assistant | AI layer over SFU's Research Expertise Engine and BC/EU collections (ArcaBC, Europeana): find experts and supervisors, EU partners and Horizon calls, and multimodal sources, with evidence for every answer |
 
 ## Documentation
 
