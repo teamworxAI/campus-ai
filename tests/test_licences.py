@@ -106,6 +106,14 @@ class LicenceGuardTests(unittest.TestCase):
             self.assertIn(model_id, MODELS, f"add {model_id} and its weight licence to MODELS")
             self.assertTrue(is_open(MODELS[model_id]), model_id)
 
+    def test_llm_router_models_are_open(self):
+        from campus_ai.core.llm import config
+
+        for model, licence in config.MODEL_LICENCES.items():
+            self.assertTrue(is_open(licence), f"{model}: {licence}")
+        for task, model in config.DEFAULT_MODELS.items():
+            self.assertIn(model, config.MODEL_LICENCES, task)
+
 
 if __name__ == "__main__":
     unittest.main()

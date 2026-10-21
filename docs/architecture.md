@@ -371,7 +371,7 @@ indexed into the shared graph.
 |---|---|---|
 | A1 | Document parser: PDF/PPTX/DOCX into one structure | Built on open-source, permissively licensed libraries (python-docx, python-pptx, pdfplumber); 7 tests. Supersedes PR #4, which used PyMuPDF |
 | A2 | Deterministic audit + WCAG-mapped report | Planned |
-| A3 | Alt-text worker (vision model, confidence score) | Planned; needs the LLM router (P1, PR #2, not merged) |
+| A3 | Alt-text worker (local vision model, confidence score) | Planned; the LLM router (P1) is built |
 | A4 | Structure, table and text workers | Planned |
 | A5 | Rebuild accessible DOCX/HTML + verify loop | Planned |
 | A6 | Gold set (40 documents) and eval metrics | Planned; needs P6 and the documents |
@@ -429,7 +429,7 @@ the search graph.
 | Untagged PDFs | Carry no heading or list semantics, so A1 returns them as paragraphs; A4 must infer structure |
 | Checkers | The plan names axe-core (via Playwright) and veraPDF (Java). Confirm their licences and that they run offline; both add large runtimes to the image |
 | **Vision model** (D9) | A local open-weight vision-language model under an OSI-approved licence, chosen by bake-off on the gold set. Local models may describe complex figures less well than hosted ones, so confidence thresholds and human review matter more |
-| LLM router | PR #2 has Claude and Bedrock backends; they must be removed so only local models remain (P1) |
+| LLM router | Done: Ollama is the only backend (`OLLAMA_HOST`: this machine, or the team's inference box); models must be in its open-licence allowlist; defaults are Gemma 4 (Apache-2.0) |
 | Gold set | 40 real course documents labelled by an accessibility specialist (D6); none collected yet |
 
 Module details for A1 are in [`design.md`](design.md#9-course-access-agent).

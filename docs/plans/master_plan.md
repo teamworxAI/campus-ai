@@ -74,7 +74,7 @@ Status: draft for iteration. Open decisions are listed in section 8.
 
 | Component | What | Where |
 |---|---|---|
-| LLM router | One interface over **local open-weight models only** (prime directive 2), run in containers from local weights; route by task (vision, reasoning, cheap classification). No cloud backends | `campus_ai/core/llm/` |
+| LLM router | One interface over **local open-weight models only** (prime directive 2), served by Ollama on hardware we control (a developer's machine, or the team's dedicated inference box via `OLLAMA_HOST`); route by task (vision, reasoning, cheap classification). Models must be in its open-licence allowlist. No cloud backends | `campus_ai/core/llm/` |
 | Graph core | Neo4j (`neo4j:2026.09.0-community` in compose) writer, vector + fulltext indexing, hybrid retriever with graph expansion. Every searchable node carries the `Entity` label, a 128-d vector (indexed, for candidates) and a 768-d vector (for reranking); vector and fulltext rankings are fused by reciprocal rank fusion | `campus_ai/core/graph/` |
 | Embedder | EmbeddingGemma 2 (open, Apache 2.0, runs offline from local weights): text, images, audio and video in one vector space; 128-dim vectors for fast candidate search, 768-dim for reranking. Behind one interface so it can be swapped (decision D7) | `campus_ai/core/embed/` |
 | Agent loop | Plain Python workflows calling local models through the LLM router (tool use and structured outputs with open-weight models); deterministic steps in plain Python. No hosted agent SDKs | `campus_ai/<product>/agent.py` |
@@ -360,7 +360,7 @@ Each card is sized for one cloud session and one PR.
 | ID | Card | Depends on |
 |---|---|---|
 | P0 | Project skeleton: `pyproject.toml` (uv), `campus_ai/` package, unittest setup, SessionStart hook | - |
-| P1 | LLM router over local open-weight models only, served in containers from local weights, with tests. PR #2 predates the prime directives and has Claude/Bedrock backends: those must be removed before merge | P0 |
+| P1 | LLM router over local open-weight models only, on Ollama (local, or the team's inference box), with tests. **Built** (#2, made local-only in #10): defaults Gemma 4 (Apache-2.0); the router refuses models not in its open-licence allowlist | P0 |
 | P8 | Licence guard: a test that lists every Python package, image and model weight in the stack and fails on any licence that is not OSI-approved (the two named exceptions listed: free GPU vendor runtimes, Docker Desktop for Windows development). **Built:** `tests/test_licences.py`, runs in both images | P0 |
 | P5 | Graph core: Neo4j writer, vector + fulltext indexes, hybrid retriever | P0, P7 |
 | P6 | Eval harness: gold-set format, RAGAS + deterministic metrics, report | P0 |

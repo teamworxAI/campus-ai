@@ -36,8 +36,7 @@ core with hybrid retrieval (P5), Europeana loader (R8), collections search API
 and web UI (R9), all for the Research Assistant. Course Access Agent: the
 document parser (A1) is built on open-source libraries; audit, fixing workers,
 rebuild and review are next (see [architecture](docs/architecture.md#11-course-access-agent)).
-Also next: LLM router over local models only (PR #2 needs its cloud backends
-removed), eval harness, licence guard (P8). OCR for scanned PDFs is next phase.
+Also built: LLM router over local open-weight models on Ollama (P1) and the licence guard (P8). Next: eval harness; OCR for scanned PDFs is next phase.
 
 ## Quick start
 
