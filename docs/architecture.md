@@ -369,7 +369,7 @@ indexed into the shared graph.
 
 | Card | What | State |
 |---|---|---|
-| A1 | Document parser: PDF/PPTX/DOCX into one structure | Built on branch `a1-document-parser` (PR #4, 7 tests). **Not merged** into this line yet |
+| A1 | Document parser: PDF/PPTX/DOCX into one structure | Built on open-source, permissively licensed libraries (python-docx, python-pptx, pdfplumber); 7 tests. Supersedes PR #4, which used PyMuPDF |
 | A2 | Deterministic audit + WCAG-mapped report | Planned |
 | A3 | Alt-text worker (vision model, confidence score) | Planned; needs the LLM router (P1, PR #2, not merged) |
 | A4 | Structure, table and text workers | Planned |
@@ -424,7 +424,7 @@ the search graph.
 
 | Item | Why it matters |
 |---|---|
-| **Replace PyMuPDF** (decided, D8) | A1 reads PDFs with PyMuPDF, which is AGPL-3.0 or paid. Under prime directive 1 it goes: A1's PDF path moves to permissively licensed libraries before merge |
+| PyMuPDF replaced (D8) | Done: A1 reads PDFs with pdfplumber (MIT). PDF reading order is now by position on the page rather than content-stream order |
 | Scanned PDFs | A1 reads text layers only; image-only scans give no text. **OCR is next phase** (card A7), with an open-source offline engine |
 | Untagged PDFs | Carry no heading or list semantics, so A1 returns them as paragraphs; A4 must infer structure |
 | Checkers | The plan names axe-core (via Playwright) and veraPDF (Java). Confirm their licences and that they run offline; both add large runtimes to the image |

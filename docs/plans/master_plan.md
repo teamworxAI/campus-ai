@@ -142,9 +142,9 @@ Key rules for the workers:
 ### 3.3 Tools (candidates, confirm in week 0)
 All tools must meet the prime directives: open source, no paid licences,
 running offline.
-- PDF parsing: permissively licensed libraries only (e.g. `pypdf`,
-  `pdfminer.six`; confirm each licence). **Not PyMuPDF**: it is AGPL-3.0 or
-  commercially licensed, so A1 must drop it (decision D8).
+- PDF parsing: `pdfplumber` on `pdfminer.six` (MIT; permissively licensed
+  libraries only). **Not PyMuPDF**: it is AGPL-3.0 or
+  commercially licensed, so A1 dropped it (decision D8).
   PPTX/DOCX: `python-pptx`, `python-docx` (MIT).
 - Checkers: `axe-core` (via Playwright) on the HTML output, `veraPDF` for
   PDF/UA reporting on inputs, plus custom rules for DOCX/PPTX structure.
@@ -367,7 +367,7 @@ Each card is sized for one cloud session and one PR.
 | P2 | Tracing module: per-run JSONL log of tool calls, tokens, cost | P0 |
 | P3 | Review queue Streamlit component (approve/edit/reject) | P0 |
 | P4 | MCP server template wrapping a product's public functions | P1 |
-| A1 | Document parser (PDF/PPTX/DOCX -> common structure). Built (PR #4) on PyMuPDF; replace it with permissively licensed PDF libraries before merge (D8) | P0 |
+| A1 | Document parser (PDF/PPTX/DOCX -> common structure). Built on python-docx, python-pptx and pdfplumber (all MIT); the PyMuPDF version (PR #4) is superseded (D8) | P0 |
 | A2 | Deterministic audit + WCAG-mapped report | A1 |
 | A3 | Alt-text worker with a local open-weight vision model (D9) and confidence score | A1, P1 |
 | A4 | Structure, table and text workers | A1 |

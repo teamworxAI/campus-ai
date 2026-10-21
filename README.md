@@ -34,7 +34,7 @@ Details and scope: [AGENTS.md](AGENTS.md#prime-directives-standing-orders-they-o
 Built: offline multimodal embedder with EmbeddingGemma 2 (P7), Neo4j graph
 core with hybrid retrieval (P5), Europeana loader (R8), collections search API
 and web UI (R9), all for the Research Assistant. Course Access Agent: the
-document parser (A1) is built on its own branch (PR #4); audit, fixing workers,
+document parser (A1) is built on open-source libraries; audit, fixing workers,
 rebuild and review are next (see [architecture](docs/architecture.md#11-course-access-agent)).
 Also next: LLM router over local models only (PR #2 needs its cloud backends
 removed), eval harness, licence guard (P8). OCR for scanned PDFs is next phase.
