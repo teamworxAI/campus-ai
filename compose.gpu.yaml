@@ -1,0 +1,5 @@
+# Give the embed service the host's NVIDIA GPUs. Opt in per machine, e.g. in .env:
+#   COMPOSE_FILE=compose.yaml;compose.gpu.yaml   (Windows; use ":" on Linux/macOS)
+services:
+  embed:
+    gpus: all
