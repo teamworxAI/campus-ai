@@ -144,3 +144,10 @@ dialog::backdrop { background: rgba(20, 35, 43, 0.45); }
   .search .seg button { flex: 1; }
   .search .btn.primary { width: 100%; justify-content: center; }
 }
+
+/* image search verdict */
+.verdict { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 18px; }
+.verdict-img { width: 120px; height: 120px; object-fit: cover; border-radius: 10px; background: #DDE4E2; flex: 0 0 auto; }
+.verdict > div { flex: 1 1 260px; display: flex; flex-direction: column; gap: 6px; }
+.verdict.none { border-color: #B26B00; box-shadow: inset 4px 0 0 #B26B00; }
+.verdict.same, .verdict.close { box-shadow: inset 4px 0 0 var(--accent); }

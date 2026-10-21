@@ -31,6 +31,7 @@ class Hit:
     score: float
     neighbors: list[dict] = field(default_factory=list)
     found_by: list[str] = field(default_factory=list)  # "meaning" (vector index), "words" (fulltext)
+    similarity: float = 0.0  # cosine similarity to the query at full size, -1..1
 
 
 def fulltext_query(text: str) -> str:
@@ -116,7 +117,9 @@ class HybridRetriever:
         by_meaning = {row["id"] for row in rows}
         found_by = {id_: [name for name, ids in (("meaning", by_meaning), ("words", set(by_text))) if id_ in ids]
                     for id_ in top}
-        hits = [Hit(id_, found[id_]["labels"], found[id_]["text"], scores[id_], found_by=found_by[id_]) for id_ in top]
+        cosine = dict(zip(ids, similarity.tolist()))
+        hits = [Hit(id_, found[id_]["labels"], found[id_]["text"], scores[id_], found_by=found_by[id_],
+                    similarity=cosine[id_]) for id_ in top]
         if neighbors and hits:
             linked = self.run(
                 f"UNWIND $ids AS id MATCH (n:{LABEL} {{id: id}}) RETURN id, COLLECT {{ "

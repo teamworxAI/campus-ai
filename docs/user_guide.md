@@ -25,7 +25,15 @@ docker compose stop web api    # stop
 ```
 
 - **Words / By image.** Type a question in any language, or switch to *By
-  image* and drop a picture to find similar ones.
+  image* and drop a picture to find similar ones. Image search only knows the
+  indexed collections, so it always has *some* nearest pictures. The page shows
+  your picture and says whether it is **in the collection** (similarity ≥ 0.98),
+  has **similar pictures** (≥ 0.76), or has **no close match**, in which case
+  the list is only the nearest of what the index holds. The thresholds were
+  measured on the salmon pilot: unrelated pictures peaked at 0.68–0.72,
+  salmon and fishing pictures from outside the index at 0.80–0.86
+  (`SAME_PICTURE`, `CLOSE_PICTURE` in `collections.py`; recheck them when
+  collections change).
 - **Results.** Pictures and books, reports and film come as two lists: a text
   query always sits closer to text than to pictures, so one merged list would
   bury the pictures. Each card shows how it matched: *Picture*, *Meaning*,

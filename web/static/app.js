@@ -130,14 +130,33 @@ function rail() {
       h("p", { class: "muted", text: "Status: waiting on the REE integration" })));
 }
 
+// The uploaded picture and an honest verdict: the list always holds the nearest pictures in
+// the index, so say when none of them is actually close.
+function imageVerdict(results) {
+  const n = results.indexed_items;
+  const verdicts = {
+    same: ["This picture is in the collection", "It is the first result. The others are the most similar pictures."],
+    close: ["Similar pictures found", `The closest of the ${n} indexed items, best first.`],
+    none: ["No close match", `Nothing among the ${n} indexed items looks like this picture. ` +
+      "The pictures below are only the nearest ones, and are probably unrelated."],
+  };
+  const [title, body] = verdicts[results.match] || verdicts.none;
+  return h("section", { class: `panel verdict ${results.match}`, role: "status" },
+    results.preview ? h("img", { src: results.preview, alt: "Your picture", class: "verdict-img" }) : null,
+    h("div", {}, h("h2", { text: title }), h("p", { text: body }),
+      results.match === "none" ? h("p", { class: "muted", text: "The index currently holds the Europeana salmon pilot collection only." }) : null));
+}
+
 function renderResults() {
   const area = document.getElementById("results");
   if (!area || !state.results) return;
   const keep = (c) => state.licences.has(licenceGroup(c.licence));
   const pictures = state.show.pictures ? state.results.pictures.filter(keep) : [];
   const texts = state.show.texts ? state.results.texts.filter(keep) : [];
-  const label = state.results.byImage ? `Pictures like “${state.results.query}”` : "European collections";
+  const label = !state.results.byImage ? "European collections"
+    : state.results.match === "none" ? "Nearest pictures in the index" : `Pictures like “${state.results.query}”`;
   area.replaceChildren(...[
+    state.results.byImage ? imageVerdict(state.results) : null,
     h("div", { class: "head-row" },
       h("h2", { id: "eu-heading" }, label, h("span", { class: "sub", text: " · Europeana" })),
       h("span", { class: "muted", text: "Best matches first" })),
@@ -178,12 +197,14 @@ async function runSearch(query) {
 }
 
 async function searchByImage(file) {
-  state.results = null; state.licences = null;
+  if (state.results && state.results.preview) URL.revokeObjectURL(state.results.preview);
+  state.results = null; state.licences = null; state.mode = "image";
   renderSearch({ text: "Looking for similar pictures…" });
   const body = new FormData();
   body.append("file", file);
   try {
-    state.results = { ...(await api("/api/search/image", { method: "POST", body })), byImage: true };
+    const found = await api("/api/search/image", { method: "POST", body });
+    state.results = { ...found, byImage: true, preview: URL.createObjectURL(file) };
     renderSearch();
   } catch (error) {
     renderSearch({ text: "Image search failed: " + error.message, error: true });

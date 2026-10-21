@@ -18,6 +18,13 @@ from campus_ai.core.graph import HybridRetriever
 DATA_DIR = Path("data")
 CANDIDATES = 50
 
+# Image-to-image cosine similarity (EmbeddingGemma 2, 768-d). Calibrated on the salmon pilot:
+# unrelated pictures (a newspaper, portraits) peaked at 0.68-0.72 against the index, fishing and
+# salmon pictures from outside it at 0.80-0.86, and an indexed picture at 1.00.
+SAME_PICTURE = 0.98
+CLOSE_PICTURE = 0.76
+PICTURE_LABELS = {"same": "Same picture", "close": "Similar", "none": "Not close"}
+
 LICENCES = (
     (r"publicdomain/zero/([\d.]+)", "CC0 {}"),
     (r"publicdomain/mark/", "Public domain"),
@@ -57,6 +64,7 @@ class Card:
     image: str | None
     file: str | None = field(default=None, repr=False)
     matched: str = ""
+    similarity: float | None = None  # set for picture hits
 
     def public(self) -> dict:
         data = asdict(self)
@@ -109,6 +117,13 @@ def matched(found_by: list[str], picture: bool) -> str:
     return " and ".join(parts).capitalize() or "Related"
 
 
+def picture_match(best: float | None) -> str:
+    """How close the best indexed picture is to an uploaded one: "same", "close" or "none"."""
+    if best is None or best < CLOSE_PICTURE:
+        return "none"
+    return "same" if best >= SAME_PICTURE else "close"
+
+
 def citations(c: Card) -> dict[str, str]:
     """APA, Chicago and BibTeX strings; deterministic, from the record alone."""
     who = "; ".join(c.creators) or c.holder or "Unknown"
@@ -148,11 +163,15 @@ class CollectionsSearch:
         if modality == "text":  # did the item's own text also match the words?
             words = {hit.id for hit in self.retriever.search(query, CANDIDATES, labels=["Item"], neighbors=0)
                      if "words" in hit.found_by}
+        similarity = {hit.id.split("#")[0]: hit.similarity for hit in hits}
         cards = self.cards(parents)
         out = []
         for id_ in parents:
             if id_ in cards:
                 cards[id_].matched = matched(["words"] if id_ in words else [], picture=True)
+                cards[id_].similarity = round(similarity[id_], 3)
+                if modality == "image":
+                    cards[id_].matched = PICTURE_LABELS[picture_match(similarity[id_])]
                 out.append(cards[id_])
         return out
 

@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from campus_ai.core.graph import Hit
 from campus_ai.research_assistant import collections
 from campus_ai.research_assistant.api import create_app
-from campus_ai.research_assistant.collections import CollectionsSearch, card, citations, licence, matched, media_url
+from campus_ai.research_assistant.collections import CollectionsSearch, card, citations, licence, matched, media_url, picture_match
 
 ROW = {
     "id": "europeana:/1/a",
@@ -72,6 +72,10 @@ class CardTests(unittest.TestCase):
         self.assertEqual(c.image, "/media/europeana/salmon/media/a.jpg")
         self.assertNotIn("file", c.public())
 
+    def test_picture_match_thresholds(self):
+        self.assertEqual([picture_match(s) for s in (None, 0.5, 0.759, 0.76, 0.979, 0.98)],
+                         ["none", "none", "none", "close", "close", "same"])
+
     def test_matched_labels(self):
         self.assertEqual(matched(["words"], picture=True), "Picture and words")
         self.assertEqual(matched([], picture=True), "Picture")
@@ -129,6 +133,16 @@ class ApiTests(unittest.TestCase):
     def test_image_upload_checks_type(self):
         response = self.client.post("/api/search/image", files={"file": ("a.txt", b"hello", "text/plain")})
         self.assertEqual(response.status_code, 415)
+
+    def test_image_search_says_when_nothing_is_close(self):
+        for similarity, match, label in ((0.72, "none", "Not close"), (0.81, "close", "Similar"),
+                                          (0.995, "same", "Same picture")):
+            with self.subTest(similarity=similarity):
+                self.service.retriever.search = lambda *a, s=similarity, **kw: [
+                    Hit("europeana:/1/a#image", [], "", 0.03, similarity=s)]
+                body = self.client.post("/api/search/image", files={"file": ("p.png", b"png", "image/png")}).json()
+                self.assertEqual((body["match"], body["best_similarity"], body["indexed_items"]), (match, similarity, 2))
+                self.assertEqual(body["pictures"][0]["matched"], label)
 
     def test_media_serves_only_images_in_media_folders(self):
         with tempfile.TemporaryDirectory() as tmp:

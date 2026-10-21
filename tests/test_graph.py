@@ -150,6 +150,7 @@ class RetrieverTests(unittest.TestCase):
         # "word" is in both rankings so fusion puts it first; the full-size rerank lifts "close" above "far".
         self.assertEqual([hit.id for hit in hits], ["word", "close"])
         self.assertEqual([hit.found_by for hit in hits], [["words"], ["meaning"]])
+        self.assertAlmostEqual(hits[1].similarity, 1.0, places=5)  # "close" is the query vector itself
         self.assertEqual(hits[1].neighbors[0]["id"], "c1")
         self.assertEqual(driver.calls[0][1]["labels"], ["Item"])
         self.assertEqual(len(driver.calls[0][1]["vector"]), 128)

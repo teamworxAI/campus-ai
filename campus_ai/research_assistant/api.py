@@ -20,7 +20,7 @@ from fastapi import FastAPI, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 
 from campus_ai.research_assistant import collections
-from campus_ai.research_assistant.collections import CollectionsSearch
+from campus_ai.research_assistant.collections import CollectionsSearch, picture_match
 
 MAX_UPLOAD = 10 * 1024 * 1024
 IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
@@ -77,7 +77,17 @@ def create_app(service: CollectionsSearch | None = None) -> FastAPI:
                     pictures = search().pictures(tmp.name, k, modality="image")
             except (OSError, ValueError) as error:  # not a readable image
                 raise HTTPException(422, "could not read that image") from error
-        return {"query": file.filename or "image", "pictures": [c.public() for c in pictures], "texts": []}
+        best = pictures[0].similarity if pictures else None
+        return {
+            "query": file.filename or "image",
+            "pictures": [c.public() for c in pictures],
+            "texts": [],
+            # "same": the picture is in the index; "close": similar ones; "none": nothing close,
+            # so the list is only the nearest of what the index holds.
+            "match": picture_match(best),
+            "best_similarity": best,
+            "indexed_items": search().count(),
+        }
 
     @app.get("/api/items/{item_id:path}")
     def item(item_id: str) -> dict:

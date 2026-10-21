@@ -307,7 +307,24 @@ retriever searches people, projects and collections together.
 - **Planned.** GDPR handling for EU researcher data, OCAP® for Indigenous
   materials, and in-region LLM routing (master plan, sections 4.4 and 2).
 
-## 9. Scaling and limits
+## 9. Resilience
+
+- `neo4j`, `api` and `web` have `restart: unless-stopped`: they come back
+  after a crash and when Docker starts (e.g. after a reboot, if Docker Desktop
+  starts with Windows), until you stop them with `docker compose stop`.
+- Health checks on all three. `api` is restarted by Compose when Neo4j is, and
+  its database driver also reconnects on its own.
+- nginx looks up `api` through Docker's DNS on every request (cached 10 s), so
+  a recreated `api` container with a new address is found without restarting
+  `web`.
+- Each image is built by one service only (`test`, `embed`); `api`,
+  `fetch-models` and `fetch-europeana` reuse the image with
+  `pull_policy: never`. Building one image from two services in parallel
+  corrupted it, so run `docker compose build` before `up`.
+- Measured: a crashed `api` serves again in about 25 s (model reload); after a
+  Neo4j restart, search works again within seconds.
+
+## 10. Scaling and limits
 
 - Indexing is CPU-bound without a GPU. Add `compose.gpu.yaml` on NVIDIA
   machines; models then run in bfloat16.
