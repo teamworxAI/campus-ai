@@ -1,0 +1,11 @@
+{"id": "d1", "modality": "text", "content": "Wildfire smoke exposure and respiratory health outcomes in British Columbia."}
+{"id": "d2", "modality": "text", "content": "Coastal salmon populations and ocean temperature change in the North Pacific."}
+{"id": "d3", "modality": "text", "content": "Photographies d'archives des chantiers navals de Lisbonne au XIXe siècle."}
+{"id": "d4", "modality": "text", "content": "Enregistrements sonores de chants traditionnels acadiens."}
+{"id": "d5", "modality": "text", "content": "Machine learning methods for detecting accessibility issues in lecture slides."}
+{"id": "d6", "modality": "text", "content": "Politiques publiques de logement abordable dans les villes européennes."}
+{"query": "health effects of forest fire smoke", "lang": "en", "relevant": ["d1"]}
+{"query": "effets de la température de l'océan sur le saumon", "lang": "fr", "relevant": ["d2"]}
+{"query": "historic photos of Lisbon shipyards", "lang": "en", "relevant": ["d3"]}
+{"query": "musique traditionnelle acadienne", "lang": "fr", "relevant": ["d4"]}
+{"query": "affordable housing policy in Europe", "lang": "en", "relevant": ["d6"]}

@@ -6,6 +6,13 @@ readme = "README.md"
 requires-python = ">=3.11,<3.14"
 dependencies = [
     "anthropic[bedrock]>=1.11.0",
+    "numpy>=2.4.6",
+]
+
+[project.optional-dependencies]
+embed = [
+    "av>=18.1.0",
+    "sentence-transformers[image,video]>=6.1.0",
 ]
 
 [build-system]
