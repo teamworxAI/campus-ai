@@ -227,7 +227,22 @@ Use your `NEO4J_PASSWORD` if you set one.
 | Wipe the graph | `docker compose down -v` (deletes the `neo4j-data` volume) |
 | Remove a harvest | delete `data/europeana/<name>/` |
 
-## 7. Troubleshooting
+## 7. Audit a course document (Course Access Agent)
+
+Check a PDF, PPTX or DOCX against WCAG 2.2 AA. It runs offline, and the file
+never leaves the machine:
+
+```bash
+docker compose run --rm -v "$PWD/samples:/samples:ro" test python scripts/audit_document.py /samples/week4.docx
+```
+
+Put the files in a folder (here `samples/`) and mount it read-only as shown.
+The report lists each problem with its WCAG criterion, where it is and what
+will fix it, then what the automatic checks can't judge (such as colour
+contrast and whether existing alt text is accurate). Add `--json` for a
+machine-readable report. Fixing comes with the next cards (A3–A5).
+
+## 8. Troubleshooting
 
 | Symptom | Cause and fix |
 |---|---|

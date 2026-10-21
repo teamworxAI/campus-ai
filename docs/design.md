@@ -321,7 +321,37 @@ Other rules:
 - **Images** get `nearby_text`: the text block just before and just after on
   the same page, the context the alt-text worker (A3) needs.
 
-### 9.2 Limits that the next cards must handle
+### 9.2 Audit (A2): `campus_ai/course_access/audit.py`
+
+`audit(document)` returns `Issue`s in document order; `report_markdown` and
+`report_json` render them. Deterministic only: no model.
+
+| Rule | WCAG 2.2 | Level | Finds | Fixed by |
+|---|---|---|---|---|
+| `document-no-title` | 2.4.2 Page Titled | A | No title in the document properties | text worker |
+| `document-no-language`, `document-bad-language` | 3.1.1 Language of Page | A | Language missing, or not a language tag | text worker |
+| `no-headings` | 1.3.1 Info and Relationships | A | 5+ paragraphs and no headings (for PDFs: no heading markup) | structure worker |
+| `heading-level-skipped` | 1.3.1 | A | A heading more than one level deeper than the previous one | structure worker |
+| `slide-no-title`, `slide-title-duplicate` | 2.4.6 Headings and Labels | AA | PPTX slides without a title, or sharing one | structure worker |
+| `image-missing-alt` | 1.1.1 Non-text Content | A | Image with no alt text and not marked decorative | alt-text worker |
+| `image-placeholder-alt` | 1.1.1 | A | Alt text that is a file name or a word like "image" | alt-text worker |
+| `table-no-header-row` | 1.3.1 | A | Table of 2+ rows without a marked header row | table worker |
+| `link-no-text`, `link-vague-text`, `link-bare-url` | 2.4.4 Link Purpose (In Context) | A | Empty, "click here"-style or raw-URL link text | text worker |
+| `fake-list` | 1.3.1 | A | Paragraphs typed as lists ("- ", "1. ", "a) ") instead of real list markup | structure worker |
+| `page-image-only` | 1.4.5 Images of Text | AA | PDF page with images and no text (probably scanned) | person (OCR is A7) |
+
+Every report ends with what the audit cannot check (contrast, accuracy of
+existing alt text, meaningful sequence, PDF tags, language of parts,
+equations and charts), so a short list is never read as conformance.
+
+Run it:
+
+```bash
+docker compose run --rm -v "$PWD/samples:/samples:ro" test python scripts/audit_document.py /samples/lecture.pdf
+docker compose run --rm -v "$PWD/samples:/samples:ro" test python scripts/audit_document.py /samples/lecture.pdf --json
+```
+
+### 9.3 Limits that the next cards must handle
 
 | Limit | Handled by |
 |---|---|

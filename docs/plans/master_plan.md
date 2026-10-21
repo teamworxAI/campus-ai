@@ -368,7 +368,7 @@ Each card is sized for one cloud session and one PR.
 | P3 | Review queue Streamlit component (approve/edit/reject) | P0 |
 | P4 | MCP server template wrapping a product's public functions | P1 |
 | A1 | Document parser (PDF/PPTX/DOCX -> common structure). Built on python-docx, python-pptx and pdfplumber (all MIT); the PyMuPDF version (PR #4) is superseded (D8) | P0 |
-| A2 | Deterministic audit + WCAG-mapped report | A1 |
+| A2 | Deterministic audit + WCAG-mapped report. **Built:** `campus_ai/course_access/audit.py`, `scripts/audit_document.py`; colour contrast waits on colour extraction | A1 |
 | A3 | Alt-text worker with a local open-weight vision model (D9) and confidence score | A1, P1 |
 | A4 | Structure, table and text workers | A1 |
 | A5 | Rebuild accessible DOCX/HTML + verify loop | A2-A4 |
