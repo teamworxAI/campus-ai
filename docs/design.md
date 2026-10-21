@@ -262,7 +262,7 @@ Switching the graph to it needs a fresh graph (`docker compose down -v`).
 ## 9. Course Access Agent
 
 The system view and status are in [`architecture.md`](architecture.md#11-course-access-agent).
-Only A1 exists so far, on branch `a1-document-parser` (PR #4). Everything
+Only A1 exists so far. It reads files with open-source, permissively licensed libraries only: python-docx and python-pptx (MIT) and pdfplumber on pdfminer.six (MIT). The first version (PR #4) used PyMuPDF, which is AGPL and was replaced under prime directive 1. Everything
 here is bound by the prime directives (`AGENTS.md`): open-source libraries only,
 and any model (alt text, OCR) runs locally from open weights.
 
@@ -310,11 +310,11 @@ classDiagram
 |---|---|---|---|---|
 | DOCX | Body order of paragraphs and tables | From `Heading N` styles; lists from numbering or `List` styles, with nesting level | Inline drawings, with `descr` alt text and Office's decorative flag | Core properties, else the default style's language |
 | PPTX | Slide order, then shape order on each slide; groups flattened | Title placeholders become level-1 headings; body placeholders are bullets unless `buNone` | Pictures, with `descr` alt text and decorative flag | Core properties, else the first text run's language |
-| PDF | Content-stream order of text and image blocks per page | None: untagged PDFs carry no semantics, so text is paragraphs | Embedded images, with no alt text (not read from tags) | The catalog's `/Lang` |
+| PDF (pdfplumber) | Per page, top to bottom then left to right: paragraphs (consecutive lines joined until a gap taller than a line, or a table or image in between), ruled tables, images | None: untagged PDFs carry no semantics, so text is paragraphs | Each image as a 150 dpi PNG of its area on the page (what a reader sees), with no alt text (not read from tags) | The catalog's `/Lang` |
 
 Other rules:
 - **Tables**: DOCX marks a header row with `tblHeader`; PPTX with the
-  table's *first row* setting; PDF tables (found by PyMuPDF) never have one.
+  table's *first row* setting; PDF tables (ruled tables found by pdfplumber) never have one.
   Text inside a PDF table is emitted once, as the table.
 - **Links** follow the block that contains them; PDF links come at the end
   of their page.
@@ -329,4 +329,4 @@ Other rules:
 | Untagged PDF: no headings or lists; existing PDF tags and alt text are not read | A4 infers structure; A2 reports the PDF as untagged |
 | Reading order is the file's, which may be wrong (e.g. a PPTX text box added last) | A2 flags suspect order; A4 proposes a fix for review |
 | Equations, charts and SmartArt come through as images or plain text | Always routed to the review queue (master plan 3.2) |
-| PyMuPDF is AGPL-3.0, against prime directive 1 | Replaced with permissively licensed PDF libraries before A1 merges (decision D8); the PDF rows above describe current behaviour and must hold after the swap |
+| Reading order on complex PDF layouts (columns, sidebars) follows position, not the author's intent | A2 flags pages with several text columns; A4 proposes an order for review |
