@@ -6,11 +6,13 @@ and roadmap see [`plans/master_plan.md`](plans/master_plan.md); for module
 internals see [`design.md`](design.md).
 
 **Status (October 2026).** Shared core: built the embedder (P7), the graph
-core (P5), the local-only LLM router (P1) and the licence guard (P8).
+core (P5), the local-only LLM router (P1), the licence guard (P8), Ollama
+in compose (P9) and the local-stack smoke test (B1, to be run on the demo
+laptop).
 Research Assistant: built the Europeana loader (R8) and collections search
 with its web UI (R9). Course Access Agent: built the document parser (A1) and
 the deterministic audit (A2); the rest is planned (section 11). Still
-planned: Ollama in compose (P9), data-class gate (P1b), tracing (P2), review
+planned: data-class gate (P1b), tracing (P2), review
 queue (P3), MCP servers (P4), eval harness (P6), reranker (R3), rights filter
 (R10) and the ArcaBC loader (R7, blocked on R0b). Diagrams mark planned parts with dashed lines.
 
@@ -34,12 +36,12 @@ flowchart LR
         CA[Course Access Agent]
         CORE[Shared core: embedder, graph, LLM router<br/>eval harness planned]
     end
-    OLL[Ollama on hardware we control<br/>OLLAMA_HOST: this machine or the team's inference box]
+    OLL[Ollama compose service, local weights<br/>or the team's inference box via OLLAMA_HOST]
     subgraph sources[External sources, harvested once]
         EU[Europeana API]
         ARCA[ArcaBC arcabc.ca, BC ELN<br/>no access until R0b]
         REE[SFU REE, OpenAlex, CORDIS]
-        HF[Hugging Face: model weights]
+        HF[Hugging Face, Ollama registry: model weights]
     end
     R --> RA
     O --> RA
@@ -48,16 +50,16 @@ flowchart LR
     CA --> CORE
     CORE -- LLM router --> OLL
     EU -. fetch-europeana .-> campus
-    HF -. fetch-models .-> campus
+    HF -. fetch-models, fetch-ollama .-> campus
     ARCA -. planned: fetch-arcabc, blocked .-> campus
     REE -. planned .-> campus
 ```
 
 Every external source is reached only by a dedicated **fetch** step that
 writes to local disk. Everything that processes data afterwards runs offline.
-Ollama is not a compose service: the LLM router calls it at `OLLAMA_HOST`
-(default `http://localhost:11434`), and its weights are pulled into Ollama
-outside this repo.
+The LLM router calls Ollama at `OLLAMA_HOST`: in compose, the `ollama`
+service (`http://ollama:11434`), which serves weights that the one-time
+`fetch-ollama` job pulled into `MODELS_DIR/ollama`.
 
 **ArcaBC** (https://arcabc.ca) is BC ELN's collection site, the BC counterpart
 of Europeana: one aggregated source, not many repositories. Its loader (R7)
@@ -74,15 +76,15 @@ in [`AGENTS.md`](../AGENTS.md)):
 | Prime directive | Consequence in the code |
 |---|---|
 | **1. Open source only, no paid licences, ever** | Every Python package, image, tool and model weight is under an OSI-approved licence; permissive preferred, no AGPL. campus-ai is Apache-2.0. Checked: all 61 non-NVIDIA packages in the `embed` image are open source; the 16 NVIDIA CUDA packages are a named exception (free GPU vendor runtime, optional). Deployments need only Docker Engine + Compose or Podman; Docker Desktop is the other named exception, as a developer tool on Windows workstations |
-| **2. Everything runs offline** | Every model runs locally from open weights on hardware we control: the embedder in the `embed`/`api` containers, language and vision models on Ollama through the LLM router (`campus_ai/core/llm/`, Ollama is its only backend). No cloud model APIs (no Claude, OpenAI, Gemini, Bedrock). The embedder containers can't reach the internet at all (internal network) |
+| **2. Everything runs offline** | Every model runs locally from open weights on hardware we control: the embedder in the `embed`/`api` containers, language and vision models on Ollama through the LLM router (`campus_ai/core/llm/`, Ollama is its only backend). No cloud model APIs (no Claude, OpenAI, Gemini, Bedrock). The model containers (`embed`, `api`, `ollama`) can't reach the internet at all (internal network) |
 
 | Principle | Consequence in the code |
 |---|---|
 | Portable: rebuilds from the repo on any machine | Everything runs in Docker Compose; dependencies are locked in `uv.lock`; images and Neo4j are pinned |
 | Model register (D10) | The router uses only models listed in `MODEL_LICENCES` (`campus_ai/core/llm/config.py`) and refuses any other; defaults `gemma4:12b` (reasoning, vision) and `gemma4:e4b` (classification), all Apache-2.0. `tests/test_licences.py` checks these and the embedder weights |
-| Offline models | Embedder weights live in a host directory (`MODELS_DIR`) mounted read-only; `HF_HUB_OFFLINE=1`; nothing downloads at runtime |
-| Network isolation | The model containers (`embed`, `api`) sit on an `internal` Docker network that reaches only Neo4j |
-| Fetch and process are separate | `fetch-models` and `fetch-europeana` are the only services with internet access; they write files, never the graph |
+| Offline models | All weights live in a host directory (`MODELS_DIR`) mounted read-only; `HF_HUB_OFFLINE=1`; Ollama runs with `OLLAMA_NO_CLOUD=1` and can't pull; nothing downloads at runtime |
+| Network isolation | The model containers (`embed`, `api`, `ollama`) sit on an `internal` Docker network that reaches only Neo4j and each other; the B1 smoke test checks it has no internet route |
+| Fetch and process are separate | `fetch-models`, `fetch-ollama` and `fetch-europeana` are the only services with internet access; they write files, never the graph |
 | Simple codebase | Small modules in `campus_ai/core/`; one JSONL format feeds the indexer from any source |
 | Evidence for every answer | The retriever returns each hit with its linked nodes (collection, holder, creator) and every item keeps its rights statement and source URL |
 | Data rights | Only openly licensed Europeana items are kept; harvested data is never committed or baked into images. Planned: the rights and governance filter (R10) and the data-class gate in the router (P1b: classes P/I/S/R, R never reaches a model) |
@@ -92,6 +94,7 @@ in [`AGENTS.md`](../AGENTS.md)):
 ```mermaid
 flowchart TB
     HF[huggingface.co]
+    OR[registry.ollama.ai]
     API[api.europeana.eu]
     subgraph host[Host machine]
         MD[(MODELS_DIR<br/>model weights)]
@@ -99,12 +102,15 @@ flowchart TB
         ENV[.env<br/>keys and settings]
         subgraph internet_ok[Default network: internet access]
             FM[fetch-models<br/>image campus-ai:embed]
+            FO[fetch-ollama<br/>image ollama/ollama]
             FE[fetch-europeana<br/>image campus-ai:test]
         end
         subgraph graphnet["graph network (internal: no internet)"]
             EMB[embed<br/>image campus-ai:embed<br/>EmbeddingGemma 2]
             APIS[api<br/>image campus-ai:embed<br/>FastAPI + model]
             NEO[(neo4j<br/>2026.09.0-community)]
+            OLL[ollama<br/>0.40.8<br/>LLMs for the router]
+            SMK[smoke<br/>image campus-ai:test<br/>B1 checks]
         end
         WEB[web<br/>nginx 1.30.6<br/>UI + proxy]
         TEST[test<br/>image campus-ai:test<br/>no network needed]
@@ -113,6 +119,12 @@ flowchart TB
     HF --> FM
     API --> FE
     FM -- writes --> MD
+    OR --> FO
+    FO -- writes --> MD
+    MD -- read-only --> OLL
+    APIS -- "LLM router :11434" --> OLL
+    EMB -- "LLM router :11434" --> OLL
+    SMK -. checks .-> OLL
     FE -- writes --> DD
     MD -- read-only --> EMB
     DD -- read-only --> EMB
@@ -134,6 +146,9 @@ flowchart TB
 | `embed` | `campus-ai:embed` (adds PyTorch, sentence-transformers, PyAV) | `graph` (internal) | `MODELS_DIR:/models:ro`, `./data:/app/data:ro` | Bake-off, indexing, search, eval |
 | `neo4j` | `neo4j:2026.09.0-community` | `graph` (internal) | volume `neo4j-data` | Graph, vector and fulltext indexes |
 | `fetch-models` | `campus-ai:embed` | default | `MODELS_DIR:/models` (rw) | One-time weight download (profile `fetch`) |
+| `ollama` | `ollama/ollama:0.40.8` (MIT) | `graph` (internal) | `MODELS_DIR:/models:ro` | Serves the router's language and vision models from `MODELS_DIR/ollama`; port 11434 inside the network only (P9) |
+| `fetch-ollama` | `ollama/ollama:0.40.8` | default | `MODELS_DIR:/models` (rw) | One-time pull of the router's default models, or the models given as arguments, into `MODELS_DIR/ollama` (profile `fetch`) |
+| `smoke` | `campus-ai:test` | `graph` (internal) | `./evals/smoke` (rw) | Local-stack smoke test (B1): services up, no internet, router answers; report with timings (profile `smoke`) |
 | `fetch-europeana` | `campus-ai:test` | default | `./data:/app/data` (rw) | Harvest Europeana items and thumbnails (profile `fetch`) |
 | `api` | `campus-ai:embed` | `graph` (internal) | `MODELS_DIR:/models:ro`, `./data:/app/data:ro` | Collections search API (FastAPI, port 8000 inside the network only) |
 | `web` | `nginx:1.30.6-alpine` | `graph` + `edge` | `web/static`, `web/nginx.conf` (ro) | Serves the UI and proxies `/api` and `/media` to `api`; the only published port, `127.0.0.1:${WEB_PORT:-8080}` |
@@ -142,15 +157,17 @@ flowchart TB
 network can't publish a port. It runs only nginx, with no model, key or data,
 so the services that hold them stay without internet access.
 
-No compose service runs Ollama or uses the LLM router yet, and the router's
-default `localhost:11434` is unreachable from inside a container. Planned:
-card P9 adds an offline Ollama service from local weights on the `graph`
-network and passes `OLLAMA_HOST` / `CAMPUS_AI_MODEL_*` to the services that
-call the router (A3 first).
+`embed`, `api` and `smoke` get `OLLAMA_HOST` (default `http://ollama:11434`)
+and the optional `CAMPUS_AI_MODEL_*` overrides from `.env`. Start `ollama`
+with `docker compose up -d ollama`; `api` doesn't wait for it, since nothing
+in `api` calls the router yet. Ollama reads its weights read-only, so it never
+prunes them (`OLLAMA_NOPRUNE=1`), and its cloud models are off
+(`OLLAMA_NO_CLOUD=1`). It needs `MODELS_DIR/ollama` to exist, so run
+`fetch-ollama` once before starting it.
 
 Overlay files:
-- `compose.gpu.yaml` gives `embed` and `api` the host's NVIDIA GPUs (opt in
-  per machine).
+- `compose.gpu.yaml` gives `embed`, `api` and `ollama` the host's NVIDIA
+  GPUs (opt in per machine).
 - `.claude/compose.cloud.yaml` routes builds and fetches through the TLS
   proxy of Claude Code cloud sessions (development only, not part of the
   product). Use it only there.
@@ -383,7 +400,8 @@ retriever searches people, projects and collections together.
   and `.env` are excluded from git and from Docker build contexts.
 - **Models.** All local (prime directive 2), so no document, query or record
   is ever sent to a model provider. The LLM router reaches only the Ollama
-  host in `OLLAMA_HOST` (this machine or the team's inference box).
+  host in `OLLAMA_HOST` (the `ollama` compose service, or the team's
+  inference box).
 - **Planned.** The data-class gate in the router (P1b: P/I/S/R, R never
   reaches a model, per-call trace of model, host and class); the rights and
   governance filter ahead of collections indexing (R10: Europeana
@@ -393,10 +411,10 @@ retriever searches people, projects and collections together.
 
 ## 9. Resilience
 
-- `neo4j`, `api` and `web` have `restart: unless-stopped`: they come back
+- `neo4j`, `ollama`, `api` and `web` have `restart: unless-stopped`: they come back
   after a crash and when Docker starts (e.g. after a reboot, if the Docker engine
   starts with Windows), until you stop them with `docker compose stop`.
-- Health checks on all three. `api` is restarted by Compose when Neo4j is, and
+- Health checks on all four. `api` is restarted by Compose when Neo4j is, and
   its database driver also reconnects on its own.
 - nginx looks up `api` through Docker's DNS on every request (cached 10 s), so
   a recreated `api` container with a new address is found without restarting
@@ -479,7 +497,7 @@ rules in section 2, Course Access will become one more compose service.
 Parsing, auditing and rebuilding are local and deterministic. The only model
 calls are alt text and other judgement steps, and they go through the LLM
 router (P1) to a local open-weight vision model served by Ollama on hardware
-we control, in compose once P9 lands (prime directive 2; model chosen by
+we control, the `ollama` compose service (P9) (prime directive 2; model chosen by
 bake-off B3, D9). No
 document ever leaves the machine. Documents are processed and returned; the
 service keeps no copy beyond what the review queue needs, and nothing enters

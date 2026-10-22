@@ -191,8 +191,8 @@ reviews; it rarely writes product code itself.
 | Course Access parser and audit | `campus_ai/course_access/`, `scripts/audit_document.py` |
 | Europeana loader, collections search API, web UI | `campus_ai/research_assistant/`, `scripts/fetch_europeana.py`, `web/` |
 | Licence guard | `tests/test_licences.py` |
-| Docker | `Dockerfile`, `compose.yaml` (`test`, `embed`, `fetch-models`, Neo4j, API, web), `compose.gpu.yaml`, `.claude/compose.cloud.yaml` |
-| Cloud session hook | `.claude/hooks/session-start.sh` (starts Docker, builds `test`) |
+| Docker | `Dockerfile`, `compose.yaml` (`test`, `embed`, `fetch-models`, `fetch-ollama`, Neo4j, Ollama, API, web, `smoke`), `compose.gpu.yaml`, `.claude/compose.cloud.yaml` |
+| Cloud session hook | `.claude/hooks/session-start.sh` (starts Docker, builds `test` with `docker buildx bake`) |
 
 Tests: `docker compose run --rm test` (the rule is Docker only, no host
 virtualenvs). The coordinator has also used `uv run python -m unittest
@@ -213,9 +213,9 @@ discover -s tests` for quick checks inside its cloud container. On Oct 22,
 - Answer: remove the early plan copy on `sfu-aria/student-assistant` branch
   `ccr-b486116f-phsbvu`?
 
-**Next cards** (section 5 of the plan): P9 Ollama service in compose (the
-router cannot reach Ollama from inside containers yet); B1 local-stack smoke test on the demo
-laptop; P1b data-class gate with P2 tracing; P6 eval harness; A6 gold set and
+**Next cards** (section 5 of the plan): run the B1 smoke test on the demo
+laptop (`docker compose run --rm smoke`; P9 added Ollama to compose and the
+script); P1b data-class gate with P2 tracing; P6 eval harness; A6 gold set and
 A3 alt-text worker with bake-off B3 (D9); B2 embedder + reranker bake-off on
 the salmon pilot; R10 rights filter. Then A4/A4b/A5, R1/R2/R3.
 
