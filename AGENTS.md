@@ -19,8 +19,9 @@
 
 Before adding any dependency, image or model, check its licence and that it
 runs offline. `tests/test_licences.py` enforces this: a new image or model
-must be added to its licence table, and any non-open package fails the build. If a task can't be done within these rules, stop and say so;
-never trade a directive off. Using Claude Code to build the repo is the
+must be added to its licence table, and any non-open package fails the
+build. If a task can't be done within these rules, stop and say so; never
+trade a directive off. Using Claude Code to build the repo is the
 development process and is outside the product.
 
 ## Plan
@@ -29,10 +30,11 @@ task cards and open decisions. Read it before starting a task card, and
 update it in the same PR when a decision changes.
 
 ## Structure
-- `campus_ai/core/`: shared modules (LLM router, graph, eval, tracing,
-  review UI, region config).
+- `campus_ai/core/`: shared modules: `llm/` (LLM router), `embed/`
+  (embedder), `graph/` (Neo4j store and hybrid retriever).
 - `campus_ai/course_access/`, `campus_ai/research_assistant/`: one package per
   product.
+- `scripts/`: command-line entry points. `web/`: collections search UI.
 - `evals/`: gold sets and eval reports. `tests/`: unit tests.
 
 ## Development
@@ -45,7 +47,7 @@ Dependencies are managed with `uv` inside the image (`pyproject.toml` +
 
 Models are fully local. Weights live in a host directory (`MODELS_DIR`,
 default `./models`, shareable across projects) mounted read-only into the
-`embed` service. That service sits on an internal Docker network that
+`embed` and `api` services. They sit on an internal Docker network that
 reaches only Neo4j (the graph store), never the internet. Only
 `fetch-models` touches the network, once, to fill that directory; you can
 also copy weights in from another machine.
@@ -88,6 +90,11 @@ commit `.env`, model weights, caches or customer data.
 - Data stays on the machines that run the product, so in its region (Canada
   or EU). All model calls go through the LLM router to local models; product
   code never calls a model provider, and there are no cloud backends.
+- A model may be used only if it is in the D10 model register (plan section 2)
+  and in `MODEL_LICENCES` (`campus_ai/core/llm/config.py`); add both, with
+  its licence check, in the same PR.
+- Classify data P/I/S/R (plan section 2) before it reaches a model; R
+  (restricted) is never embedded or sent to any model.
 - Tests use `unittest`; mock LLMs, Neo4j and network calls.
 - New services, tools and models ship as Docker images or compose services,
   pinned and rebuildable from the repo alone. Models run offline from local

@@ -179,8 +179,8 @@ pattern in `.claude/compose.cloud.yaml`: a `secrets: ca: file:
 docker compose run --rm test
 ```
 
-Expect `OK (skipped=3)`. The three skipped tests need the embed image and
-Neo4j, and run in step 7.
+Expect `Ran 82 tests` and `OK (skipped=4)`. The four skipped tests need
+PyAV (embed image) or Neo4j, and run in step 7.
 
 ## 6. Fetch model weights (one time)
 
@@ -269,7 +269,7 @@ macOS has no GPU passthrough to Docker, so models run on the CPU there.
 ## Verification checklist
 
 - [ ] `docker compose version` prints v2+
-- [ ] `docker compose run --rm test` → `OK (skipped=3)`
+- [ ] `docker compose run --rm test` → `OK (skipped=4)`
 - [ ] `MODELS_DIR` contains `google/embeddinggemma-2` and `intfloat/multilingual-e5-small`
 - [ ] `docker compose run --rm embed python -m unittest discover -s tests` → `OK`
 - [ ] Sample eval → `recall@10 all=1.000`
