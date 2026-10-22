@@ -226,3 +226,6 @@ evals/**/raw/
 
 # Local model weights (MODELS_DIR default)
 /models/
+
+# Run traces (CAMPUS_AI_TRACE_DIR default)
+/traces/

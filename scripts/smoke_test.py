@@ -75,7 +75,7 @@ def ollama_models() -> str:
 
 
 def ask(task: str) -> str:
-    reply = generate([{"role": "user", "content": PROMPT}], task)
+    reply = generate([{"role": "user", "content": PROMPT}], task, data_class="P")  # fixed public prompt
     return f"{reply.model}, {reply.output_tokens} tokens: {reply.text.strip()[:40]!r}"
 
 

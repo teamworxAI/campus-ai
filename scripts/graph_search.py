@@ -47,7 +47,11 @@ def load(path: Path) -> tuple[list[Node], list[Link], list[dict]]:
                 text = record.get("text") or content
             else:  # media: index only a real caption, never the file path
                 text, content = record.get("text", ""), str(path.parent / content)
-            nodes.append(Node(record["id"], record.get("label", "Item"), text, modality, content, record.get("props", {})))
+            # A record may carry its data class (P/I/S/R); class R is refused before embedding.
+            data_class = record.get("data_class", "P")
+            nodes.append(
+                Node(record["id"], record.get("label", "Item"), text, modality, content, record.get("props", {}), data_class)
+            )
     return nodes, links, queries
 
 

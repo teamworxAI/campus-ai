@@ -6,15 +6,15 @@ and roadmap see [`plans/master_plan.md`](plans/master_plan.md); for module
 internals see [`design.md`](design.md).
 
 **Status (October 2026).** Shared core: built the embedder (P7), the graph
-core (P5), the local-only LLM router (P1), the licence guard (P8), Ollama
-in compose (P9) and the local-stack smoke test (B1, to be run on the demo
-laptop). Research Assistant: built the Europeana loader (R8), collections
-search with its web UI (R9) and the rights filter ahead of indexing (R10).
-Course Access Agent: built the document parser (A1) and the deterministic
-audit (A2); the rest is planned (section 11). Still planned: data-class gate
-(P1b), tracing (P2), review queue (P3), MCP servers (P4), eval harness (P6),
-reranker (R3) and the ArcaBC loader (R7, blocked on R0b). Diagrams mark
-planned parts with dashed lines.
+core (P5), the local-only LLM router (P1) with its data-class gate (P1b),
+tracing (P2), the licence guard (P8), Ollama in compose (P9) and the
+local-stack smoke test (B1, passed on the demo laptop). Research Assistant:
+built the Europeana loader (R8), collections search with its web UI (R9) and
+the rights filter ahead of indexing (R10). Course Access Agent: built the
+document parser (A1) and the deterministic audit (A2); the rest is planned
+(section 11). Still planned: review queue (P3), MCP servers (P4), eval
+harness (P6), reranker (R3) and the ArcaBC loader (R7, blocked on R0b).
+Diagrams mark planned parts with dashed lines.
 
 ## 1. System context
 
@@ -87,7 +87,8 @@ in [`AGENTS.md`](../AGENTS.md)):
 | Fetch and process are separate | `fetch-models`, `fetch-ollama` and `fetch-europeana` are the only services with internet access; they write files, never the graph |
 | Simple codebase | Small modules in `campus_ai/core/`; one JSONL format feeds the indexer from any source |
 | Evidence for every answer | The retriever returns each hit with its linked nodes (collection, holder, creator) and every item keeps its rights statement and source URL |
-| Data rights | The rights filter (R10) classes every harvested record P or R before indexing: only CC0, PDM, CC BY and CC BY-SA items without access limits or TK Labels are embedded; class R stays a metadata link in the JSONL. Harvested data is never committed or baked into images. Planned: the data-class gate in the router (P1b: classes P/I/S/R, R never reaches a model) |
+| Data rights | The rights filter (R10) classes every harvested record P or R before indexing: only CC0, PDM, CC BY and CC BY-SA items without access limits or TK Labels are embedded; class R stays a metadata link in the JSONL. Harvested data is never committed or baked into images. Behind it, the data-class gate (P1b) makes every router call and every embedding declare its class (P/I/S/R) and refuses R before any model sees it |
+| Traceable model calls | Every router call writes a metadata-only JSONL trace record (P2: model, host, data class, tokens, latency, outcome), never prompts or outputs |
 
 ## 3. Runtime: containers and networks
 
@@ -185,6 +186,8 @@ campus_ai/
     embed/        Embedder interface, EmbeddingGemma 2 + e5 baseline, media decoding   (P7)
     graph/        GraphStore (writer + indexes), HybridRetriever, stop words            (P5)
     llm/          LLM router: generate(), Ollama backend, MODEL_LICENCES allowlist      (P1)
+    data_classes.py  P/I/S/R data-class gate before any model or embedding           (P1b)
+    tracing.py    per-run JSONL trace of model and tool calls                           (P2)
   course_access/
     parser.py     PDF/PPTX/DOCX -> Document                                             (A1)
     audit.py      deterministic WCAG checks, Markdown/JSON report                       (A2)
@@ -377,6 +380,8 @@ retriever searches people, projects and collections together.
 | Fusion | Reciprocal rank fusion, k=60 | No score calibration between cosine and Lucene; robust | Weighted score sum needs tuning per corpus |
 | Fulltext analyzer | Language-neutral, stop words removed at query time | Corpus is multilingual; Lucene's analyzer holds one language's stop words | Per-language indexes: more schema for little gain at this size |
 | LLM router (P1, D10) | Ollama only, at `OLLAMA_HOST`; models allowed only from `MODEL_LICENCES`; defaults Gemma 4 | One local backend keeps the router small; the allowlist enforces D8 for weights | Cloud backends (Claude, Bedrock and others): removed (D2) |
+| Data-class gate (P1b) | Required `data_class` argument on `generate` and `Embedder.embed`; R refused there | The two model entry points are the only places data reaches a model, so one check each covers every caller | A check per product: easy to miss one |
+| Tracing (P2) | JSONL file per run, standard library, metadata fields only | Inspectable, no service to run, cannot leak content | A tracing service or OpenTelemetry stack: more to run for no gain yet |
 | Graph store | Neo4j Community in compose | Vector, fulltext and graph traversal in one store; matches the plan's graph-RAG pattern | Separate vector DB + graph: two stores to keep in sync |
 | Isolation | Internal Docker network | Models and data can't reach the internet even if code tries | Disabling all networking would also cut off Neo4j |
 | Loader output | JSONL files, then index | Fetch needs no model; harvests are reproducible and inspectable; one indexer for all sources | Writing to Neo4j during fetch would put models on an internet-connected container |
@@ -407,8 +412,11 @@ retriever searches people, projects and collections together.
   is ever sent to a model provider. The LLM router reaches only the Ollama
   host in `OLLAMA_HOST` (the `ollama` compose service, or the team's
   inference box via `OLLAMA_URL`).
-- **Planned.** The data-class gate in the router (P1b: P/I/S/R, R never
-  reaches a model, per-call trace of model, host and class); the rights and
+- **Data classes.** Every LLM router call and every embedding declares its
+  class (P1b: P/I/S/R); class R is refused before any model call or
+  embedding. Each router call writes a trace record of model, host, class,
+  tokens, latency and outcome to `CAMPUS_AI_TRACE_DIR` (P2), never content.
+- **Planned.** The rights and
   governance filter ahead of collections indexing (R10: Europeana
   `edm:rights`, ArcaBC access flags and TK Labels); GDPR handling for EU
   researcher data and OCAP® for Indigenous materials (master plan, section

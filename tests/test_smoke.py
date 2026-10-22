@@ -50,7 +50,8 @@ def fake_urlopen(ollama=OLLAMA, down=()):
     return urlopen
 
 
-def reply(messages, task):
+def reply(messages, task, data_class):
+    assert data_class == "P", data_class  # the smoke prompt is public
     return LLMResponse(text="OK\n", model=config.model(task), input_tokens=12, output_tokens=2)
 
 
@@ -58,7 +59,7 @@ class SmokeTestTests(unittest.TestCase):
     def run_checks(self, urlopen=None, connect=OSError("unreachable"), generate=reply):
         with mock.patch.object(smoke.urllib.request, "urlopen", urlopen or fake_urlopen()), \
              mock.patch.object(smoke.socket, "create_connection", side_effect=connect), \
-             mock.patch.object(smoke, "generate", side_effect=generate), \
+             mock.patch.object(smoke, "generate", autospec=True, side_effect=generate), \
              mock.patch.dict("os.environ", {"OLLAMA_HOST": "http://ollama:11434"}):
             return {r["check"]: r for r in smoke.run()}
 

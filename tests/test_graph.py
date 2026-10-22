@@ -8,6 +8,7 @@ from unittest import mock
 
 import numpy as np
 
+from campus_ai.core.data_classes import RestrictedDataError
 from campus_ai.core.embed import get_embedder
 from campus_ai.core.graph import GraphStore, HybridRetriever, Link, Node
 from campus_ai.core.graph.retriever import fulltext_query, fuse
@@ -97,6 +98,14 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(embedder._model.encode.call_args_list[0].args[0], ["salmon ecology", "wildfire smoke"])
         self.assertEqual(driver.calls[1][1]["rows"][0]["text"], "a photo")
 
+    def test_restricted_node_never_embedded_or_written(self):
+        driver = FakeDriver()
+        embedder = gemma()
+        with self.assertRaises(RestrictedDataError):
+            GraphStore(driver, embedder).upsert([Node("a1", "Item", "access-limited item", data_class="R")])
+        embedder._model.encode.assert_not_called()
+        self.assertEqual(driver.calls, [])
+
     def test_link_groups_by_type(self):
         driver = FakeDriver()
         GraphStore(driver, gemma()).link([Link("a", "IN", "c"), Link("b", "IN", "c"), Link("a", "AUTHORED", "p")])
@@ -130,7 +139,7 @@ class StoreTests(unittest.TestCase):
 class RetrieverTests(unittest.TestCase):
     def test_reranks_on_full_vectors_fuses_fulltext_and_expands(self):
         embedder = gemma()
-        query_vector = embedder.embed(["salmon ocean"], kind="query")[0]
+        query_vector = embedder.embed(["salmon ocean"], kind="query", data_class="P")[0]
         close, far = query_vector.tolist(), (-query_vector).tolist()
 
         def answer(query, params):
@@ -173,7 +182,7 @@ class ScriptTests(unittest.TestCase):
         path = ROOT / "evals" / "embed" / "sample_bakeoff.jsonl"
         nodes, links, queries = self.module.load(path)
         self.assertEqual((len(nodes), len(links), len(queries)), (6, 0, 5))
-        self.assertTrue(all(node.label == "Item" and node.text for node in nodes))
+        self.assertTrue(all(node.label == "Item" and node.text and node.data_class == "P" for node in nodes))
 
     def test_media_text_is_caption_not_path(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -181,6 +190,13 @@ class ScriptTests(unittest.TestCase):
             path.write_text('{"id": "p", "modality": "image", "content": "red.png"}\n', encoding="utf-8")
             (node,), _, _ = self.module.load(path)
         self.assertEqual((node.text, node.content), ("", str(Path(tmp) / "red.png")))
+
+    def test_record_data_class_kept(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "items.jsonl"
+            path.write_text('{"id": "r", "content": "access-limited", "data_class": "R"}\n', encoding="utf-8")
+            (node,), _, _ = self.module.load(path)
+        self.assertEqual(node.data_class, "R")
 
 
 @unittest.skipUnless(os.environ.get("NEO4J_URI"), "needs Neo4j: run in the embed service")

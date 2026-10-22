@@ -181,7 +181,7 @@ pattern in `.claude/compose.cloud.yaml`: a `secrets: ca: file:
 docker compose run --rm test
 ```
 
-Expect `Ran 103 tests` and `OK (skipped=4)`. The four skipped tests need
+Expect `Ran 115 tests` and `OK (skipped=4)`. The four skipped tests need
 PyAV (embed image) or Neo4j, and run in step 7.
 
 ## 6. Fetch model weights (one time)

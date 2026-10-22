@@ -40,7 +40,7 @@ def create_app(service: CollectionsSearch | None = None) -> FastAPI:
             from campus_ai.core.graph import connect
 
             embedder, driver = get_embedder(), connect()
-            embedder.embed(["warm-up"], kind="query")  # load the model before the first request
+            embedder.embed(["warm-up"], kind="query", data_class="P")  # load the model before the first request
             state["service"] = CollectionsSearch(driver, embedder)
         yield
         if driver:

@@ -71,14 +71,16 @@ class HybridRetriever:
         modality: str = "text",
         labels: Sequence[str] | None = None,
         neighbors: int = 5,
+        data_class: str = "P",
     ) -> list[Hit]:
         """Top `k` nodes for a query (text, or a media path with `modality`).
 
         `labels` keeps only nodes with one of those labels; `neighbors` caps
         the linked nodes attached to each hit (0 to skip expansion).
+        `data_class` is the query's class (P/I/S; R is refused before embedding).
         """
         fast, _ = dims(self.embedder)
-        full = self.embedder.embed([query], modality=modality, kind="query")[0]
+        full = self.embedder.embed([query], modality=modality, kind="query", data_class=data_class)[0]
         wanted = [name(label) for label in labels or []]
         # Vector search filters inside the index, so a rare label still gets n candidates;
         # fulltext filters its top n afterwards.
