@@ -76,6 +76,19 @@ class OllamaRoutingTests(unittest.TestCase):
                         generate(MESSAGES, task="vision")
         self.urlopen.assert_not_called()
 
+    def test_missing_ollama_names_the_fix(self):
+        self.urlopen.side_effect = backends.urllib.error.URLError("Connection refused")
+        with mock.patch.dict("os.environ", {"OLLAMA_HOST": "http://ollama:11434"}, clear=True):
+            with self.assertRaisesRegex(ConnectionError, r"No Ollama at http://ollama:11434 .*docker compose up -d ollama"):
+                generate(MESSAGES, task="reasoning")
+
+    def test_missing_model_names_the_fix(self):
+        self.urlopen.side_effect = backends.urllib.error.HTTPError(
+            "http://ollama:11434/api/chat", 404, "Not Found", {}, io.BytesIO(b'{"error":"model not found"}'))
+        with mock.patch.dict("os.environ", {}, clear=True):
+            with self.assertRaisesRegex(RuntimeError, r"\(404\): .*model not found.*fetch-ollama"):
+                generate(MESSAGES, task="reasoning")
+
     def test_unknown_task_rejected(self):
         with self.assertRaises(ValueError):
             generate(MESSAGES, task="poetry")

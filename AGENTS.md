@@ -47,15 +47,19 @@ Dependencies are managed with `uv` inside the image (`pyproject.toml` +
 
 Models are fully local. Weights live in a host directory (`MODELS_DIR`,
 default `./models`, shareable across projects) mounted read-only into the
-`embed` and `api` services. They sit on an internal Docker network that
-reaches only Neo4j (the graph store), never the internet. Only
-`fetch-models` touches the network, once, to fill that directory; you can
-also copy weights in from another machine.
+`embed` and `api` services, and its `ollama/` folder into the `ollama`
+service, which serves the LLM router's language and vision models. They sit
+on an internal Docker network that reaches only Neo4j (the graph store) and
+each other, never the internet. Only `fetch-models` and `fetch-ollama` touch
+the network, once, to fill that directory; you can also copy weights in from
+another machine.
 
 ```bash
 docker compose build                       # test image + embed image
 docker compose run --rm test               # unit tests
-docker compose run --rm fetch-models       # one-time: weights into MODELS_DIR
+docker compose run --rm fetch-models       # one-time: embedding weights into MODELS_DIR
+docker compose run --rm fetch-ollama       # one-time: router models into MODELS_DIR/ollama
+docker compose up -d ollama                # language and vision models for the router, offline
 docker compose run --rm embed              # bake-off on local models, offline
 docker compose run --rm embed python scripts/graph_search.py index evals/embed/sample_bakeoff.jsonl
 docker compose run --rm embed python scripts/graph_search.py search "ocean warming"

@@ -254,3 +254,6 @@ machine-readable report. Fixing comes with the next cards (A3–A5).
 | `--label` returns nothing on a graph built before this version | Run any `index` command once: `ensure_schema` adds the `kind` filter to the old graph |
 | `does not support 'image' inputs` | `--backend e5-small` is text only |
 | Indexing is slow | Use a GPU (`compose.gpu.yaml`) or index fewer rows |
+| `No Ollama at http://ollama:11434` | Start it: `docker compose up -d ollama` |
+| `Ollama ... rejected the request (404)` | The task's model is not downloaded: `docker compose run --rm fetch-ollama` (set `OLLAMA_PULL` to choose) |
+| Containers try `127.0.0.1:11434` for Ollama | Your shell exports `OLLAMA_HOST` (a native Ollama install does this) and compose passed it on. Unset it in that shell; the stack uses `OLLAMA_URL` |

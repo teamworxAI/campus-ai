@@ -135,6 +135,8 @@ Edit `.env`:
 | `DATA_DIR`, `NEO4J_DATA` | optional | Put harvests and the graph on another drive; see below |
 | `NEO4J_PASSWORD` | optional | Set it **before** Neo4j first starts; empty means `campus-ai-local`. Neo4j has no published ports |
 | `EUROPEANA_API_KEY` | step 8 | Free from https://pro.europeana.eu/page/get-api |
+| `OLLAMA_PULL` | step 6 | Which router models `fetch-ollama` downloads; empty means the router's defaults (about 13 GB). Smaller machines: `gemma4:e4b` or `gemma4:e2b` |
+| `OLLAMA_URL` | optional | The team's inference box; empty means the `ollama` compose service |
 | `COMPOSE_FILE` | step 10 | GPU overlay; leave commented on machines without NVIDIA |
 
 `.env` is gitignored. Never commit it.
@@ -189,12 +191,22 @@ docker compose run --rm fetch-models
 ```
 
 This downloads EmbeddingGemma 2 and the e5-small baseline (about 2 GB) into
-`MODELS_DIR`, using the layout `<org>/<model>`. It is the only step that
-downloads models.
+`MODELS_DIR`, using the layout `<org>/<model>`.
 
-**Air-gapped machine.** Run this step on a connected machine, then copy the
+```bash
+docker compose run --rm fetch-ollama
+```
+
+This downloads the LLM router's language and vision models into
+`MODELS_DIR/ollama` (Ollama's own layout): by default `gemma4:12b` and
+`gemma4:e4b`, about 13 GB. On a laptop with a small GPU, set `OLLAMA_PULL` in
+`.env` to a smaller allow-listed model first (`gemma4:e4b`, 7 GB, or
+`gemma4:e2b`, 5 GB) and point the tasks at it with `CAMPUS_AI_MODEL_*`. These
+two jobs are the only steps that download models.
+
+**Air-gapped machine.** Run these steps on a connected machine, then copy the
 `MODELS_DIR` folder over (USB, `rsync`, `scp`). Keep the same layout:
-`google/embeddinggemma-2/`, `intfloat/multilingual-e5-small/`.
+`google/embeddinggemma-2/`, `intfloat/multilingual-e5-small/`, `ollama/`.
 
 ## 7. Verify offline embedding and the graph
 
@@ -219,6 +231,24 @@ takes about 20 seconds.
 docker compose run --rm embed python -c "import socket; socket.create_connection(('huggingface.co', 443), 3)"
 # fails with socket.gaierror: no route out of the internal network
 ```
+
+### Language and vision models (the LLM router)
+
+```bash
+docker compose up -d ollama
+docker compose exec ollama ollama list          # the models fetch-ollama downloaded
+docker compose run --rm test python -c "from campus_ai.core.llm import generate; print(generate([{'role': 'user', 'content': 'Say hi.'}], task='classification').text)"
+```
+
+The `ollama` service serves `MODELS_DIR/ollama` read-only on the internal
+network, so like the embedder it cannot download anything
+(`docker compose exec ollama ollama pull gemma4:e2b` fails with a DNS error:
+that is the point). The `test`, `embed` and `api` containers reach it as
+`http://ollama:11434`. If the call fails with `No Ollama at ...`, start the
+service; with a 404, the task's model is not downloaded: set `OLLAMA_PULL` or
+`CAMPUS_AI_MODEL_<TASK>` and re-run `fetch-ollama`. To use the team's
+inference box instead, set `OLLAMA_URL` in `.env` and leave the service
+stopped.
 
 ## 8. Harvest a Europeana collection
 
@@ -263,6 +293,8 @@ runtimes). The NVIDIA Container Toolkit itself is Apache-2.0.
 3. In `.env`, set `COMPOSE_FILE=compose.yaml;compose.gpu.yaml` with Docker
    Desktop on Windows, or `compose.yaml:compose.gpu.yaml` on Linux and WSL.
 4. Run `docker compose run --rm embed`. Models now run in bfloat16 on the GPU.
+   The `ollama` service gets the GPU too; on a 4 GB card the e2b and e4b Gemma 4
+   models fit, the 12B one spills to the CPU.
 
 macOS has no GPU passthrough to Docker, so models run on the CPU there.
 
@@ -270,7 +302,8 @@ macOS has no GPU passthrough to Docker, so models run on the CPU there.
 
 - [ ] `docker compose version` prints v2+
 - [ ] `docker compose run --rm test` → `OK (skipped=4)`
-- [ ] `MODELS_DIR` contains `google/embeddinggemma-2` and `intfloat/multilingual-e5-small`
+- [ ] `MODELS_DIR` contains `google/embeddinggemma-2`, `intfloat/multilingual-e5-small` and `ollama/`
+- [ ] `docker compose exec ollama ollama list` shows the fetched models, and the router call above answers
 - [ ] `docker compose run --rm embed python -m unittest discover -s tests` → `OK`
 - [ ] Sample eval → `recall@10 all=1.000`
 - [ ] `data/europeana/<name>/items.jsonl` exists after a harvest

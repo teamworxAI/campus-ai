@@ -2,6 +2,8 @@
 # docker compose run --rm test            unit tests (no models, no database)
 # docker compose run --rm fetch-models    one-time download into MODELS_DIR (needs network)
 # docker compose run --rm fetch-europeana  Europeana items into DATA_DIR (needs network)
+# docker compose run --rm fetch-ollama    one-time download of the router's models (needs network)
+# docker compose up -d ollama             language and vision models for the LLM router, offline
 # docker compose run --rm embed ...       local models + Neo4j, no internet access
 # docker compose up -d web                collections search UI on http://localhost:8080
 #
@@ -20,10 +22,25 @@ x-neo4j-env: &neo4j-env
   NEO4J_USER: neo4j
   NEO4J_PASSWORD: ${NEO4J_PASSWORD:-campus-ai-local}
 
+# LLM router settings (P9) for every service that may call it. The router talks
+# to the `ollama` service below unless .env sets OLLAMA_URL to the team's
+# inference box. (Not OLLAMA_HOST: a native Ollama install often exports that in
+# the shell, and compose would pass it on.) CAMPUS_AI_MODEL_* pick other
+# allow-listed models per task.
+x-router-env: &router-env
+  OLLAMA_HOST: ${OLLAMA_URL:-http://ollama:11434}
+  CAMPUS_AI_MODEL_REASONING: ${CAMPUS_AI_MODEL_REASONING:-}
+  CAMPUS_AI_MODEL_VISION: ${CAMPUS_AI_MODEL_VISION:-}
+  CAMPUS_AI_MODEL_CLASSIFICATION: ${CAMPUS_AI_MODEL_CLASSIFICATION:-}
+
 services:
+  # Unit tests, and the CPU-only image for scripts (audit, later the fixing workers).
+  # On the internal network so those scripts reach Ollama and nothing outside.
   test:
     build: .
     image: campus-ai:test
+    networks: [graph]
+    environment: *router-env
 
   embed:
     build:
@@ -36,7 +53,8 @@ services:
     depends_on:
       neo4j:
         condition: service_healthy
-    environment: *neo4j-env
+    environment:
+      <<: [*neo4j-env, *router-env]
     volumes:
       - ${MODELS_DIR:-./models}:/models:ro
       - ${DATA_DIR:-./data}:/app/data:ro
@@ -51,7 +69,8 @@ services:
       neo4j:
         condition: service_healthy
         restart: true
-    environment: *neo4j-env
+    environment:
+      <<: [*neo4j-env, *router-env]
     volumes:
       - ${MODELS_DIR:-./models}:/models:ro
       - ${DATA_DIR:-./data}:/app/data:ro
@@ -83,6 +102,23 @@ services:
       timeout: 5s
       retries: 3
 
+  # Language and vision models for the LLM router (P9): Ollama serving the
+  # allow-listed models from MODELS_DIR/ollama, read-only, on the internal network
+  # like the embedder, so it can't download anything. `fetch-ollama` fills the folder.
+  ollama:
+    image: ollama/ollama:0.40.8
+    restart: unless-stopped
+    networks: [graph]
+    environment:
+      OLLAMA_NO_CLOUD: "true"  # prime directive 2: Ollama's cloud models stay off
+      OLLAMA_NOPRUNE: "true"  # the weights are read-only
+    volumes:
+      - ${MODELS_DIR:-./models}/ollama:/root/.ollama/models:ro
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      retries: 6
+
   neo4j:
     image: neo4j:2026.09.0-community
     restart: unless-stopped
@@ -106,6 +142,21 @@ services:
     volumes:
       - ${MODELS_DIR:-./models}:/models
     command: ["python", "scripts/fetch_models.py"]
+
+  # One-time download of the router's default models (about 13 GB) into
+  # MODELS_DIR/ollama. OLLAMA_PULL in .env chooses other allow-listed models,
+  # e.g. smaller ones for a laptop. The only step that lets Ollama reach the network.
+  fetch-ollama:
+    image: ollama/ollama:0.40.8
+    profiles: [fetch]
+    volumes:
+      - ${MODELS_DIR:-./models}/ollama:/root/.ollama/models
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        ollama serve >/dev/null 2>&1 &
+        until ollama list >/dev/null 2>&1; do sleep 1; done
+        for m in ${OLLAMA_PULL:-gemma4:12b gemma4:e4b}; do ollama pull "$$m" || exit 1; done
 
   fetch-europeana:
     image: campus-ai:test

@@ -37,9 +37,10 @@ core with hybrid retrieval (P5), Europeana loader (R8), collections search API
 and web UI (R9), all for the Research Assistant. Course Access Agent: the
 document parser (A1) and the WCAG audit and report (A2) are built; fixing workers,
 rebuild and review are next (see [architecture](docs/architecture.md#11-course-access-agent)).
-Also built: LLM router over local open-weight models on Ollama (P1) and the
-licence guard (P8). Next: the model bake-offs (B1-B5), data-class gate (P1b),
-eval harness (P6) and alt-text worker (A3); OCR for scanned PDFs (A7) is next phase.
+Also built: LLM router over local open-weight models on Ollama (P1), an offline
+Ollama service in compose (P9) and the licence guard (P8). Next: the model
+bake-offs (B1-B5), data-class gate (P1b), eval harness (P6) and alt-text worker
+(A3); OCR for scanned PDFs (A7) is next phase.
 
 ## Quick start
 
@@ -48,6 +49,7 @@ cp .env.example .env
 docker compose build
 docker compose run --rm test
 docker compose run --rm fetch-models     # one time, needs internet
+docker compose run --rm fetch-ollama     # one time, needs internet: language and vision models
 docker compose run --rm embed python scripts/graph_search.py index evals/embed/sample_bakeoff.jsonl
 docker compose run --rm embed python scripts/graph_search.py search "ocean warming"
 docker compose up -d web                 # collections search UI on http://localhost:8080
