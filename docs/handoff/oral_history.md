@@ -333,8 +333,11 @@ discover -s tests` for quick checks inside its cloud container. On Oct 22,
 - OK to `ollama pull gemma4:e4b` (about 5.5 GB) on the laptop for A3 testing?
   The 12B model mostly runs on CPU there (4 GB GPU); it belongs on the
   inference box.
-- A few real, non-sensitive course documents to run the A2 audit on (A6 gold
-  set later).
+- Gold-set labels (D6): 20 openly licensed course documents are harvested by
+  `fetch-course-docs` (Oct 22) and audited (`evals/course_access/`); a
+  specialist still has to label them. More CC BY documents welcome; NC-licensed
+  sets (KPU Discrete Math slides, MIT OCW, LOUIS biology slides) were found but
+  left out until the team decides on NC material.
 - Send the RIO (REE) and BC ELN (ArcaBC) emails (drafts in the appendix; the
   BC ELN address still needs finding). Until answered, R0, R1's REE part, R7
   stay blocked.

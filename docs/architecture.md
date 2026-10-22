@@ -526,6 +526,6 @@ the search graph.
 | Checkers | The plan names axe-core (via Playwright) and veraPDF (Java). Confirm their licences and that they run offline; both add large runtimes to the image |
 | **Vision model** (D9) | A local open-weight vision-language model under an OSI-approved licence, chosen by bake-off B3 on the gold set; register candidates `gemma4:12b` (router default) or `qwen3-vl:8b`. Local models may describe complex figures less well than hosted ones, so confidence thresholds and human review matter more |
 | LLM router | Done: Ollama is the only backend (the `ollama` compose service, or the team's inference box via `OLLAMA_URL`); models must be in its open-licence allowlist; defaults are Gemma 4 (Apache-2.0) |
-| Gold set | 40 real course documents labelled by an accessibility specialist (D6); none collected yet |
+| Gold set | 40 real course documents labelled by an accessibility specialist (D6). 20 openly licensed ones (CC BY, CC BY-SA) are collected by `fetch-course-docs` into `DATA_DIR/course_access`, with a manifest; none labelled yet |
 
 Module details for A1 and A2 are in [`design.md`](design.md#9-course-access-agent).

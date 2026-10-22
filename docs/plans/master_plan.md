@@ -439,7 +439,7 @@ Each card is sized for one cloud session and one PR.
 | A4 | Structure, table and text workers | A1 | To do |
 | A4b | OMML -> MathML conversion for DOCX/PPTX equations (deterministic) | A1 | To do |
 | A5 | Rebuild accessible DOCX/HTML + verify loop | A2-A4 | To do |
-| A6 | Gold set + eval metrics in `evals/course_access/` | A2, P6 | Next (needs documents) |
+| A6 | Gold set + eval metrics in `evals/course_access/`. Corpus: openly licensed course documents (CC BY, CC BY-SA) fetched by `fetch-course-docs` into `DATA_DIR/course_access` with a manifest of sources and licences; `evals/course_access/audit_corpus.py` audits them all | A2, P6 | Corpus started Oct 22: 20 documents (PDF, DOCX, PPTX) from Canadian and UK OER repositories, all parse; labels by a specialist (D6) and the metrics (P6) next |
 | A7 | OCR for scanned (image-only) PDFs with an open-source offline engine (e.g. Tesseract) | A1 | Next phase |
 | R0 | REE integration spec with RIO: fields, access method, refresh, consent | - | Waiting: email drafted Oct 22, to be sent by the team |
 | R0b | Data agreement with BC ELN for ArcaBC (arcabc.ca): permission, interface, rights handling, pilot collection. Until signed, no code or session touches arcabc.ca | - | Waiting: email drafted Oct 22, to be sent by the team |

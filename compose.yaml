@@ -3,6 +3,7 @@
 # docker compose run --rm fetch-models    one-time download into MODELS_DIR (needs network)
 # docker compose run --rm fetch-ollama    one-time LLM download into MODELS_DIR/ollama (needs network)
 # docker compose run --rm fetch-europeana  Europeana items into DATA_DIR (needs network)
+# docker compose run --rm fetch-course-docs  open course documents for the A6 gold set (needs network)
 # docker compose run --rm embed ...       local models + Neo4j, no internet access
 # docker compose up -d web                collections search UI on http://localhost:8080
 # docker compose up -d ollama             local LLMs for the router (after fetch-ollama)
@@ -40,6 +41,8 @@ services:
     image: campus-ai:test
     networks: [graph]
     environment: *llm-env
+    volumes:
+      - ${DATA_DIR:-./data}:/app/data:ro
 
   embed:
     build:
@@ -162,6 +165,18 @@ services:
         for m in "$$@"; do ollama pull "$$m" || exit 1; done
       - fetch-ollama
     command: ["gemma4:12b", "gemma4:e4b"]
+
+  # One-time download of openly licensed course documents (PDF, PPTX, DOCX) for
+  # the Course Access gold set (A6) into DATA_DIR/course_access, with a manifest
+  # of sources and licences.
+  fetch-course-docs:
+    image: campus-ai:test
+    pull_policy: never
+    profiles: [fetch]
+    volumes:
+      - ${DATA_DIR:-./data}:/app/data
+    entrypoint: ["python", "scripts/fetch_course_docs.py"]
+    command: []
 
   fetch-europeana:
     image: campus-ai:test

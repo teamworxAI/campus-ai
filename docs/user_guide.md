@@ -280,6 +280,23 @@ proposals. Add `--json` for the proposals as data, and `--data-class` (P, I
 or S; default I) to declare the document's class. The document and its
 images never leave the machine.
 
+**A corpus of real course documents.** `fetch-course-docs` downloads openly
+licensed lecture slides, lecture notes, course outlines and readings (CC BY
+and CC BY-SA, from Canadian and UK open-education repositories) into
+`DATA_DIR/course_access`, one folder per source, and records every file's
+URL, authors, licence and checksum in `manifest.jsonl`. It is the Course
+Access counterpart of the Europeana harvest: the one step that needs the
+network. Then audit the whole corpus at once:
+
+```bash
+docker compose run --rm fetch-course-docs
+docker compose run --rm test python evals/course_access/audit_corpus.py
+```
+
+The report (one row per document: pages, images, tables, issues by rule)
+is the raw material for the gold set (A6), which still needs a specialist's
+labels. The documents are evaluation input only and are never committed.
+
 ## 8. Troubleshooting
 
 | Symptom | Cause and fix |
