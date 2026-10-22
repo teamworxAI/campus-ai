@@ -16,20 +16,10 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from campus_ai.research_assistant.rights import is_open
+
 SOURCE = "europeana"
 MAX_TEXT = 2000
-
-# Rights statements that allow reuse with at most attribution and share-alike.
-OPEN_RIGHTS = (
-    "creativecommons.org/publicdomain/zero/",
-    "creativecommons.org/publicdomain/mark/",
-    "creativecommons.org/licenses/by/",
-    "creativecommons.org/licenses/by-sa/",
-)
-
-
-def is_open(rights: str) -> bool:
-    return any(pattern in rights for pattern in OPEN_RIGHTS)
 
 
 def first(item: dict, key: str) -> str:

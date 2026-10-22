@@ -197,7 +197,7 @@ flowchart TD
 Open rights: `creativecommons.org/publicdomain/zero/`, `/publicdomain/mark/`,
 `/licenses/by/`, `/licenses/by-sa/`. NC and ND licences and
 rightsstatements.org statements are excluded. This is the loader's own
-filter; the shared rights and governance filter (R10) is planned.
+filter; the shared rights filter (R10, below) checks again at indexing.
 
 **Why a separate Image node.** An Item's vector encodes its metadata text;
 the Image's vector encodes the picture alone. A text query can then match a
@@ -227,6 +227,26 @@ label, collection, holder, creators and image:
 checked for type (JPEG, PNG, WebP, GIF) and size (10 MB) and kept only in a
 temporary file for the search.
 
+### 4.4 Rights filter (R10): `campus_ai/research_assistant/rights.py`
+
+`graph_search.py index` passes every file through `screen(nodes, links)`
+before embedding; `graph_search.py rights <file>` prints the same report
+without embedding or Neo4j. Deterministic, no model involved.
+
+| Record | Class R when |
+|---|---|
+| Any | `access` is set and not `open`; `tk_labels` is non-empty; `rights` points at localcontexts.org |
+| Item or Image with a `source` | `rights` is missing or not CC0, PDM, CC BY or CC BY-SA |
+| Part of a class-R item (`PART_OF`) | always |
+| Collection, Institution, Creator with a `source` | not linked, directly or through other metadata, to a kept node |
+
+Class-R records and the links touching them are never written to the graph,
+so they are never embedded, searched or shown to a model. They stay only in
+the harvested JSONL, as a metadata link (id and source URL) printed in the
+index report. Records without a `source` are the repo's own fixtures (the
+bake-off set) and need no rights statement. Eval:
+`evals/rights/sample_records.jsonl` keeps 5 of 10 items (8 of 15 nodes).
+
 ## 5. File formats
 
 One JSONL format feeds the indexer from any source, one record per line:
@@ -242,6 +262,11 @@ One JSONL format feeds the indexer from any source, one record per line:
 - Media `content` paths are relative to the JSONL file. Media `text` is a
   real caption or empty, never the file path.
 - `query` lines are used by `eval` and by the bake-off, and ignored by `index`.
+- Governance props, read by the rights filter (R10) before anything is
+  embedded: `source` (the harvested collection), `rights` (rights statement
+  URI), `access` (ArcaBC access limit; empty or `open` means none) and
+  `tk_labels` (TK/BC Labels, Local Contexts Notices or other community
+  protocol markers). See section 4.4.
 
 ## 6. Testing strategy
 
