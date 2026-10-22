@@ -135,6 +135,10 @@ class PptxParserTests(ParserTestCase):
         run = box.text_frame.paragraphs[0].add_run()
         run.text = "Course page"
         run.hyperlink.address = "https://example.org/course"
+
+        slide = p.slides.add_slide(p.slide_layouts[5])  # a title box with two lines typed in
+        slide.shapes.title.text_frame.text = "Week 3"
+        slide.shapes.title.text_frame.add_paragraph().text = "EDST 101"
         path = self.dir / "sample.pptx"
         p.save(path)
         return path
@@ -143,12 +147,13 @@ class PptxParserTests(ParserTestCase):
         document = parse(self._build())
         self.assertEqual(document.source_format, "pptx")
         self.assertEqual(document.title, "Lecture 2")
-        self.assertEqual(document.page_count, 2)
+        self.assertEqual(document.page_count, 3)
         self.assertEqual(_kinds(document), [
             "Heading", "ListItem", "ListItem", "Image",
-            "Heading", "Table", "Paragraph", "Link"])
+            "Heading", "Table", "Paragraph", "Link", "Heading"])
         b = document.blocks
-        self.assertEqual([x.page for x in b], [1, 1, 1, 1, 2, 2, 2, 2])
+        self.assertEqual([x.page for x in b], [1, 1, 1, 1, 2, 2, 2, 2, 3])
+        self.assertEqual(b[8].text, "Week 3 EDST 101")  # one title placeholder, one heading
         self.assertEqual((b[1].text, b[1].level), ("Nucleus", 1))
         self.assertEqual((b[2].text, b[2].level), ("DNA", 2))
         self.assertEqual(b[3].alt, "Cell diagram")

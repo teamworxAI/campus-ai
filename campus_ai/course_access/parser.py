@@ -351,13 +351,18 @@ def _pptx_shape(shape, page: int) -> list[Block]:
     placeholder = (shape.placeholder_format.type
                    if shape.is_placeholder else None)
     blocks: list[Block] = []
+    if placeholder in _TITLE_TYPES:
+        # One title placeholder is one slide title, however many lines it holds
+        # (a second line is usually a subtitle or course name typed into the box).
+        lines = [p.text.strip() for p in shape.text_frame.paragraphs if p.text.strip()]
+        if lines:
+            blocks.append(Heading(text=" ".join(lines), level=1, page=page))
+        return blocks + _pptx_links(shape, page)
     for paragraph in shape.text_frame.paragraphs:
         text = paragraph.text.strip()
         if not text:
             continue
-        if placeholder in _TITLE_TYPES:
-            blocks.append(Heading(text=text, level=1, page=page))
-        elif _pptx_is_bullet(paragraph, placeholder in _BULLET_TYPES):
+        if _pptx_is_bullet(paragraph, placeholder in _BULLET_TYPES):
             blocks.append(ListItem(text=text, level=paragraph.level + 1,
                                    page=page))
         else:
@@ -367,6 +372,11 @@ def _pptx_shape(shape, page: int) -> list[Block]:
                 blocks.append(Link(text=run.text.strip(),
                                    url=run.hyperlink.address, page=page))
     return blocks
+
+
+def _pptx_links(shape, page: int) -> list[Link]:
+    return [Link(text=run.text.strip(), url=run.hyperlink.address, page=page)
+            for paragraph in shape.text_frame.paragraphs for run in paragraph.runs if run.hyperlink.address]
 
 
 def _pptx_is_bullet(paragraph, default: bool) -> bool:
