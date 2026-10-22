@@ -452,12 +452,49 @@ worker on them and writes a report next to itself: a shape check for the
 configured model, not the bake-off. Card A3b (charts: extract the data as a
 table first, then check every claim against it) is not built.
 
-### 9.4 Limits that the next cards must handle
+### 9.4 Structure, table and text workers (A4): `campus_ai/course_access/workers.py`
+
+```python
+from campus_ai.course_access.workers import propose_fixes, report_markdown
+
+fixes = propose_fixes(doc, data_class="I")   # one or more Fix per structure, table or text issue
+print(report_markdown(fixes, "lecture-03.pptx"))
+```
+
+`propose_fixes` routes the audit's issues by rule to a handler; alt-text
+issues are A3's. Every `Fix` carries the rule, the worker, an `action` from
+`ACTIONS`, the proposed `value` (`None` when a person must supply it), a
+confidence, `needs_review` with its reason, the evidence, and the model if
+one was asked. Rules in code make every proposal the document gives away;
+the model is asked only where judgement is needed, and its answer is parsed
+and checked like A3's (`model_answers.py`).
+
+| Rule | Action | How | Confidence, review |
+|---|---|---|---|
+| `fake-list` | `convert-to-list` | Strip the typed marker; ordered if it is a number or letter | 0.9, applied |
+| `heading-level-skipped` | `set-heading-level` | One level below the previous heading | 0.8, applied |
+| `slide-title-duplicate` | `retitle-slide` | "Title (n of m)" over the slides that share it (WCAG 2.4.6) | 0.9, applied |
+| `slide-no-title` | `add-slide-title` | The slide's first line of text; none if the slide has no text | 0.6, review (0, review) |
+| `no-headings` | `promote-to-heading` | Each short line without a final period that a longer paragraph follows | 0.5, review |
+| `table-no-header-row` | `treat-as-layout` | One column, 40%+ empty cells, or two rows of multi-line text: page layout, not data (most PDF "tables") | 0.75, applied |
+| `table-no-header-row` | `mark-header-row` | First row all short, distinct, non-numeric text; otherwise doubtful | 0.85 applied; 0.5 review |
+| `document-no-title` | `set-title` | First level-1 heading; else the first short paragraph; else none | 0.85 applied; 0.5 or 0, review |
+| `document-no-language`, `-bad-language` | `set-language` | The model (task `classification`) names a BCP 47 tag for the first 600 characters; checked against the audit's tag pattern | model's, review below 0.7 |
+| `link-bare-url`, `link-no-text`, `link-vague-text` | `set-link-text` | The text before the URL in the same paragraph if it has one ("Timeline template: https://..."); otherwise the model (task `reasoning`) from the URL and surrounding text, rejected if vague, a URL or over 100 characters | 0.85 applied; model's, review below 0.7 |
+
+`scripts/propose_fixes.py` prints the review sheet for a document (and, with
+`--alt-text`, A3's proposals too). `evals/course_access/propose_corpus.py`
+runs the workers over the A6 corpus and tabulates proposals, review share and
+model use per action, with samples to read. Reading order, captions and
+colour contrast are not handled yet (the plan's W2-W4 also name them): the
+parser does not yet give the workers what they need for those.
+
+### 9.5 Limits that the next cards must handle
 
 | Limit | Handled by |
 |---|---|
 | No OCR: image-only (scanned) PDFs produce images and no text | Next phase: card A7, open-source offline OCR |
-| Untagged PDF: no headings or lists; existing PDF tags and alt text are not read | A4 infers structure; A2 already reports `no-headings` and lists PDF tags under "not checked" |
+| Untagged PDF: no headings or lists; existing PDF tags and alt text are not read | A4 proposes heading candidates for review (`promote-to-heading`); A2 reports `no-headings` and lists PDF tags under "not checked". PDF alt text and table headers from tags would cut the inflated counts on tagged PDFs |
 | Reading order is the file's, which may be wrong (e.g. a PPTX text box added last) | A2 lists reading order (1.3.2) under "not checked"; planned: A4 proposes a fix for review |
 | Equations, charts and SmartArt come through as images or plain text | A3 describes them and always routes them to review (master plan 3.2); A3b adds the chart data check |
 | Reading order on complex PDF layouts (columns, sidebars) follows position, not the author's intent | Planned: A4 proposes an order for review (A2 has no column check yet) |

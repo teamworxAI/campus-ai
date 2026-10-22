@@ -20,7 +20,7 @@ Status (Oct 22, 2026): build in progress. Shared platform (P0, P1, P5, P7,
 P8, P9), the Course Access parser and audit (A1, A2) and the Europeana
 collections search (R8, R9 first cut) and its rights filter (R10) are
 merged in `main`; the data-class gate and tracing (P1b, P2) are built;
-the alt-text worker (A3) is built; 128 unit tests pass. The B1 smoke test
+the alt-text (A3) and structure, table and text (A4) workers are built; 150 unit tests pass. The B1 smoke test
 passed on the demo laptop (Oct 22, RTX 2050, 9/9 checks, report in
 `evals/smoke/`). Next: the week-1 bake-offs
 that were deferred (B2-B5), the eval harness (P6) and the structure, table
@@ -436,7 +436,7 @@ Each card is sized for one cloud session and one PR.
 | A2 | Deterministic audit + WCAG-mapped report (`audit.py`, `scripts/audit_document.py`); colour contrast waits on colour extraction | A1 | Built (#13) |
 | A3 | Alt-text worker with a local open-weight vision model (D9) and confidence score: proposals for the images the audit flags, through the router's `vision` task; charts, diagrams, equations, images of text, decorative calls and low confidence always go to review; `scripts/alt_text.py` | A1, P1 | Built; probe run with `gemma4:e2b` 6/6 kinds (`evals/course_access/`); B3 on the gold set decides D9 |
 | A3b | Chart rule for A3: extract the chart's data as a table, write the description from it, flag any claim the table does not support | A3 | To do |
-| A4 | Structure, table and text workers | A1 | To do |
+| A4 | Structure, table and text workers: `workers.py` proposes a fix per audit issue (lists, heading levels, slide titles, header rows, layout tables, titles, language, link text) with confidence, review flag and evidence; rules first, the router only for language and link text | A1 | Built; reading order, captions and contrast wait on the parser; run on the A6 corpus (`evals/course_access/`) |
 | A4b | OMML -> MathML conversion for DOCX/PPTX equations (deterministic) | A1 | To do |
 | A5 | Rebuild accessible DOCX/HTML + verify loop | A2-A4 | To do |
 | A6 | Gold set + eval metrics in `evals/course_access/`. Corpus: openly licensed course documents (CC BY, CC BY-SA) fetched by `fetch-course-docs` into `DATA_DIR/course_access` with a manifest of sources and licences; `evals/course_access/audit_corpus.py` audits them all | A2, P6 | Corpus started Oct 22: 20 documents (PDF, DOCX, PPTX) from Canadian and UK OER repositories, all parse; labels by a specialist (D6) and the metrics (P6) next |
