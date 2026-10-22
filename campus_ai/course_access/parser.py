@@ -8,22 +8,29 @@ Reading order per format:
 - DOCX: body order of paragraphs and tables.
 - PPTX: slide order, then shape order on each slide (the order screen
   readers use).
-- PDF: content-stream order of text and image blocks on each page. Untagged
-  PDFs carry no heading or list semantics, so their text is paragraphs.
+- PDF: top to bottom, then left to right, on each page: text paragraphs,
+  ruled tables and images. Untagged PDFs carry no heading or list semantics,
+  so their text is paragraphs.
 
 Each block records the 1-based page (PDF) or slide (PPTX) it came from. DOCX
 has no fixed pages, so ``page`` is ``None``. Links are emitted right after
 the block that contains them (PDF: at the end of their page).
+
+All libraries are open source and permissively licensed (prime directive 1):
+python-docx, python-pptx (MIT) and pdfplumber on pdfminer.six (MIT).
 """
 
 from __future__ import annotations
 
+import io
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import docx
-import pymupdf
+import pdfplumber
 import pptx
+from pdfminer.pdftypes import resolve1
+from pdfminer.utils import decode_text
 from docx.oxml.ns import qn
 from docx.table import Table as DocxTable
 from pptx.enum.shapes import MSO_SHAPE_TYPE, PP_PLACEHOLDER
@@ -125,53 +132,91 @@ def _is_decorative(element) -> bool:
 
 # --- PDF ------------------------------------------------------------------
 
+IMAGE_DPI = 150  # resolution of the PNG made for each PDF image (for the alt-text worker)
+
+
 def _parse_pdf(path: Path) -> Document:
-    with pymupdf.open(path) as pdf:
-        kind, lang = pdf.xref_get_key(pdf.pdf_catalog(), "Lang")
+    with pdfplumber.open(path) as pdf:
         document = Document(
             source_format="pdf",
-            title=_clean(pdf.metadata.get("title")),
-            language=_clean(lang) if kind == "string" else None,
-            page_count=pdf.page_count,
+            title=_clean(_pdf_text(pdf.metadata.get("Title"))),
+            language=_clean(_pdf_text(resolve1(pdf.doc.catalog.get("Lang")))),
+            page_count=len(pdf.pages),
         )
-        for page in pdf:
-            document.blocks.extend(_pdf_page_blocks(page, page.number + 1))
+        for number, page in enumerate(pdf.pages, start=1):
+            document.blocks.extend(_pdf_page_blocks(page, number))
     return document
 
 
+def _pdf_text(value) -> str | None:
+    """A PDF string (bytes in PDFDocEncoding or UTF-16) or an already decoded str."""
+    if isinstance(value, bytes):
+        return decode_text(value)
+    return value if isinstance(value, str) else None
+
+
 def _pdf_page_blocks(page, page_no: int) -> list[Block]:
-    tables = page.find_tables().tables
-    pending = list(tables)  # tables not yet placed in reading order
-    blocks: list[Block] = []
-    for raw in page.get_text("dict")["blocks"]:
-        rect = pymupdf.Rect(raw["bbox"])
-        if raw["type"] == 1:
-            blocks.append(Image(data=raw["image"], format=raw["ext"],
-                                page=page_no))
-            continue
-        table = next((t for t in tables
-                      if pymupdf.Rect(t.bbox).contains(_centre(rect))), None)
-        if table is not None:
-            # Text inside a table is emitted once, as the table itself.
-            if table in pending:
-                pending.remove(table)
-                blocks.append(_pdf_table(table, page_no))
-            continue
-        text = " ".join(
-            "".join(span["text"] for span in line["spans"]).strip()
-            for line in raw["lines"]).strip()
-        if text:
-            blocks.append(Paragraph(text=text, page=page_no))
-    blocks.extend(_pdf_table(t, page_no) for t in pending)
-    for link in page.get_links():
+    """Paragraphs, tables and images ordered top to bottom, then left to right;
+    then the page's links."""
+    tables = page.find_tables()
+    placed: list[tuple[float, float, Block]] = [
+        (t.bbox[1], t.bbox[0], _pdf_table(t, page_no)) for t in tables]
+    placed += [(im["top"], im["x0"], _pdf_image(page, im, page_no))
+               for im in page.images]
+    # Text inside a table is emitted once, as the table itself.
+    lines = [line for line in page.extract_text_lines()
+             if not any(_inside(line, t.bbox) for t in tables)]
+    placed += [(top, x0, Paragraph(text=text, page=page_no))
+               for top, x0, text in _paragraphs(lines, placed)]
+    blocks = [block for _, _, block in sorted(placed, key=lambda p: (round(p[0]), p[1]))]
+    for link in page.hyperlinks:
         if link.get("uri"):
-            text = page.get_textbox(link["from"]).strip()
+            box = _clip((link["x0"], link["top"], link["x1"], link["bottom"]), page.bbox)
+            text = (page.crop(box).extract_text() or "").strip() if box else ""
             blocks.append(Link(text=text, url=link["uri"], page=page_no))
     return blocks
 
 
-def _centre(rect: pymupdf.Rect) -> pymupdf.Point:
-    return pymupdf.Point((rect.x0 + rect.x1) / 2, (rect.y0 + rect.y1) / 2)
+def _paragraphs(lines: list[dict], others: list) -> list[tuple[float, float, str]]:
+    """Join consecutive text lines into paragraphs. A line starts a new
+    paragraph after a gap taller than a line, or when a table or image sits
+    between it and the previous line."""
+    paragraphs: list[list] = []  # [top, x0, bottom, height, [texts]]
+    for line in sorted(lines, key=lambda l: (round(l["top"]), l["x0"])):
+        height = line["bottom"] - line["top"]
+        last = paragraphs[-1] if paragraphs else None
+        between = last and any(last[2] <= top < line["top"] for top, _, _ in others)
+        if last and not between and line["top"] - last[2] <= max(height, last[3]):
+            last[2] = line["bottom"]
+            last[4].append(line["text"].strip())
+        else:
+            paragraphs.append([line["top"], line["x0"], line["bottom"], height,
+                               [line["text"].strip()]])
+    return [(top, x0, " ".join(t for t in texts if t))
+            for top, x0, _, _, texts in paragraphs if any(texts)]
+
+
+def _inside(obj: dict, bbox) -> bool:
+    x = (obj["x0"] + obj["x1"]) / 2
+    y = (obj["top"] + obj["bottom"]) / 2
+    return bbox[0] <= x <= bbox[2] and bbox[1] <= y <= bbox[3]
+
+
+def _clip(box, page_box):
+    """`box` cut to the page, or None if nothing is left."""
+    x0, top = max(box[0], page_box[0]), max(box[1], page_box[1])
+    x1, bottom = min(box[2], page_box[2]), min(box[3], page_box[3])
+    return (x0, top, x1, bottom) if x1 > x0 and bottom > top else None
+
+
+def _pdf_image(page, image: dict, page_no: int) -> Image:
+    """The image as a PNG of its area on the page: what a reader sees there,
+    whatever the image's internal encoding."""
+    box = _clip((image["x0"], image["top"], image["x1"], image["bottom"]), page.bbox)
+    buffer = io.BytesIO()
+    if box:
+        page.crop(box).to_image(resolution=IMAGE_DPI).original.save(buffer, "PNG")
+    return Image(data=buffer.getvalue(), format="png", page=page_no)
 
 
 def _pdf_table(table, page_no: int) -> Table:

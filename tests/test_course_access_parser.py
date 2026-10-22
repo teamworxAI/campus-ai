@@ -1,22 +1,27 @@
+import io
 import tempfile
 import unittest
 from pathlib import Path
 
 import docx
-import pymupdf
 import pptx
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.opc.constants import RELATIONSHIP_TYPE
+from PIL import Image as PILImage
 from pptx.util import Inches
+from pypdf import PdfWriter
+from pypdf.generic import NameObject, TextStringObject
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
 
 from campus_ai.course_access.parser import parse
 
 
 def _png() -> bytes:
-    pixmap = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 4, 4), False)
-    pixmap.clear_with(200)
-    return pixmap.tobytes("png")
+    buffer = io.BytesIO()
+    PILImage.new("RGB", (4, 4), (200, 200, 200)).save(buffer, "PNG")
+    return buffer.getvalue()
 
 
 def _kinds(document):
@@ -157,30 +162,33 @@ class PptxParserTests(ParserTestCase):
 
 class PdfParserTests(ParserTestCase):
     def _build(self) -> Path:
-        pdf = pymupdf.open()
-        pdf.set_metadata({"title": "Notes"})
-        pdf.xref_set_key(pdf.pdf_catalog(), "Lang", "(fr-CA)")
-        page = pdf.new_page()
-        page.insert_text((72, 72), "Opening paragraph.")
-        page.insert_image(pymupdf.Rect(72, 100, 144, 172),
-                          filename=str(self.png))
-        page.insert_text((72, 200), "Visit the site")
-        page.insert_link({"kind": pymupdf.LINK_URI,
-                          "from": pymupdf.Rect(70, 188, 160, 204),
-                          "uri": "https://example.org/"})
+        # Coordinates below are from the top of the page, as the parser
+        # reports them; reportlab measures from the bottom, hence `up`.
+        path = self.dir / "sample.pdf"
+        height = letter[1]
+        up = lambda y: height - y  # noqa: E731
+        c = canvas.Canvas(str(path), pagesize=letter)
+        c.setTitle("Notes")
+        c.drawString(72, up(72), "Opening paragraph.")
+        c.drawImage(str(self.png), 72, up(172), width=72, height=72)
+        c.drawString(72, up(200), "Visit the site")
+        c.linkURL("https://example.org/", (70, up(204), 160, up(188)), relative=0)
         # A 2x2 ruled table.
         x, y, w, h = 72, 300, 100, 20
         for r in range(3):
-            page.draw_line((x, y + r * h), (x + 2 * w, y + r * h))
-        for c in range(3):
-            page.draw_line((x + c * w, y), (x + c * w, y + 2 * h))
+            c.line(x, up(y + r * h), x + 2 * w, up(y + r * h))
+        for col in range(3):
+            c.line(x + col * w, up(y), x + col * w, up(y + 2 * h))
         for r, row in enumerate([["Term", "Hours"], ["Fall", "3"]]):
-            for c, value in enumerate(row):
-                page.insert_text((x + c * w + 5, y + r * h + 14), value)
-        pdf.new_page().insert_text((72, 72), "Second page.")
-        path = self.dir / "sample.pdf"
-        pdf.save(path)
-        pdf.close()
+            for col, value in enumerate(row):
+                c.drawString(x + col * w + 5, up(y + r * h + 14), value)
+        c.showPage()
+        c.drawString(72, up(72), "Second page.")
+        c.save()
+        # reportlab can't set the document language; add /Lang to the catalog.
+        writer = PdfWriter(clone_from=str(path))
+        writer._root_object[NameObject("/Lang")] = TextStringObject("fr-CA")
+        writer.write(str(path))
         return path
 
     def test_structure_and_order(self):
@@ -194,6 +202,8 @@ class PdfParserTests(ParserTestCase):
         b = document.blocks
         self.assertEqual([x.page for x in b], [1, 1, 1, 1, 1, 2])
         self.assertEqual(b[1].format, "png")
+        self.assertTrue(b[1].data.startswith(b"\x89PNG"))
+        self.assertEqual(PILImage.open(io.BytesIO(b[1].data)).size, (150, 150))  # 1 inch at 150 dpi
         self.assertIsNone(b[1].alt)
         self.assertEqual(b[1].nearby_text,
                          "Opening paragraph.\nVisit the site")
@@ -201,6 +211,24 @@ class PdfParserTests(ParserTestCase):
         self.assertEqual((b[4].text, b[4].url),
                          ("Visit the site", "https://example.org/"))
         self.assertEqual(b[5].text, "Second page.")
+
+
+class PdfParagraphTests(ParserTestCase):
+    def test_lines_join_into_paragraphs_until_a_gap(self):
+        path = self.dir / "lines.pdf"
+        c = canvas.Canvas(str(path), pagesize=letter)
+        c.setTitle("")  # reportlab writes "untitled" by default
+        top = letter[1]
+        for y, text in ((72, "First line of a paragraph"), (86, "and its second line."),
+                        (160, "A new paragraph after a gap.")):
+            c.drawString(72, top - y, text)
+        c.save()
+        document = parse(path)
+        self.assertEqual([b.text for b in document.blocks],
+                         ["First line of a paragraph and its second line.",
+                          "A new paragraph after a gap."])
+        self.assertIsNone(document.language)  # no /Lang: reported as absent for the audit
+        self.assertIsNone(document.title)
 
 
 class ParseTests(unittest.TestCase):
