@@ -33,9 +33,10 @@ Status: draft for iteration. Open decisions are listed in section 8.
 3. **Human approval at decision points.** The agent proposes; an instructor
    approves meaning-bearing alt text, a research officer approves outreach.
    Nothing is sent or published automatically.
-4. **In-region by default.** Course materials and researcher data are
-   processed in Canada for BC customers and in the EU for EU customers. Local
-   models (Ollama) are the fallback for sensitive data.
+4. **Local, open models only (D2).** Every model runs on hardware we
+   control, from open-weight checkpoints under an OSI-approved licence. No
+   cloud model APIs. A BC customer's data is processed on an inference box in
+   Canada, an EU customer's on one in the EU.
 5. **Evals before features.** Each product gets a gold set in week 1; every
    PR reports eval deltas.
 6. **Capabilities exposed as MCP servers.** The same tools then work from
@@ -51,19 +52,52 @@ Status: draft for iteration. Open decisions are listed in section 8.
 
 | Component | What | Where |
 |---|---|---|
-| LLM router | One interface with Claude (in-region cloud) and Ollama (local) backends; route by task (vision, reasoning, cheap classification) and by data region | `campus_ai/core/llm/` |
+| LLM router | One interface over Ollama (developer machine or the region's inference box via `OLLAMA_HOST`); picks the model per task from the D8 register and refuses any model not in `MODEL_LICENCES` | `campus_ai/core/llm/` |
 | Graph core | Neo4j writer, vector + fulltext indexing, hybrid retriever with graph expansion | `campus_ai/core/graph/` |
 | Embedder | EmbeddingGemma 2 (open, Apache 2.0, runs offline from local weights): text, images, audio and video in one vector space; 128-dim vectors for fast candidate search, 768-dim for reranking. Behind one interface so it can be swapped (decision D7) | `campus_ai/core/embed/` |
-| Agent loop | Claude Agent SDK for the agentic steps (tool use, subagents, structured outputs); plain Python for deterministic steps | `campus_ai/<product>/agent.py` |
+| Agent loop | Plain Python: deterministic steps in code, judgement steps call the LLM router (tool calling and JSON output via Ollama) | `campus_ai/<product>/agent.py` |
 | Skills | Domain procedures as Agent Skills (`SKILL.md` + scripts): WCAG remediation playbook, Horizon call analysis | `.claude/skills/` and `campus_ai/<product>/skills/` |
 | MCP servers | One per product, thin wrappers over the product's functions | `campus_ai/<product>/mcp_server.py` |
 | Review queue | One approval UI pattern (Streamlit) for both products: item, proposed change, evidence, approve/edit/reject | `campus_ai/core/review_ui.py` |
 | Evaluation | RAGAS + deterministic metrics, per-product gold sets | `campus_ai/core/eval/`, `evals/` |
-| Tracing | Log every run: inputs, tool calls, model, tokens, cost, latency, outcome | `campus_ai/core/tracing.py` |
+| Tracing | Log every run: inputs, tool calls, model, host, data class, tokens, latency, outcome (evidence for each customer's privacy impact assessment) | `campus_ai/core/tracing.py` |
 
-Hosting for Claude in-region: use Claude through a cloud provider's Canadian
-and EU regions (for example AWS Bedrock `ca-central-1` and an EU region).
-Confirm model availability per region in week 0 before committing.
+Hosting (D2): one inference box per region (Canada, EU) running Ollama and
+the `embed` service; the Lisbon demo laptop runs the same stack. Every model
+in use is listed in the D8 model register below.
+
+Data classes, checked in code before any model call:
+
+| Class | Examples | Rule |
+|---|---|---|
+| P public | CORDIS, Horizon calls, OpenAlex, open Europeana items | Any of our inference boxes |
+| I institutional | Course materials, REE profiles | Inference box in the customer's region |
+| S sensitive | Student data, accommodation requests | Customer's region; minimal retention; PIA-listed |
+| R restricted | Arca items with access limits or TK Labels, Indigenous materials under OCAP | Never embedded or sent to any model; metadata link only |
+
+### D8 model register
+
+The router and embed service may only use models listed here. Picks follow
+`docs/research/multimodal_model_stack.md`, filtered to OSI-licensed open
+weights; each needs its week-1 bake-off before it is final. Licences marked
+(verify) come from secondary sources.
+
+| Step | Model | Licence | Served by | Status |
+|---|---|---|---|---|
+| Reasoning, orchestration | `gemma4:12b`; candidate Qwen 3.5 35B-A3B for harder steps | Apache-2.0 (Qwen: verify) | Ollama | Default set; B5 decides |
+| Vision, alt text | `gemma4:12b` or `qwen3-vl:8b` | Apache-2.0 | Ollama | B3 decides |
+| Classification, routing | `gemma4:e4b` | Apache-2.0 | Ollama | Default set |
+| Judge (evals, verify loop) | A different model family from the generator (e.g. `qwen3:8b` if Gemma generates) | Apache-2.0 | Ollama | B5 calibrates |
+| Embeddings | EmbeddingGemma 2 (contingency Qwen3-Embedding-4B; never EmbeddingGemma v1, Gemma Terms of Use) | Apache-2.0 | `embed` service | D7, B2 decides |
+| Reranker | Qwen3-Reranker-4B | Apache-2.0 (verify) | `embed` service | B2 |
+| Document parsing | Docling + Granite-Docling-258M; hard pages to PaddleOCR-VL | MIT / Apache-2.0 | Docker service | B4 vs current parser |
+| Speech to text | Granite Speech 4.1 2B | Apache-2.0 (verify) | Docker service | Stretch, B6 |
+| Diarization | Open question: pyannote Community-1 is CC-BY-4.0, not an OSI software licence | - | - | Decide before use |
+
+Week-1 bake-offs (details and pass rules in the research report): B1 local
+stack smoke test on the demo laptop, B2 embedder + reranker, B3 alt-text
+model (needs 3.5/5 from reviewers), B4 parser, B5 judge calibration
+(kappa >= 0.6 against human labels), B6 speech (stretch).
 
 Layout:
 
@@ -115,9 +149,15 @@ Key rules for the workers:
 - Decorative images get marked decorative, not described.
 - Each fix carries a confidence score; anything below threshold, and every
   chart, diagram or equation, goes to the review queue.
+- Charts: the vision model first extracts the chart's data as a table, then
+  writes the description from that table; a check flags any claim in the
+  description that the table does not support.
 
 ### 3.3 Tools (candidates, confirm in week 0)
-- PDF parsing: `pymupdf`; PPTX/DOCX: `python-pptx`, `python-docx`.
+- Parsing: `pymupdf`, `python-pptx`, `python-docx` today (card A1, merged);
+  Docling as a candidate replacement behind the same `parse(path)`
+  interface (bake-off B4). DOCX/PPTX equations convert from OMML to MathML
+  deterministically, without OCR.
 - Checkers: `axe-core` (via Playwright) on the HTML output, `veraPDF` for
   PDF/UA reporting on inputs, plus custom rules for DOCX/PPTX structure.
 - Math: convert to MathML where detectable.
@@ -316,36 +356,39 @@ Each card is sized for one cloud session and one PR.
 
 | ID | Card | Depends on |
 |---|---|---|
-| P0 | Project skeleton: `pyproject.toml` (uv), `campus_ai/` package, unittest setup, SessionStart hook | - |
-| P1 | LLM router with Claude (in-region) and Ollama backends, with tests | P0 |
+| P0 | Project skeleton: `pyproject.toml` (uv), `campus_ai/` package, unittest setup, SessionStart hook (**done**, #1) | - |
+| P1 | LLM router over local Ollama models with licence allow-list (**done**, #2, #10) | P0 |
+| P1b | Data-class gate in the router (P/I/S/R; R never reaches a model) and per-call trace of model, host and class | P1, P2 |
 | P5 | Graph core: Neo4j writer, vector + fulltext indexes, hybrid retriever | P0 |
 | P6 | Eval harness: gold-set format, RAGAS + deterministic metrics, report | P0 |
 | P2 | Tracing module: per-run JSONL log of tool calls, tokens, cost | P0 |
 | P3 | Review queue Streamlit component (approve/edit/reject) | P0 |
 | P4 | MCP server template wrapping a product's public functions | P1 |
-| A1 | Document parser (PDF/PPTX/DOCX -> common structure) | P0 |
+| A1 | Document parser (PDF/PPTX/DOCX -> common structure) (**done**, #4) | P0 |
+| A1b | Bake-off B4: Docling + Granite-Docling vs the A1 parser on the gold documents; swap behind `parse(path)` only if it wins | A1, A6 |
 | A2 | Deterministic audit + WCAG-mapped report | A1 |
-| A3 | Alt-text worker with vision model and confidence score | A1, P1 |
-| A4 | Structure, table and text workers | A1 |
+| A3 | Alt-text worker with vision model and confidence score; charts go chart -> table -> description -> claim check | A1, P1 |
+| A4 | Structure, table and text workers; OMML -> MathML conversion for DOCX/PPTX equations | A1 |
 | A5 | Rebuild accessible DOCX/HTML + verify loop | A2-A4 |
 | A6 | Gold set + eval metrics in `evals/course_access/` | A2, P6 |
 | R0 | REE integration spec with RIO: fields, access method, refresh, consent | - |
 | R1 | OpenAlex loader (SFU authors, topics), REE loader once R0 is agreed | P5, R0 |
 | R2 | CORDIS loader (projects, participants) + calls loader | P5 |
-| R3 | Graph schema + indexing for Researcher/Project/Call | R1, R2 |
+| R3 | Graph schema + indexing for Researcher/Project/Call; reranker step; every vector index records the embedding model id | R1, R2 |
 | R4 | Router + call analyst + partner scout + expert search (journey 4) | R3, P1 |
-| R5 | Network worker, eligibility rules, citation evaluator | R4 |
+| R5 | Network worker, eligibility rules, citation evaluator; code checks that every cited span exists in its source before any LLM judge runs | R4 |
 | R6 | Back-test eval (recall@10) | R3, P6 |
-| P7 | Embedder module with EmbeddingGemma 2 + bake-off vs text baseline (D7) | P0, P6 |
+| P7 | Embedder module with EmbeddingGemma 2 + bake-off vs text baseline (D7) (**done**, #3) | P0, P6 |
 | R0b | Collections data agreement with BC ELN (Arca) and pick the pilot collection | - |
 | R7 | Arca harvester + media splitter (text, image, audio, video units) with rights statements | P5, P7, R0b |
 | R8 | Europeana loader for the matching collection | P5, P7 |
 | R9 | Collections search: multimodal retrieval, citations with timestamps and image regions | R7, R8 |
+| R10 | Rights and governance filter ahead of any collections indexing: Europeana `edm:rights` per item, Arca access flags and TK Labels; restricted items get data class R | R0b |
 
 Kickoff prompt template for a card:
 
 ```text
-Read AGENTS.md and docs/plans/higher_ed_master_plan.md.
+Read AGENTS.md and docs/plans/master_plan.md.
 Implement task card <ID>: <title>.
 Start in plan mode and show me the plan before editing.
 Reuse campus_ai/core modules; keep the change minimal.
@@ -359,12 +402,13 @@ Commit, push to your branch, and open a PR with the eval results.
 | ID | Decision | Recommendation |
 |---|---|---|
 | D1 | Same repo or new repo for the products | **Decided:** new private repo `Teamworxai/campus-ai`, clean build, no code copied from the SFU prototype |
-| D2 | Model hosting | **Decided:** Claude via in-region cloud (Canada + EU) for reasoning and vision; Ollama for offline demo fallback. Confirm per-region model availability in week 0 |
+| D2 | Model hosting | **Decided:** local only. Open-weight models under OSI-approved licences, served by Ollama and the `embed` service on hardware we control (developer machines, one inference box per region, the demo laptop). No cloud model APIs. Research found no Claude option that keeps processing in Canada, which this rule also avoids |
 | D3 | Pilot partner for gold data | SFU accessibility services (A); SFU Research Intelligence team (RIO), owner of REE (R). Needs a data-sharing agreement for REE profiles before any REE data enters this repo |
 | D4 | Product names | Working names here; Teamworx branding to decide |
-| D5 | Demo hosting at Lisbon | Pre-loaded laptop with local fallback; do not rely on venue Wi-Fi |
+| D5 | Demo hosting at Lisbon | Pre-loaded laptop running the full local stack with public or sample data; do not rely on venue Wi-Fi. Dry run in week 2, not week 4 |
 | D6 | Who labels gold sets | One accessibility specialist (A); two research officers (R); one librarian for collections search |
-| D7 | Default embedder | **Decided, pending bake-off:** EmbeddingGemma 2 (`google/embeddinggemma-2`, released Oct 6, 2026, Apache 2.0, not gated; Matryoshka dims 768/512/256/128), run offline in the `embed` Docker image from local weights, text, image, audio and video. vLLM (0.31.0) does not support it yet and Ollama lists only text and image, so neither serves it for now. Text baseline: `intfloat/multilingual-e5-small`. Keep the baseline if it loses on our gold set |
+| D7 | Default embedder | **Decided, pending bake-off:** EmbeddingGemma 2 (`google/embeddinggemma-2`, released Oct 6, 2026, Apache 2.0, not gated; Matryoshka dims 768/512/256/128), run offline in the `embed` Docker image from local weights, text, image, audio and video. vLLM (0.31.0) does not support it yet and Ollama lists only text and image, so neither serves it for now. Text baseline: `intfloat/multilingual-e5-small`. Keep the baseline if it loses on our gold set. Contingency: Qwen3-Embedding-4B; never EmbeddingGemma v1 (Gemma Terms of Use) |
+| D8 | Model register | **Decided:** the table in section 2; the router's `MODEL_LICENCES` must match it. Adding a model means a licence check and a register row in the same PR |
 
 ## 9. Risks
 
@@ -377,5 +421,7 @@ Commit, push to your branch, and open a PR with the eval results.
 | GDPR complaints about profiling | Public data only, removal process, evidence shown for every match |
 | REE data access not agreed in time | Build and demo on public OpenAlex/ORCID data for SFU authors; swap in REE data once RIO agrees. Respect REE profile choices (e.g. not accepting students) |
 | Arca rights or cultural protocols block indexing | Start with one openly licensed collection agreed with BC ELN; rights checked per item |
+| Local models weaker than frontier APIs on alt text and reasoning | Bake-offs B3/B5 with pass rules; human review stays mandatory for charts, diagrams and equations |
+| Inference box hardware and cost per region | Get Canadian and EU GPU quotes now; the research found no Canadian prices |
 | EmbeddingGemma 2 is brand new | Bake-off in week 1; embedder behind one interface so it can be swapped |
 | Max usage limits slow the build | Cap parallel heavy sessions at 3; push bulk work to subagents and off-peak routines |
