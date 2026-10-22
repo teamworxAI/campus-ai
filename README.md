@@ -37,9 +37,9 @@ core with hybrid retrieval (P5), Europeana loader (R8), collections search API
 and web UI (R9), all for the Research Assistant. Course Access Agent: the
 document parser (A1) and the WCAG audit and report (A2) are built; fixing workers,
 rebuild and review are next (see [architecture](docs/architecture.md#11-course-access-agent)).
-Also built: LLM router over local open-weight models on Ollama (P1) and the
-licence guard (P8). Next: the model bake-offs (B1-B5), data-class gate (P1b),
-eval harness (P6) and alt-text worker (A3); OCR for scanned PDFs (A7) is next phase.
+Also built: LLM router over local open-weight models on Ollama (P1), the
+data-class gate and tracing (P1b, P2) and the licence guard (P8). Next: the
+model bake-offs (B1-B5), eval harness (P6) and alt-text worker (A3); OCR for scanned PDFs (A7) is next phase.
 
 ## Quick start
 

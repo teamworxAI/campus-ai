@@ -18,9 +18,10 @@ copied from it.
 
 Status (Oct 22, 2026): build in progress. Shared platform (P0, P1, P5, P7,
 P8), the Course Access parser and audit (A1, A2) and the Europeana
-collections search (R8, R9 first cut) are merged in `main`; 82 unit tests
-pass. Next: the week-1 bake-offs that were deferred (B1-B5), the data-class
-gate (P1b), the eval harness (P6) and the alt-text worker (A3). Open
+collections search (R8, R9 first cut) are merged in `main`; the data-class
+gate and tracing (P1b, P2) are built; 94 unit tests pass. Next: the week-1
+bake-offs that were deferred (B1-B5), the eval harness (P6) and the alt-text
+worker (A3). Open
 decisions are in section 8; section 5 has the remaining schedule.
 
 > ## Prime directives (standing orders; they override everything else)
@@ -87,7 +88,7 @@ decisions are in section 8; section 5 has the remaining schedule.
 | MCP servers | One per product, thin wrappers over the product's functions | `campus_ai/<product>/mcp_server.py` |
 | Review queue | One approval UI pattern (Streamlit) for both products: item, proposed change, evidence, approve/edit/reject | `campus_ai/core/review_ui.py` |
 | Evaluation | RAGAS (Apache-2.0) + deterministic metrics, per-product gold sets; any LLM judge is a local model, never a hosted one | `campus_ai/core/eval/`, `evals/` |
-| Tracing | Log every run: inputs, tool calls, model, tokens, cost, latency, outcome | `campus_ai/core/tracing.py` |
+| Tracing | Log every run: tool calls, model, host, data class, tokens, latency, outcome; metadata only, never inputs or outputs (no cost: models are local) | `campus_ai/core/tracing.py` |
 
 Hosting: everything, models included, runs in Docker on the institution's own
 machines or a laptop (prime directives). There is no cloud model hosting. GPU
@@ -415,8 +416,8 @@ Each card is sized for one cloud session and one PR.
 |---|---|---|---|
 | P0 | Project skeleton: `pyproject.toml` (uv), `campus_ai/` package, unittest setup, SessionStart hook | - | Built (#1) |
 | P1 | LLM router over local open-weight models only, on Ollama (local, or the team's inference box). Defaults Gemma 4 (Apache-2.0); refuses models not in its open-licence allow-list | P0 | Built (#2, local-only in #10) |
-| P1b | Data-class gate in the router (P/I/S/R; R never reaches a model) and per-call trace of model, host and class | P1, P2 | Next |
-| P2 | Tracing module: per-run JSONL log of tool calls, model, host, data class, tokens, latency | P0 | Next |
+| P1b | Data-class gate in the router (P/I/S/R; R never reaches a model) and per-call trace of model, host and class | P1, P2 | Built (this PR); embedder refuses R too |
+| P2 | Tracing module: per-run JSONL log of tool calls, model, host, data class, tokens, latency | P0 | Built (this PR) |
 | P3 | Review queue Streamlit component (approve/edit/reject) | P0 | To do |
 | P4 | MCP server template wrapping a product's public functions | P1 | To do |
 | P5 | Graph core: Neo4j writer, vector + fulltext indexes, hybrid retriever (RRF) | P0, P7 | Built (#5) |
