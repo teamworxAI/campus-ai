@@ -7,3 +7,5 @@ services:
     gpus: all
   api:
     gpus: all
+  ollama:
+    gpus: all

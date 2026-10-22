@@ -36,6 +36,7 @@ IMAGES = {
     "python": "PSF-2.0",  # python:*-slim, Debian base
     "neo4j": "GPL-3.0-only",  # Community edition only; Enterprise is commercial
     "nginx": "BSD-2-Clause",
+    "ollama": "MIT",  # bundles NVIDIA's CUDA runtime: the GPU named exception; runs on CPU too
 }
 # Model weights, by Hugging Face id: licence from the model card.
 MODELS = {
