@@ -13,15 +13,32 @@ update it in the same PR when a decision changes.
 - `evals/`: gold sets and eval reports. `tests/`: unit tests.
 
 ## Development
-Python 3.11+ with `uv`.
+Everything runs in Docker so any machine can rebuild it: no host virtualenvs.
+Dependencies are managed with `uv` inside the image (`pyproject.toml` +
+`uv.lock`).
+
+Models are fully local. Weights live in a host directory (`MODELS_DIR`,
+default `./models`, shareable across projects) mounted read-only into the
+`embed` service, which runs with networking disabled. Only
+`fetch-models` touches the network, once, to fill that directory; you can
+also copy weights in from another machine.
 
 ```bash
-uv sync
-uv run python -m unittest discover -s tests -v
+docker compose build                       # test image + embed image
+docker compose run --rm test               # unit tests
+docker compose run --rm fetch-models       # one-time: weights into MODELS_DIR
+docker compose run --rm embed              # bake-off on local models, offline
 ```
 
-Copy `.env.example` to `.env` for local secrets. Never commit `.env`,
-model binaries, caches or customer data.
+On machines with an NVIDIA GPU, add `compose.gpu.yaml` (e.g. set
+`COMPOSE_FILE` in `.env`, see `.env.example`); models then run in bfloat16.
+
+To change dependencies, run `uv add` / `uv lock` in a container, e.g.
+`docker run --rm -v "$PWD":/app -w /app python:3.13-slim sh -c "pip install uv && uv lock"`.
+In Claude Code cloud sessions add `-f compose.yaml -f .claude/compose.cloud.yaml`.
+
+Copy `.env.example` to `.env` for local settings (compose reads it). Never
+commit `.env`, model weights, caches or customer data.
 
 ## Rules
 - Keep the codebase simple: add complexity only when strictly necessary.
@@ -31,6 +48,9 @@ model binaries, caches or customer data.
 - Data stays in its region (Canada or EU). Route through the LLM router,
   never call a model provider directly from product code.
 - Tests use `unittest`; mock LLMs, Neo4j and network calls.
+- New services, tools and models ship as Docker images or compose services,
+  pinned and rebuildable from the repo alone. Models run offline from local
+  weights; nothing downloads at runtime.
 - Every PR that touches a product reports its eval results.
 
 ## Commits and PRs

@@ -220,6 +220,8 @@ __marimo__/
 .streamlit/secrets.toml
 
 # campus-ai
-.cache/
 data/private/
 evals/**/raw/
+
+# Local model weights (MODELS_DIR default)
+/models/
