@@ -88,6 +88,39 @@ Hosting: everything, models included, runs in Docker on the institution's own
 machines or a laptop (prime directives). There is no cloud model hosting. GPU
 use is optional and needs only free vendor runtimes; the CPU path always works.
 
+Data classes, checked in code before any model call (card P1b):
+
+| Class | Examples | Rule |
+|---|---|---|
+| P public | CORDIS, Horizon calls, OpenAlex, open Europeana items | Any machine running the stack |
+| I institutional | Course materials, REE profiles | The institution's own machines, in its region |
+| S sensitive | Student data, accommodation requests | As I, plus minimal retention; listed in the institution's PIA |
+| R restricted | Arca items with access limits or TK Labels, Indigenous materials under OCAP | Never embedded or sent to any model; metadata link only |
+
+### D10 model register
+
+The router and embed service may only use models listed here, and each must
+meet D8. Picks follow `docs/research/multimodal_model_stack.md`, filtered to
+OSI-licensed open weights; each needs its week-1 bake-off before it is final.
+Licences marked (verify) come from secondary sources.
+
+| Step | Model | Licence | Served by | Status |
+|---|---|---|---|---|
+| Reasoning, orchestration | `gemma4:12b`; candidate Qwen 3.5 35B-A3B for harder steps | Apache-2.0 (Qwen: verify) | Ollama | Default set; B5 decides |
+| Vision, alt text | `gemma4:12b` or `qwen3-vl:8b` | Apache-2.0 | Ollama | D9, B3 decides |
+| Classification, routing | `gemma4:e4b` | Apache-2.0 | Ollama | Default set |
+| Judge (evals, verify loop) | A different model family from the generator (e.g. `qwen3:8b` if Gemma generates) | Apache-2.0 | Ollama | B5 calibrates |
+| Embeddings | EmbeddingGemma 2 (contingency Qwen3-Embedding-4B; never EmbeddingGemma v1, Gemma Terms of Use) | Apache-2.0 | `embed` service | D7, B2 decides |
+| Reranker | Qwen3-Reranker-4B | Apache-2.0 (verify) | `embed` service | B2 |
+| Document parsing | Current A1 parser; candidate Docling + Granite-Docling-258M, hard pages to PaddleOCR-VL | MIT / Apache-2.0 (verify) | Docker service | B4 |
+| Speech to text | Granite Speech 4.1 2B | Apache-2.0 (verify) | Docker service | Stretch, B6 |
+| Diarization | Open: pyannote Community-1 is CC-BY-4.0, not an OSI software licence, so it fails D8 | - | - | Decide before use |
+
+Week-1 bake-offs (details and pass rules in the research report): B1 local
+stack smoke test on the demo laptop, B2 embedder + reranker, B3 alt-text
+model (needs 3.5/5 from reviewers), B4 parser, B5 judge calibration
+(kappa >= 0.6 against human labels), B6 speech (stretch).
+
 Layout:
 
 ```text
@@ -138,6 +171,9 @@ Key rules for the workers:
 - Decorative images get marked decorative, not described.
 - Each fix carries a confidence score; anything below threshold, and every
   chart, diagram or equation, goes to the review queue.
+- Charts: the vision model first extracts the chart's data as a table, then
+  writes the description from that table; a check flags any claim in the
+  description that the table does not support.
 
 ### 3.3 Tools (candidates, confirm in week 0)
 All tools must meet the prime directives: open source, no paid licences,
@@ -146,6 +182,10 @@ running offline.
   libraries only). **Not PyMuPDF**: it is AGPL-3.0 or
   commercially licensed, so A1 dropped it (decision D8).
   PPTX/DOCX: `python-pptx`, `python-docx` (MIT).
+- Candidate replacement: Docling (MIT) with Granite-Docling-258M, behind
+  the same `parse(path)` interface, decided by bake-off B4 (card A1b).
+- DOCX/PPTX equations convert from OMML to MathML deterministically,
+  without OCR.
 - Checkers: `axe-core` (via Playwright) on the HTML output, `veraPDF` for
   PDF/UA reporting on inputs, plus custom rules for DOCX/PPTX structure.
   Confirm each licence and that they run fully offline in the image.
@@ -363,6 +403,7 @@ Each card is sized for one cloud session and one PR.
 | P1 | LLM router over local open-weight models only, on Ollama (local, or the team's inference box), with tests. **Built** (#2, made local-only in #10): defaults Gemma 4 (Apache-2.0); the router refuses models not in its open-licence allowlist | P0 |
 | P8 | Licence guard: a test that lists every Python package, image and model weight in the stack and fails on any licence that is not OSI-approved (the two named exceptions listed: free GPU vendor runtimes, Docker Desktop for Windows development). **Built:** `tests/test_licences.py`, runs in both images | P0 |
 | P5 | Graph core: Neo4j writer, vector + fulltext indexes, hybrid retriever | P0, P7 |
+| P1b | Data-class gate in the router (P/I/S/R; R never reaches a model) and per-call trace of model, host and class | P1, P2 |
 | P6 | Eval harness: gold-set format, RAGAS + deterministic metrics, report | P0 |
 | P2 | Tracing module: per-run JSONL log of tool calls, tokens, cost | P0 |
 | P3 | Review queue Streamlit component (approve/edit/reject) | P0 |
@@ -371,26 +412,30 @@ Each card is sized for one cloud session and one PR.
 | A2 | Deterministic audit + WCAG-mapped report. **Built:** `campus_ai/course_access/audit.py`, `scripts/audit_document.py`; colour contrast waits on colour extraction | A1 |
 | A3 | Alt-text worker with a local open-weight vision model (D9) and confidence score | A1, P1 |
 | A4 | Structure, table and text workers | A1 |
+| A1b | Bake-off B4: Docling + Granite-Docling vs the A1 parser on the gold documents; swap behind `parse(path)` only if it wins | A1, A6 |
+| A3b | Chart rule for A3: extract the chart's data as a table, write the description from it, flag any claim the table does not support | A3 |
+| A4b | OMML -> MathML conversion for DOCX/PPTX equations (deterministic) | A1 |
 | A5 | Rebuild accessible DOCX/HTML + verify loop | A2-A4 |
 | A6 | Gold set + eval metrics in `evals/course_access/` | A2, P6 |
 | A7 | **Next phase:** OCR for scanned (image-only) PDFs with an open-source offline engine (e.g. Tesseract), feeding the same Document structure | A1 |
 | R0 | REE integration spec with RIO: fields, access method, refresh, consent | - |
 | R1 | OpenAlex loader (SFU authors, topics), REE loader once R0 is agreed | P5, R0 |
 | R2 | CORDIS loader (projects, participants) + calls loader | P5 |
-| R3 | Graph schema + indexing for Researcher/Project/Call | R1, R2 |
+| R3 | Graph schema + indexing for Researcher/Project/Call; reranker step; every vector index records the embedding model id | R1, R2 |
 | R4 | Router + call analyst + partner scout + expert search (journey 4) | R3, P1 |
-| R5 | Network worker, eligibility rules, citation evaluator | R4 |
+| R5 | Network worker, eligibility rules, citation evaluator; code checks that every cited span exists in its source before any LLM judge runs | R4 |
 | R6 | Back-test eval (recall@10) | R3, P6 |
 | P7 | Embedder module with EmbeddingGemma 2 + bake-off vs text baseline (D7) | P0, P6 |
 | R0b | Data agreement with BC ELN for ArcaBC (arcabc.ca): permission to ingest, the interface to use, rights handling, and the pilot collection. **In progress; until signed, no code or session touches arcabc.ca** | - |
 | R7 | ArcaBC loader, the BC counterpart of R8: one fetch step through the interface agreed in R0b, writing the same JSONL records (items, media units, collections, holders, creators, rights statements). Blocked on R0b | P5, P7, R0b |
 | R8 | Europeana loader for the matching collection. Pilot theme: salmon, as a subject (*Salmo*, *Oncorhynchus*, salmonids) or as salmon fishing in titles in 7 languages, without specimen photos: about 150 items, nearly all on topic (looser queries were half noise: people named Salmon, salmon-coloured fashion, herbarium sheets named after a botanist); open licences only (CC0, PDM, CC BY, CC BY-SA), until the ArcaBC collection (R0b) fixes the theme. Images use Europeana's 400 px thumbnails; full-size media, audio and video need each provider's host and come later | P5, P7 |
 | R9 | Collections search: multimodal retrieval, citations with timestamps and image regions. First cut built: API (`campus_ai/research_assistant/api.py`) and web UI (`web/`) over Europeana; pictures and texts ranked separately; APA/Chicago/BibTeX citations. Timestamps and image regions wait on audio/video and region detection | R7, R8 |
+| R10 | Rights and governance filter ahead of any collections indexing: Europeana `edm:rights` per item, ArcaBC access flags and TK Labels; restricted items get data class R | R0b |
 
 Kickoff prompt template for a card:
 
 ```text
-Read AGENTS.md and docs/plans/higher_ed_master_plan.md.
+Read AGENTS.md and docs/plans/master_plan.md.
 Implement task card <ID>: <title>.
 Start in plan mode and show me the plan before editing.
 Reuse campus_ai/core modules; keep the change minimal.
@@ -407,11 +452,12 @@ Commit, push to your branch, and open a PR with the eval results.
 | D2 | Model hosting | **Decided (revised Oct 21, prime directive 2):** all models run locally from open weights, in Docker, on hardware we or the institution control. No cloud model APIs: Claude, OpenAI, Gemini, Bedrock and similar are out of the product. Replaces the earlier "Claude via in-region cloud" decision |
 | D3 | Pilot partner for gold data | SFU accessibility services (A); SFU Research Intelligence team (RIO), owner of REE (R). Needs a data-sharing agreement for REE profiles before any REE data enters this repo |
 | D4 | Product names | Working names here; Teamworx branding to decide |
-| D5 | Demo hosting at Lisbon | Pre-loaded laptop with local fallback; do not rely on venue Wi-Fi |
+| D5 | Demo hosting at Lisbon | Pre-loaded laptop running the full local stack with public or sample data; do not rely on venue Wi-Fi. Dry run in week 2, not week 4 |
 | D6 | Who labels gold sets | One accessibility specialist (A); two research officers (R); one librarian for collections search |
 | D7 | Default embedder | **Decided, pending bake-off:** EmbeddingGemma 2 (`google/embeddinggemma-2`, released Oct 6, 2026, Apache 2.0, not gated; Matryoshka dims 768/512/256/128), run offline in the `embed` Docker image from local weights, text, image, audio and video. vLLM (0.31.0) does not support it yet and Ollama lists only text and image, so neither serves it for now. Text baseline: `intfloat/multilingual-e5-small`. Keep the baseline if it loses on our gold set |
 | D8 | Licences | **Decided (Oct 21, prime directive 1):** open source only, no paid licences. OSI-approved licences for all code, dependencies, images, tools and model weights; permissive preferred; no AGPL (so PyMuPDF is replaced). campus-ai is Apache-2.0. Two named exceptions: free GPU vendor runtimes (NVIDIA CUDA), optional, with a CPU path that always works; and Docker Desktop as a developer tool on Windows workstations (Oct 21). Deployments need only the open-source Docker Engine + Compose (or Podman), and nothing may depend on Desktop-only features |
 | D9 | Vision model for alt text (A3) | **Open:** a local open-weight vision-language model under an OSI-approved licence (e.g. Apache-2.0 or MIT weights; "community" licences don't qualify), chosen by bake-off on the A6 gold set, running in a container from local weights |
+| D10 | Model register | **Decided:** the table in section 2; the router's allow-list must match it. Adding a model means a D8 licence check and a register row in the same PR |
 
 ## 9. Risks
 
@@ -424,6 +470,8 @@ Commit, push to your branch, and open a PR with the eval results.
 | GDPR complaints about profiling | Public data only, removal process, evidence shown for every match |
 | REE data access not agreed in time | Build and demo on public OpenAlex/ORCID data for SFU authors; swap in REE data once RIO agrees. Respect REE profile choices (e.g. not accepting students) |
 | ArcaBC permission not granted in time, or rights and cultural protocols block indexing | Demo on Europeana with ArcaBC shown as pending; start ArcaBC with one openly licensed collection agreed with BC ELN; rights checked per item |
+| Local models weaker than frontier APIs on alt text and reasoning | Bake-offs B3/B5 with pass rules; human review stays mandatory for charts, diagrams and equations |
+| Hardware for each institution or the demo laptop | Size from the B1 smoke test; get Canadian and EU GPU quotes (the research found no Canadian prices); CPU path stays as fallback |
 | EmbeddingGemma 2 is brand new | Bake-off in week 1; embedder behind one interface so it can be swapped |
 | Local open-weight models are weaker than hosted ones for alt text and reasoning | Bake-off (D9); confidence scores; every chart, diagram, equation and low-confidence fix goes to human review |
 | Local models are slow on CPU-only machines | GPU optional via free vendor runtime; batch work (indexing, remediation) runs ahead of the demo; measured: pilot index 17 min on 4 CPU cores, 80 s on an RTX 2050 |
