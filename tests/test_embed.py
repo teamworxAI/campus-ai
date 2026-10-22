@@ -9,6 +9,7 @@ from unittest import mock
 
 import numpy as np
 
+from campus_ai.core.data_classes import RestrictedDataError
 from campus_ai.core.embed import BACKENDS, get_embedder, media, truncate
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -41,45 +42,45 @@ class EmbedderTests(unittest.TestCase):
     def test_gemma_query_prompt_and_matryoshka_dim(self):
         model = fake_model(768)
         embedder = get_embedder("embeddinggemma-2", model=model)
-        out = embedder.embed(["wildfire smoke"], kind="query", dim=128)
+        out = embedder.embed(["wildfire smoke"], kind="query", dim=128, data_class="P")
         self.assertEqual(out.shape, (1, 128))
         np.testing.assert_allclose(np.linalg.norm(out, axis=1), 1.0, rtol=1e-6)
         model.encode.assert_called_once_with(["wildfire smoke"], convert_to_numpy=True, prompt_name="SearchQuery")
 
     def test_gemma_document_prompt_full_dim(self):
         model = fake_model(768)
-        out = get_embedder(model=model).embed(["a", "b"])
+        out = get_embedder(model=model).embed(["a", "b"], data_class="P")
         self.assertEqual(out.shape, (2, 768))
         self.assertEqual(model.encode.call_args.kwargs["prompt_name"], "Document")
 
     def test_baseline_prompts(self):
         model = fake_model(384)
         embedder = get_embedder("e5-small", model=model)
-        embedder.embed(["q"], kind="query")
+        embedder.embed(["q"], kind="query", data_class="P")
         self.assertEqual(model.encode.call_args.kwargs["prompt"], "query: ")
-        embedder.embed(["d"])
+        embedder.embed(["d"], data_class="P")
         self.assertEqual(model.encode.call_args.kwargs["prompt"], "passage: ")
 
     def test_rejects_unsupported_dim_modality_and_kind(self):
         embedder = get_embedder(model=fake_model(768))
         with self.assertRaises(ValueError):
-            embedder.embed(["a"], dim=100)
+            embedder.embed(["a"], dim=100, data_class="P")
         with self.assertRaises(NotImplementedError):
-            get_embedder("e5-small", model=fake_model(384)).embed(["img.png"], modality="image")
+            get_embedder("e5-small", model=fake_model(384)).embed(["img.png"], modality="image", data_class="P")
         with self.assertRaises(ValueError):
-            embedder.embed(["a"], kind="passage")
+            embedder.embed(["a"], kind="passage", data_class="P")
         with self.assertRaises(ValueError):
             get_embedder("nope")
 
     def test_media_goes_in_bare_keyed_by_modality(self):
         model = fake_model(768)
         embedder = get_embedder(model=model)
-        embedder.embed([Path("a.png")], modality="image", kind="query", dim=256)
+        embedder.embed([Path("a.png")], modality="image", kind="query", dim=256, data_class="P")
         model.encode.assert_called_once_with([{"image": "a.png"}], convert_to_numpy=True)
 
         samples = np.zeros(16000, dtype=np.float32)
         with mock.patch.object(media, "load_audio", return_value=samples) as load_audio:
-            embedder.embed(["a.wav"], modality="audio")
+            embedder.embed(["a.wav"], modality="audio", data_class="P")
         load_audio.assert_called_once_with("a.wav")
         audio = model.encode.call_args.args[0][0]["audio"]
         self.assertEqual(audio["sampling_rate"], 16000)
@@ -87,11 +88,11 @@ class EmbedderTests(unittest.TestCase):
 
         video = {"array": np.zeros((2, 4, 4, 3)), "video_metadata": {}}
         with mock.patch.object(media, "load_video", return_value=video):
-            embedder.embed(["a.mp4"], modality="video")
+            embedder.embed(["a.mp4"], modality="video", data_class="P")
         self.assertEqual(model.encode.call_args.args[0], [{"video": video}])
 
         decoded = {"array": samples, "sampling_rate": 16000}
-        embedder.embed([decoded], modality="audio")
+        embedder.embed([decoded], modality="audio", data_class="P")
         self.assertEqual(model.encode.call_args.args[0], [{"audio": decoded}])
 
     def test_loads_only_from_local_models_dir(self):
@@ -113,9 +114,18 @@ class EmbedderTests(unittest.TestCase):
         self.assertTrue(kwargs["local_files_only"])
         self.assertIs(kwargs["model_kwargs"]["dtype"], torch.float32)
 
+    def test_restricted_data_never_embedded(self):
+        model = fake_model(768)
+        embedder = get_embedder(model=model)
+        with self.assertRaises(RestrictedDataError):
+            embedder.embed(["a restricted item"], data_class="R")
+        with self.assertRaises(TypeError):
+            embedder.embed(["no class declared"])
+        model.encode.assert_not_called()
+
     def test_empty_input_skips_model(self):
         model = fake_model(768)
-        out = get_embedder(model=model).embed([], dim=256)
+        out = get_embedder(model=model).embed([], dim=256, data_class="P")
         self.assertEqual(out.shape, (0, 256))
         model.encode.assert_not_called()
 

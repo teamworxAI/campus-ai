@@ -30,7 +30,9 @@ _NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 @dataclass
 class Node:
     """One graph node. `content` is what gets embedded (default: `text`);
-    for media it is a file path, with `text` holding its caption or metadata."""
+    for media it is a file path, with `text` holding its caption or metadata.
+    `data_class` (P/I/S/R) is checked before embedding: class R is refused.
+    The default P fits what the graph holds today (open Europeana items)."""
 
     id: str
     label: str
@@ -38,6 +40,7 @@ class Node:
     modality: str = "text"
     content: Any = None
     props: dict[str, Any] = field(default_factory=dict)
+    data_class: str = "P"
 
 
 @dataclass
@@ -106,12 +109,14 @@ class GraphStore:
     def upsert(self, nodes: Sequence[Node]) -> None:
         """Embed and write nodes, replacing the vectors and text of existing ids."""
         fast, _ = dims(self.embedder)
-        groups: dict[tuple[str, str], list[Node]] = defaultdict(list)
+        groups: dict[tuple[str, str, str], list[Node]] = defaultdict(list)
         for node in nodes:
-            groups[(name(node.label), node.modality)].append(node)
-        for (label, modality), group in groups.items():
+            groups[(name(node.label), node.modality, node.data_class)].append(node)
+        for (label, modality, data_class), group in groups.items():
             full = self.embedder.embed(
-                [node.text if node.content is None else node.content for node in group], modality=modality
+                [node.text if node.content is None else node.content for node in group],
+                modality=modality,
+                data_class=data_class,
             )
             rows = [
                 {

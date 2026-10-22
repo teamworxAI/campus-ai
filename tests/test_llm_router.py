@@ -1,9 +1,13 @@
 import io
 import json
 import re
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
+from campus_ai.core import tracing
+from campus_ai.core.data_classes import RestrictedDataError
 from campus_ai.core.llm import LLMResponse, backends, config, generate
 
 MESSAGES = [{"role": "user", "content": "Hello"}]
@@ -23,6 +27,15 @@ class OllamaRoutingTests(unittest.TestCase):
             "done_reason": "stop",
         }
         self.urlopen.return_value.__enter__.return_value = io.BytesIO(json.dumps(reply).encode())
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.traces = Path(tmp.name)
+        patcher = mock.patch.object(tracing, "trace_dir", return_value=self.traces)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def trace_records(self):
+        return [json.loads(line) for path in self.traces.glob("*.jsonl") for line in path.read_text().splitlines()]
 
     def sent_body(self):
         return json.loads(self.urlopen.call_args.args[0].data)
@@ -30,7 +43,7 @@ class OllamaRoutingTests(unittest.TestCase):
     def test_routes_to_ollama_host(self):
         env = {"OLLAMA_HOST": "http://inference-box:11434/"}
         with mock.patch.dict("os.environ", env, clear=True):
-            result = generate(MESSAGES, task="reasoning", system="Sys")
+            result = generate(MESSAGES, task="reasoning", data_class="I", system="Sys")
         request = self.urlopen.call_args.args[0]
         self.assertEqual(request.full_url, "http://inference-box:11434/api/chat")
         body = self.sent_body()
@@ -45,7 +58,7 @@ class OllamaRoutingTests(unittest.TestCase):
 
     def test_default_host_is_this_machine(self):
         with mock.patch.dict("os.environ", {}, clear=True):
-            generate(MESSAGES, task="classification")
+            generate(MESSAGES, task="classification", data_class="P")
         self.assertEqual(self.urlopen.call_args.args[0].full_url, "http://localhost:11434/api/chat")
         self.assertEqual(self.sent_body()["model"], "gemma4:e4b")
 
@@ -58,7 +71,7 @@ class OllamaRoutingTests(unittest.TestCase):
             ],
         }]
         with mock.patch.dict("os.environ", {}, clear=True):
-            generate(messages, task="vision")
+            generate(messages, task="vision", data_class="P")
         self.assertEqual(
             self.sent_body()["messages"],
             [{"role": "user", "content": "Describe this.", "images": ["AAAA"]}],
@@ -66,19 +79,60 @@ class OllamaRoutingTests(unittest.TestCase):
 
     def test_model_override_must_be_open_licensed(self):
         with mock.patch.dict("os.environ", {"CAMPUS_AI_MODEL_VISION": "qwen3-vl:8b"}, clear=True):
-            generate(MESSAGES, task="vision")
+            generate(MESSAGES, task="vision", data_class="P")
         self.assertEqual(self.sent_body()["model"], "qwen3-vl:8b")
         self.urlopen.reset_mock()
         for blocked in ("gemma3:12b", "llama3.2-vision:11b"):
             with self.subTest(model=blocked):
                 with mock.patch.dict("os.environ", {"CAMPUS_AI_MODEL_VISION": blocked}, clear=True):
                     with self.assertRaisesRegex(ValueError, "prime directive 1"):
-                        generate(MESSAGES, task="vision")
+                        generate(MESSAGES, task="vision", data_class="P")
         self.urlopen.assert_not_called()
+
+    def test_call_writes_trace_without_content(self):
+        env = {"OLLAMA_HOST": "http://inference-box:11434"}
+        with mock.patch.dict("os.environ", env, clear=True):
+            generate(MESSAGES, task="reasoning", data_class="S", system="Secret system prompt")
+        [entry] = self.trace_records()
+        self.assertEqual(entry["event"], "llm")
+        self.assertEqual(
+            {key: entry[key] for key in ("task", "model", "host", "data_class", "input_tokens", "output_tokens", "outcome")},
+            {"task": "reasoning", "model": "gemma4:12b", "host": "http://inference-box:11434", "data_class": "S",
+             "input_tokens": 11, "output_tokens": 3, "outcome": "ok"},
+        )
+        self.assertGreaterEqual(entry["latency_ms"], 0)
+        text = json.dumps(entry)
+        self.assertNotIn("Hello", text)
+        self.assertNotIn("Secret", text)
+
+    def test_restricted_data_refused_before_model_call(self):
+        with mock.patch.dict("os.environ", {}, clear=True):
+            with self.assertRaises(RestrictedDataError):
+                generate(MESSAGES, task="reasoning", data_class="R")
+        self.urlopen.assert_not_called()
+        [entry] = self.trace_records()
+        self.assertEqual((entry["data_class"], entry["outcome"]), ("R", "refused"))
+        self.assertNotIn("model", entry)
+        self.assertNotIn("Hello", json.dumps(entry))
+
+    def test_data_class_required_and_known(self):
+        with self.assertRaises(TypeError):
+            generate(MESSAGES, task="reasoning")
+        with self.assertRaisesRegex(ValueError, "Unknown data class"):
+            generate(MESSAGES, task="reasoning", data_class="public")
+        self.urlopen.assert_not_called()
+
+    def test_model_error_traced(self):
+        self.urlopen.side_effect = OSError("connection refused")
+        with mock.patch.dict("os.environ", {}, clear=True):
+            with self.assertRaises(OSError):
+                generate(MESSAGES, task="classification", data_class="P")
+        [entry] = self.trace_records()
+        self.assertEqual((entry["model"], entry["outcome"], entry["error"]), ("gemma4:e4b", "error", "OSError"))
 
     def test_unknown_task_rejected(self):
         with self.assertRaises(ValueError):
-            generate(MESSAGES, task="poetry")
+            generate(MESSAGES, task="poetry", data_class="P")
         self.urlopen.assert_not_called()
 
 
