@@ -4,6 +4,7 @@ Prime directive 2: there are no cloud backends.
 """
 
 import json
+import urllib.error
 import urllib.request
 
 from .response import LLMResponse
@@ -42,8 +43,20 @@ def ollama(messages, model, max_tokens, host, system=None) -> LLMResponse:
         data=json.dumps(body).encode(),
         headers={"Content-Type": "application/json"},
     )
-    with urllib.request.urlopen(request, timeout=600) as resp:
-        data = json.load(resp)
+    try:
+        with urllib.request.urlopen(request, timeout=600) as resp:
+            data = json.load(resp)
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode(errors="replace")[:200]
+        raise RuntimeError(
+            f"Ollama at {host} rejected the request ({e.code}): {detail}. If the model is missing, "
+            "download it once with `docker compose run --rm fetch-ollama <model>`."
+        ) from e
+    except urllib.error.URLError as e:
+        raise ConnectionError(
+            f"No Ollama at {host} ({e.reason}). Start it with `docker compose up -d ollama`, "
+            "or set OLLAMA_URL in .env to the team's inference box."
+        ) from e
     return LLMResponse(
         text=data["message"]["content"],
         model=data["model"],

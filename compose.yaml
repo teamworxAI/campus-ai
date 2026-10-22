@@ -23,9 +23,11 @@ x-neo4j-env: &neo4j-env
   NEO4J_USER: neo4j
   NEO4J_PASSWORD: ${NEO4J_PASSWORD:-campus-ai-local}
 
-# For services that call the LLM router: Ollama in compose unless OLLAMA_HOST is set.
+# For services that call the LLM router: Ollama in compose unless OLLAMA_URL is set
+# (the team's inference box). The .env key is not OLLAMA_HOST because a native Ollama
+# install exports that in the shell, and compose would pass the shell's value on.
 x-llm-env: &llm-env
-  OLLAMA_HOST: ${OLLAMA_HOST:-http://ollama:11434}
+  OLLAMA_HOST: ${OLLAMA_URL:-http://ollama:11434}
   CAMPUS_AI_MODEL_REASONING: ${CAMPUS_AI_MODEL_REASONING:-}
   CAMPUS_AI_MODEL_VISION: ${CAMPUS_AI_MODEL_VISION:-}
   CAMPUS_AI_MODEL_CLASSIFICATION: ${CAMPUS_AI_MODEL_CLASSIFICATION:-}

@@ -137,7 +137,7 @@ Edit `.env`:
 | `NEO4J_PASSWORD` | optional | Set it **before** Neo4j first starts; empty means `campus-ai-local`. Neo4j has no published ports |
 | `EUROPEANA_API_KEY` | step 8 | Free from https://pro.europeana.eu/page/get-api |
 | `COMPOSE_FILE` | step 11 | GPU overlay; leave commented on machines without NVIDIA |
-| `OLLAMA_HOST`, `CAMPUS_AI_MODEL_*` | optional | Leave empty to use the `ollama` service and the router's default models; see `.env.example` |
+| `OLLAMA_URL`, `CAMPUS_AI_MODEL_*` | optional | Leave empty to use the `ollama` service and the router's default models; see `.env.example`. A shell `OLLAMA_HOST` (native Ollama installs export one) is ignored |
 
 `.env` is gitignored. Never commit it.
 

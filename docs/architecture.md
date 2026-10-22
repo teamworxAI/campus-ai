@@ -36,7 +36,7 @@ flowchart LR
         CA[Course Access Agent]
         CORE[Shared core: embedder, graph, LLM router<br/>eval harness planned]
     end
-    OLL[Ollama compose service, local weights<br/>or the team's inference box via OLLAMA_HOST]
+    OLL[Ollama compose service, local weights<br/>or the team's inference box via OLLAMA_URL]
     subgraph sources[External sources, harvested once]
         EU[Europeana API]
         ARCA[ArcaBC arcabc.ca, BC ELN<br/>no access until R0b]
@@ -157,8 +157,10 @@ flowchart TB
 network can't publish a port. It runs only nginx, with no model, key or data,
 so the services that hold them stay without internet access.
 
-`embed`, `api` and `smoke` get `OLLAMA_HOST` (default `http://ollama:11434`)
-and the optional `CAMPUS_AI_MODEL_*` overrides from `.env`. Start `ollama`
+`embed`, `api` and `smoke` get `OLLAMA_HOST` (the `ollama` service, or
+`OLLAMA_URL` from `.env` for the team's inference box; not the shell's
+`OLLAMA_HOST`, which a native Ollama install exports) and the optional
+`CAMPUS_AI_MODEL_*` overrides from `.env`. Start `ollama`
 with `docker compose up -d ollama`; `api` doesn't wait for it, since nothing
 in `api` calls the router yet. Ollama reads its weights read-only, so it never
 prunes them (`OLLAMA_NOPRUNE=1`), and its cloud models are off
@@ -404,7 +406,7 @@ retriever searches people, projects and collections together.
 - **Models.** All local (prime directive 2), so no document, query or record
   is ever sent to a model provider. The LLM router reaches only the Ollama
   host in `OLLAMA_HOST` (the `ollama` compose service, or the team's
-  inference box).
+  inference box via `OLLAMA_URL`).
 - **Planned.** The data-class gate in the router (P1b: P/I/S/R, R never
   reaches a model, per-call trace of model, host and class); the rights and
   governance filter ahead of collections indexing (R10: Europeana
@@ -515,7 +517,7 @@ the search graph.
 | Untagged PDFs | Carry no heading or list semantics, so A1 returns them as paragraphs; A4 must infer structure |
 | Checkers | The plan names axe-core (via Playwright) and veraPDF (Java). Confirm their licences and that they run offline; both add large runtimes to the image |
 | **Vision model** (D9) | A local open-weight vision-language model under an OSI-approved licence, chosen by bake-off B3 on the gold set; register candidates `gemma4:12b` (router default) or `qwen3-vl:8b`. Local models may describe complex figures less well than hosted ones, so confidence thresholds and human review matter more |
-| LLM router | Done: Ollama is the only backend (`OLLAMA_HOST`: this machine, or the team's inference box); models must be in its open-licence allowlist; defaults are Gemma 4 (Apache-2.0) |
+| LLM router | Done: Ollama is the only backend (the `ollama` compose service, or the team's inference box via `OLLAMA_URL`); models must be in its open-licence allowlist; defaults are Gemma 4 (Apache-2.0) |
 | Gold set | 40 real course documents labelled by an accessibility specialist (D6); none collected yet |
 
 Module details for A1 and A2 are in [`design.md`](design.md#9-course-access-agent).

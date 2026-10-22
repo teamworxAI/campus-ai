@@ -19,8 +19,8 @@ copied from it.
 Status (Oct 22, 2026): build in progress. Shared platform (P0, P1, P5, P7,
 P8, P9), the Course Access parser and audit (A1, A2) and the Europeana
 collections search (R8, R9 first cut) and its rights filter (R10) are
-merged in `main`; 101 unit tests pass. The B1 smoke test script is built
-and waits for a run on the demo laptop. Next: the week-1 bake-offs that were deferred (B1-B5), the data-class
+merged in `main`; 103 unit tests pass. The B1 smoke test passed on the demo
+laptop (Oct 22, RTX 2050, 9/9 checks, report in `evals/smoke/`). Next: the week-1 bake-offs that were deferred (B1-B5), the data-class
 gate (P1b), the eval harness (P6) and the alt-text worker (A3). Open
 decisions are in section 8; section 5 has the remaining schedule.
 
@@ -359,7 +359,7 @@ deferred and now come first.
 
 | Week | Shared platform | Course Access Agent | Research Assistant |
 |---|---|---|---|
-| Oct 22-25 | P9 Ollama in compose; B1 local-stack smoke test on the demo laptop (D5); P1b data-class gate; P6 eval harness | Collect gold documents; A6 gold set; A3 alt-text worker + B3 (D9) | B2 embedder + reranker bake-off on the salmon pilot; R10 rights filter for Europeana |
+| Oct 22-25 | P9 Ollama in compose (done); B1 local-stack smoke test on the demo laptop (D5, passed Oct 22); P1b data-class gate; P6 eval harness | Collect gold documents; A6 gold set; A3 alt-text worker + B3 (D9) | B2 embedder + reranker bake-off on the salmon pilot; R10 rights filter for Europeana |
 | Oct 26-Nov 1 | P2 tracing; P3 review queue; B5 judge calibration | A4 workers, A4b OMML->MathML, A5 rebuild + verify loop | R1/R2 OpenAlex + CORDIS loaders, R3 schema; R7 only if R0b is signed |
 | Nov 2-Lisbon | Demo laptop dry run (again), freeze | Demo script, sample pack, one-pager | Demo script (collections search + expert search), one-pager |
 
@@ -426,7 +426,7 @@ Each card is sized for one cloud session and one PR.
 | P6 | Eval harness: gold-set format, RAGAS + deterministic metrics, report | P0 | Next |
 | P7 | Embedder module with EmbeddingGemma 2 + text baseline + bake-off script (D7) | P0 | Built (#3); real bake-off B2 pending |
 | P8 | Licence guard: test that fails on any non-OSI licence in packages, images and model weights (two named exceptions) | P0 | Built (#9) |
-| P9 | Ollama in compose: an offline Ollama service from local weights (`MODELS_DIR/ollama`, read-only) on the internal network, a one-time `fetch-ollama` job, and `OLLAMA_HOST` / `CAMPUS_AI_MODEL_*` passed to `embed`, `api` and `smoke`. Also B1's smoke test (`scripts/smoke_test.py`) | P1 | Built (this PR); B1 run on the demo laptop pending |
+| P9 | Ollama in compose: an offline Ollama service from local weights (`MODELS_DIR/ollama`, read-only) on the internal network, a one-time `fetch-ollama` job, and `OLLAMA_HOST` (the service, or `OLLAMA_URL` from `.env`) / `CAMPUS_AI_MODEL_*` passed to `embed`, `api` and `smoke`. Also B1's smoke test (`scripts/smoke_test.py`) | P1 | Built; B1 passed on the demo laptop Oct 22 (9/9, `evals/smoke/`) |
 | A1 | Document parser (PDF/PPTX/DOCX -> common structure) on python-docx, python-pptx and pdfplumber (all MIT) | P0 | Built (#11; PyMuPDF version #4 superseded by D8) |
 | A1b | Bake-off B4: Docling + Granite-Docling vs the A1 parser on the gold documents; swap behind `parse(path)` only if it wins | A1, A6 | To do |
 | A2 | Deterministic audit + WCAG-mapped report (`audit.py`, `scripts/audit_document.py`); colour contrast waits on colour extraction | A1 | Built (#13) |

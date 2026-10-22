@@ -213,9 +213,10 @@ discover -s tests` for quick checks inside its cloud container. On Oct 22,
 - Answer: remove the early plan copy on `sfu-aria/student-assistant` branch
   `ccr-b486116f-phsbvu`?
 
-**Next cards** (section 5 of the plan): run the B1 smoke test on the demo
-laptop (`docker compose run --rm smoke`; P9 added Ollama to compose and the
-script); P1b data-class gate with P2 tracing; P6 eval harness; A6 gold set and
+**Next cards** (section 5 of the plan): B1 passed on the demo laptop on Oct 22
+(`docker compose run --rm smoke`, 9/9 with `gemma4:e2b`, report in
+`evals/smoke/`; the laptop's user environment exports `OLLAMA_HOST`, which is
+why compose reads `OLLAMA_URL` instead); P1b data-class gate with P2 tracing; P6 eval harness; A6 gold set and
 A3 alt-text worker with bake-off B3 (D9); B2 embedder + reranker bake-off on
 the salmon pilot; R10 rights filter. Then A4/A4b/A5, R1/R2/R3.
 
