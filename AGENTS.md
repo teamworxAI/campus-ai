@@ -29,6 +29,9 @@ development process and is outside the product.
 task cards and open decisions. Read it before starting a task card, and
 update it in the same PR when a decision changes.
 
+New to the project? Read `docs/handoff/oral_history.md` once first: the
+story so far, the user's standing orders, open items and known gotchas.
+
 ## Structure
 - `campus_ai/core/`: shared modules: `llm/` (LLM router), `embed/`
   (embedder), `graph/` (Neo4j store and hybrid retriever).

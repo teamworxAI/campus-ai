@@ -114,6 +114,17 @@ class LicenceGuardTests(unittest.TestCase):
         for task, model in config.DEFAULT_MODELS.items():
             self.assertIn(model, config.MODEL_LICENCES, task)
 
+    def test_every_allowed_model_is_in_the_plan_register(self):
+        """D10: the router's allow-list and the embedder's models must appear in the
+        master plan's model register, so the two can't drift apart."""
+        from campus_ai.core.llm import config
+
+        plan = (ROOT / "docs" / "plans" / "master_plan.md").read_text(encoding="utf-8")
+        register = plan[plan.index("### D10 model register"):plan.index("Week-1 bake-offs")]
+        missing = [m for m in [*config.MODEL_LICENCES, *MODELS] if f"`{m}`" not in register
+                   and m.split("/")[-1].lower() not in register.lower()]
+        self.assertEqual(missing, [], "add these models to the D10 register in docs/plans/master_plan.md")
+
 
 if __name__ == "__main__":
     unittest.main()

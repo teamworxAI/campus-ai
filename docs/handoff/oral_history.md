@@ -7,6 +7,10 @@ what is open. Read it once in full, then work from
 `docs/plans/master_plan.md` (source of truth for scope, decisions and task
 cards) and `AGENTS.md` (rules every session follows).
 
+Section 2b and the laptop, key-incident and build notes in sections 3-7 were
+added the same day by the build session (P7 through A2), which ran in the
+cloud and then on the user's Windows laptop.
+
 If anything here conflicts with `AGENTS.md`, the plan, or a newer message
 from the user, those win. Update this file when the story moves on.
 
@@ -77,11 +81,13 @@ API only global/us; Bedrock `ca-central-1` only Global/US profiles). Many
 figures came from search snippets because the cloud proxy blocked Hugging
 Face, arXiv and several vendor sites; the report flags them.
 
-**Oct 7-21: quiet, then the user's own sessions.** Check-ins found nothing for
-a day and were stopped. Meanwhile the user drove a stack of sessions that
-added P5 graph core (#5), R8 Europeana loader (#6), architecture/design/user/
-build guides (#7), R9 collections search API + web UI (#8), P8 licence guard
-(#9). On **Oct 21** the user set two **prime directives** (open source only;
+**Oct 7-21: quiet for the coordinator, busy for the build session.** Check-ins
+found nothing for a day and were stopped. Meanwhile the P7 session kept going
+with the user and became the main build session (its own account is in
+section 2b): it built P5 graph core (#5), R8 Europeana loader (#6), the
+architecture/design/user/build guides (#7), R9 collections search API + web
+UI (#8) and P8 licence guard (#9), first in the cloud and then on the user's
+Windows laptop, where the app now runs. On **Oct 21** the user set two **prime directives** (open source only;
 everything offline, no cloud model APIs) and acted on them: #10 made the
 router local-only on Ollama with a licence allow-list (Claude/Bedrock
 removed); #11 rebuilt A1 on pdfplumber because PyMuPDF is AGPL; #12 merged the
@@ -95,6 +101,101 @@ P1b, A1b, A3b, A4b, R10). #14 conflicted with #12/#13; resolved by keeping
 main's decisions and adding only new material. All of #1-#14 are merged.
 Data-agreement emails to RIO and BC ELN were drafted (appendix) for the user
 to send. Oct 22: docs refresh and this handoff.
+
+## 2b. The build session's account (Oct 7-22)
+
+Written by the session that built P7 through A2 (it began as the P7 cloud
+session, `session_011pDwrLJtoRT9pGzLDkr5wA`, and continued on the user's
+Windows laptop). It covers what the summary above can't: why things are the
+way they are.
+
+**P7 embedder: from "use Hugging Face" to "everything offline in Docker".**
+- The cloud proxy blocked Hugging Face, so the first PR was text-only and
+  flagged as unverified. Once the user allowed the domain, the model card
+  confirmed the API: prompts `SearchQuery`/`Document`, Matryoshka
+  768/512/256/128, media passed without prompts, never float16.
+- The user then set the first standing order: **everything in Docker,
+  portable, no host virtualenvs** (Oct 8). A host venv and model cache were
+  deleted.
+- A detour: the user asked for models "on metal" via vLLM/Ollama on their box.
+  The embedder was rewritten as an HTTP client, but vLLM 0.31.0 lacks
+  `EmbeddingGemma2Model` and Ollama on Windows lacks the needed multimodal
+  support, so the user reversed it ("if ollama is not supported keep the
+  docker images"). The embedder runs in the `embed` image from a read-only
+  `MODELS_DIR`; only `fetch-models` downloads.
+- The user's "DGX box" turned out to be a misunderstanding: that session ran
+  in an Anthropic cloud container, not on their hardware. Lesson: say plainly
+  where a session runs.
+
+**P5 graph core.** Neo4j Community on an `internal` Docker network shared
+with the model container (models can reach Neo4j, never the internet).
+- Every searchable node is `Entity` + its own label, a 128-d vector (indexed)
+  and a 768-d vector (rerank). Vector and fulltext rankings fuse by RRF k=60.
+- Two bugs found on real data, both fixed: French queries matched every
+  French document on "de"/"et" (fix: stop words in 7 languages, applied at
+  query time), and label filtering ran after the index's top 50, so
+  `--label Image` came back empty (fix: label stored as `kind`, filtered
+  inside the vector index; `ensure_schema` migrates old graphs).
+
+**R8 Europeana.** The user gave an API key in chat. Harvest query precision
+was measured by reading every title: plain `salmon` was about half noise
+(people named Salmon, salmon-coloured fashion, herbarium sheets named after
+botanist C.E. Salmon, specimen photos). The final query (species subjects +
+"salmon fishing" phrases in 7 languages, no specimens) gives 151 items, about
+95% on topic. Only CC0, PDM, CC BY, CC BY-SA kept; 400 px thumbnails.
+
+**The key incident (still open).** Europeana's `guid` URLs carry the API key
+in `utm_campaign`. The harvest file was committed by mistake on the P5 branch
+(that branch's `.gitignore` predated the rule) and pushed. The loader now
+strips URL parameters and the folder is untracked, but the commits remain:
+commit `88a56e9` is in `main`'s history via #12. The user chose not to
+rewrite history. **The key must be rotated** (see section 6).
+
+**R9 collections search.** FastAPI `api` service (model + Neo4j, internal
+network) behind nginx `web`, the only published port (`127.0.0.1:8080`).
+- Pictures and texts are ranked as separate lists: a text query always sits
+  closer to text than to images, so a merged list buried the pictures.
+- Image search always returns the nearest pictures, so an unrelated upload (a
+  Greek newspaper the user tried) got unrelated results with no warning.
+  Calibrated on 10 probes: unrelated images peak at cosine 0.68-0.72,
+  salmon/fishing images from outside the index 0.80-0.86, indexed images 1.00.
+  Thresholds: same picture >= 0.98, similar >= 0.76, else "no close match",
+  shown with the uploaded picture.
+- Resilience after the user asked for it: `restart: unless-stopped` and
+  health checks; nginx re-resolves `api` per request; each image built by one
+  service only. Tested: api recreated on a new IP, api crash (back in ~24 s),
+  Neo4j restart (search back in ~3 s).
+
+**Windows laptop deployment (Oct 20-21).** The user moved the work to their
+laptop (Windows 11, Docker Desktop, NVIDIA RTX 2050 4 GB, C: small, D: 545 GB
+free). Large files live on D: (`MODELS_DIR=D:/models`,
+`DATA_DIR=D:/campus-ai/data`); `C:\models` kept for other projects. Indexing
+the pilot: 17 min on 4 CPU cores in the cloud, **80 s on the RTX 2050**.
+Other projects run on this Docker (e.g. `sfu-site`): never restart Docker
+Desktop or prune globally without asking.
+
+**Prime directives (Oct 21).** Triggered when the session suggested a
+PyMuPDF commercial licence and Claude as the vision model. The user's answers
+to the follow-up questions: free GPU vendor runtimes allowed (CUDA is 16
+proprietary packages in the `embed` image); PyMuPDF replaced, not licensed;
+Apache-2.0 for the repo; Docker Desktop allowed on Windows dev workstations
+(first ruled out, then made an exception by the user). Ollama is the model
+server: **local on the laptop now, a dedicated inference box in the team
+environment later** (`OLLAMA_HOST`). Gemma 3 was dropped as a default (Gemma
+Terms of Use); Gemma 4 is Apache-2.0 per its Ollama registry licence layer.
+
+**The stacking mistake.** P5-R9 were opened as stacked PRs (each on the one
+below). The user merged each into its base branch, so the work stopped at
+`p8-licence-guard`, while #4 (PyMuPDF A1) and #2 (Bedrock router) went into
+`main`. #10 and #12 repaired it. Rule since then: PRs go against `main`; if
+one depends on an unmerged PR, open it as a draft against `main` and say so.
+
+**A1 and A2.** A1 rebuilt on pdfplumber (MIT): PDF order is now by position
+on the page, images are PNGs of their page area, lines join into paragraphs.
+A2: 15 rules over 7 WCAG 2.2 criteria, each naming its fixer; every report
+lists what the checks can't judge. A messy sample handout with 7 planted
+problems: all 7 found, no false positives. Neither has met real course
+documents yet.
 
 ## 3. Standing orders
 
@@ -118,11 +219,17 @@ These carry over to any session working for this user on campus-ai.
      product.
 3. **Keep it simple** (`AGENTS.md`): every change should make the codebase
    simpler; add complexity only when strictly necessary.
-4. **ArcaBC is off-limits** until BC ELN grants permission (card R0b): no
+4. **Everything in Docker, portable, rebuildable on another box** (Oct 8):
+   no host virtualenvs or host-installed models; add dependencies with `uv`
+   inside a container. On the user's laptop, big files go on D:.
+5. **Model servers:** Ollama for language and vision models (laptop now,
+   dedicated inference box in the team environment); the embedder runs in the
+   `embed` container because no server supports EmbeddingGemma 2's media.
+6. **ArcaBC is off-limits** until BC ELN grants permission (card R0b): no
    code or session fetches, scrapes or indexes arcabc.ca. REE data likewise
    waits for RIO (R0); use public OpenAlex/ORCID meanwhile.
-5. **No code from `sfu-aria/student-assistant`** in campus-ai (D1).
-6. **Cultural data**: honour every item's rights statement; Indigenous
+7. **No code from `sfu-aria/student-assistant`** in campus-ai (D1).
+8. **Cultural data**: honour every item's rights statement; Indigenous
    materials follow OCAP and community protocols; restricted items (class R)
    never reach a model.
 
@@ -174,8 +281,12 @@ reviews; it rarely writes product code itself.
   parallel researcher subagents writing notes, then one report writer. Notes
   and reports live outside the repo first; copy the final report into
   `docs/research/` and fix any references to other repos.
-- **GitHub** via the GitHub MCP tools (no `gh` CLI). The app cannot create
-  repositories; ask the user to create them.
+- **GitHub** via the GitHub MCP tools in cloud sessions (no `gh` CLI there).
+  On the user's Windows laptop the `gh` CLI is installed and authenticated.
+  The app cannot create repositories; ask the user to create them.
+- **Sessions on the user's laptop** (Windows 11, PowerShell, Docker Desktop):
+  see the laptop gotchas in section 7. Docker there is shared with other
+  projects.
 
 ## 5. Where things are
 
@@ -194,6 +305,16 @@ reviews; it rarely writes product code itself.
 | Docker | `Dockerfile`, `compose.yaml` (`test`, `embed`, `fetch-models`, Neo4j, API, web), `compose.gpu.yaml`, `.claude/compose.cloud.yaml` |
 | Cloud session hook | `.claude/hooks/session-start.sh` (starts Docker, builds `test`) |
 
+**The running app on the user's laptop** (`C:\Repos\campus-ai`): Neo4j,
+`api` and `web` with `restart: unless-stopped`, collections search on
+http://localhost:8080 over the 151-item salmon pilot (376 nodes). `.env`
+there sets `MODELS_DIR=D:/models`, `DATA_DIR=D:/campus-ai/data`,
+`COMPOSE_FILE=compose.yaml;compose.gpu.yaml` (GPU for `embed` and `api`) and
+`EUROPEANA_API_KEY` (the leaked one, until rotated). Docker Desktop's disk
+image is still on C:; the user can move it (Settings > Resources > Advanced)
+when it suits them, since that restarts Docker and their other projects.
+Bring the app back with `docker compose up -d web`.
+
 Tests: `docker compose run --rm test` (the rule is Docker only, no host
 virtualenvs). The coordinator has also used `uv run python -m unittest
 discover -s tests` for quick checks inside its cloud container. On Oct 22,
@@ -203,6 +324,17 @@ discover -s tests` for quick checks inside its cloud container. On Oct 22,
 ## 6. Open items and next steps
 
 **Waiting on people**
+- **Rotate the Europeana API key** (urgent): it is in `main`'s history in
+  harvest URLs (section 2b). Put the new key only in `.env`.
+- Delete stale branches once the user agrees: `p5-graph-core`,
+  `r8-europeana`, `docs-architecture`, `r9-collections-search`,
+  `p8-licence-guard`, `a1-document-parser`, `a1-document-parser-open`,
+  `p1-local-only`, `integrate-stack`, `a2-audit` (all merged).
+- OK to `ollama pull gemma4:e4b` (about 5.5 GB) on the laptop for A3 testing?
+  The 12B model mostly runs on CPU there (4 GB GPU); it belongs on the
+  inference box.
+- A few real, non-sensitive course documents to run the A2 audit on (A6 gold
+  set later).
 - Send the RIO (REE) and BC ELN (ArcaBC) emails (drafts in the appendix; the
   BC ELN address still needs finding). Until answered, R0, R1's REE part, R7
   stay blocked.
@@ -234,6 +366,31 @@ the salmon pilot; R10 rights filter. Then A4/A4b/A5, R1/R2/R3.
   repo except the early plan copy above.
 - The user often reviews and merges in bursts and drives their own sessions;
   expect `main` to move under you. Fetch before every change.
+- Don't stack PRs: the user merges each PR into its base branch, so stacked
+  work never reaches `main` (section 2b). Target `main`; mark dependent PRs as
+  drafts.
+- Two compose services building the same image tag in parallel corrupts it
+  ("failed to extract layer"). Each image now has one builder (`test`,
+  `embed`); keep it that way.
+- The `embed` image is about 10 GB (CUDA PyTorch). In the cloud container the
+  disk filled three times; clear old images and build cache before rebuilding.
+- `git add -A` once committed a harvest folder with an API key. Stage named
+  paths and check that nothing under `data/` is staged.
+- Measure retrieval quality by reading the results, not by the recall number
+  alone: the salmon recall looked fine while half the items were off topic.
+
+**On the user's Windows laptop**
+- PowerShell runs in Constrained Language Mode: .NET method calls such as
+  `.Substring()`, `.Contains()` on objects, and `[regex]::...` fail with
+  "Method invocation is supported only on core types". Use operators
+  (`-replace`, `-match`), cmdlets, or run Python in a container.
+- Files are checked out with CRLF line endings: string replacements that
+  assume `\n` silently miss. Use the Edit tool or `\r?\n` patterns, and check
+  the result.
+- PowerShell treats `;` as a command separator, so
+  `echo COMPOSE_FILE=a;b >> .env` writes nothing useful; quote it.
+- Docker Desktop runs other projects' containers (`sfu-site`): never prune all
+  images or volumes, restart Docker, or reuse their ports without asking.
 
 ---
 

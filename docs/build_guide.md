@@ -238,8 +238,8 @@ docker compose run --rm embed python scripts/graph_search.py search "a fish on a
 ```
 
 On 4 CPU cores without a GPU, indexing the default harvest (151 items, 94
-images, 376 nodes) took 17 minutes; 300 items with 295 images took 45. A GPU
-is much faster. Results list
+images, 376 nodes) took 17 minutes; 300 items with 295 images took 45. On an
+NVIDIA RTX 2050 laptop GPU (4 GB) the default harvest took 80 seconds. Results list
 items and images with their linked collection, institution and creator.
 
 Then start the web app and open http://localhost:8080:

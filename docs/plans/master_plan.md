@@ -116,7 +116,8 @@ Licences marked (verify) come from secondary sources.
 | Vision, alt text | `gemma4:12b` or `qwen3-vl:8b` | Apache-2.0 | Ollama | D9, B3 decides |
 | Classification, routing | `gemma4:e4b` | Apache-2.0 | Ollama | Default set |
 | Judge (evals, verify loop) | A different model family from the generator (e.g. `qwen3:8b` if Gemma generates) | Apache-2.0 | Ollama | B5 calibrates |
-| Embeddings | EmbeddingGemma 2 (contingency Qwen3-Embedding-4B; never EmbeddingGemma v1, Gemma Terms of Use) | Apache-2.0 | `embed` service | D7, B2 decides |
+| Embeddings | EmbeddingGemma 2, `google/embeddinggemma-2` (contingency Qwen3-Embedding-4B; never EmbeddingGemma v1, Gemma Terms of Use); text baseline `intfloat/multilingual-e5-small` | Apache-2.0; e5 MIT | `embed` service | D7, B2 decides |
+| Alternatives in the router's allow-list (for bake-offs) | `gemma4:e2b`, `qwen3:4b`, `qwen3-vl:4b`, `granite3.3:8b`, `mistral-small3.2:24b`, `olmo2:7b` | Apache-2.0 (each model's Ollama registry licence layer, checked Oct 21) | Ollama | Allowed, not default |
 | Reranker | Qwen3-Reranker-4B | Apache-2.0 (verify) | `embed` service | B2 |
 | Document parsing | Current A1 parser; candidate Docling + Granite-Docling-258M, hard pages to PaddleOCR-VL | MIT / Apache-2.0 (verify) | Docker service | B4 |
 | Speech to text | Granite Speech 4.1 2B | Apache-2.0 (verify) | Docker service | Stretch, B6 |
