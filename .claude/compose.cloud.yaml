@@ -23,6 +23,15 @@ services:
     volumes:
       - /root/.ccr/ca-bundle.crt:/ca.crt:ro
 
+  fetch-ollama:
+    network_mode: host
+    environment:
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-}
+      SSL_CERT_FILE: /ca.crt
+    volumes:
+      - /root/.ccr/ca-bundle.crt:/ca.crt:ro
+
   fetch-europeana:
     network_mode: host
     environment:

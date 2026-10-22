@@ -14,8 +14,9 @@ flowchart TD
     M --> V[7. Verify offline embedding]
     V --> H[8. Harvest Europeana<br/>needs internet + key]
     H --> I[9. Index + search<br/>offline]
-    I --> G{NVIDIA GPU?}
-    G -->|yes| GP[10. Enable GPU overlay]
+    I --> S[10. Smoke test B1<br/>offline]
+    S --> G{NVIDIA GPU?}
+    G -->|yes| GP[11. Enable GPU overlay]
     G -->|no| D[Done]
     GP --> D
 ```
@@ -25,7 +26,7 @@ flowchart TD
 | | Minimum | Recommended |
 |---|---|---|
 | OS | Linux x86-64, macOS (Apple silicon or Intel), Windows 10/11 with WSL 2 | Ubuntu 24.04 or newer |
-| CPU / RAM | 4 cores / 12 GB free for Docker (embedding peaks near 8 GB) | 8+ cores / 16 GB+ |
+| CPU / RAM | 4 cores / 12 GB free for Docker (embedding peaks near 8 GB) | 8+ cores / 16 GB+; the router's language models need more, which the B1 smoke test measures |
 | Free disk | 25 GB | 40 GB |
 | GPU | none | NVIDIA with bfloat16 support (Ampere or newer) |
 | Network | Internet for steps 2, 4, 6 and 8 only | — |
@@ -79,7 +80,7 @@ containers, so models run on the CPU.
 (`wsl --install`), then Docker Desktop with the WSL 2 backend, and Git for
 Windows. In Settings > Resources, allow 12+ GB memory. Run the commands in
 this guide from PowerShell in the repo folder. Docker Desktop passes an NVIDIA
-GPU through WSL 2 (step 10). This is how the project is mostly developed.
+GPU through WSL 2 (step 11). This is how the project is mostly developed.
 
 **Windows without Docker Desktop** (servers, or if you prefer it): run the
 open-source Docker Engine inside WSL 2:
@@ -135,7 +136,8 @@ Edit `.env`:
 | `DATA_DIR`, `NEO4J_DATA` | optional | Put harvests and the graph on another drive; see below |
 | `NEO4J_PASSWORD` | optional | Set it **before** Neo4j first starts; empty means `campus-ai-local`. Neo4j has no published ports |
 | `EUROPEANA_API_KEY` | step 8 | Free from https://pro.europeana.eu/page/get-api |
-| `COMPOSE_FILE` | step 10 | GPU overlay; leave commented on machines without NVIDIA |
+| `COMPOSE_FILE` | step 11 | GPU overlay; leave commented on machines without NVIDIA |
+| `OLLAMA_URL`, `CAMPUS_AI_MODEL_*` | optional | Leave empty to use the `ollama` service and the router's default models; see `.env.example`. A shell `OLLAMA_HOST` (native Ollama installs export one) is ignored |
 
 `.env` is gitignored. Never commit it.
 
@@ -146,7 +148,7 @@ Everything big can live off the system drive:
 | What | Size | Where it goes |
 |---|---|---|
 | Docker images, build cache, the Neo4j volume | ~12 GB and growing | Docker Desktop: Settings > Resources > Advanced > **Disk image location**, e.g. `D:\Docker`. Docker Engine on Linux: `data-root` in `/etc/docker/daemon.json`. Engine in WSL: move the whole WSL distro to D: with `wsl --export` / `wsl --import`, or `wsl --manage <distro> --move D:\WSL` on current WSL. Do this first: it moves all three at once and keeps Neo4j at full speed |
-| Model weights | ~2 GB | `MODELS_DIR=D:/models` |
+| Model weights | ~2 GB embedders, plus several GB per Ollama model | `MODELS_DIR=D:/models` |
 | Harvested collections and thumbnails | grows per collection | `DATA_DIR=D:/campus-ai/data` |
 | Neo4j data, if you want it outside Docker | grows with the index | `NEO4J_DATA=D:/campus-ai/neo4j` (optional; a folder on a Windows drive is slower than the volume) |
 
@@ -179,7 +181,7 @@ pattern in `.claude/compose.cloud.yaml`: a `secrets: ca: file:
 docker compose run --rm test
 ```
 
-Expect `Ran 82 tests` and `OK (skipped=4)`. The four skipped tests need
+Expect `Ran 115 tests` and `OK (skipped=4)`. The four skipped tests need
 PyAV (embed image) or Neo4j, and run in step 7.
 
 ## 6. Fetch model weights (one time)
@@ -192,9 +194,22 @@ This downloads EmbeddingGemma 2 and the e5-small baseline (about 2 GB) into
 `MODELS_DIR`, using the layout `<org>/<model>`. It is the only step that
 downloads models.
 
-**Air-gapped machine.** Run this step on a connected machine, then copy the
+Then fetch the language and vision models that the LLM router uses, served by
+the `ollama` service:
+
+```bash
+docker compose run --rm fetch-ollama
+```
+
+This pulls the router's default models (`DEFAULT_MODELS` in
+`campus_ai/core/llm/config.py`; several GB) into `MODELS_DIR/ollama`. To fetch
+other models, name them, e.g. `docker compose run --rm fetch-ollama qwen3-vl:8b`;
+each must be in `MODEL_LICENCES`. The `ollama` service then reads that folder
+read-only from the internal network, so it can't download anything itself.
+
+**Air-gapped machine.** Run both steps on a connected machine, then copy the
 `MODELS_DIR` folder over (USB, `rsync`, `scp`). Keep the same layout:
-`google/embeddinggemma-2/`, `intfloat/multilingual-e5-small/`.
+`google/embeddinggemma-2/`, `intfloat/multilingual-e5-small/`, `ollama/`.
 
 ## 7. Verify offline embedding and the graph
 
@@ -248,7 +263,30 @@ Then start the web app and open http://localhost:8080:
 docker compose up -d web
 ```
 
-## 10. Optional: NVIDIA GPU
+## 10. Local-stack smoke test (B1)
+
+Run this on every machine that will demo or host the stack (bake-off B1, the
+demo laptop first). It needs steps 6 and 9 done.
+
+```bash
+docker compose up -d web ollama
+docker compose run --rm smoke --label demo-laptop
+```
+
+From inside the internal `graph` network it checks that Neo4j, `api`, `web`
+and Ollama answer, that the network has no route to the internet, that
+Ollama has the router's models, and that the LLM router answers a short
+prompt for each task (reasoning, vision, classification). It prints a table
+and writes it to `evals/smoke/<date>-<label>.md`, with the time each check
+took and how much of each loaded model sits in GPU memory. It exits non-zero
+if any check fails.
+
+The first router call per model includes loading it, so it is the slowest;
+repeat the run for warm timings. Commit the report: it is B1's evidence and
+the input for sizing hardware. On Linux the report is owned by root; `sudo
+chown` it if needed.
+
+## 11. Optional: NVIDIA GPU
 
 The GPU is optional: everything works on the CPU. Using an NVIDIA GPU needs
 NVIDIA's driver and CUDA runtime libraries, which are free but proprietary.
@@ -263,6 +301,8 @@ runtimes). The NVIDIA Container Toolkit itself is Apache-2.0.
 3. In `.env`, set `COMPOSE_FILE=compose.yaml;compose.gpu.yaml` with Docker
    Desktop on Windows, or `compose.yaml:compose.gpu.yaml` on Linux and WSL.
 4. Run `docker compose run --rm embed`. Models now run in bfloat16 on the GPU.
+   Ollama uses the GPU too; the smoke test (step 10) shows how much of each
+   model is in GPU memory.
 
 macOS has no GPU passthrough to Docker, so models run on the CPU there.
 
@@ -270,12 +310,13 @@ macOS has no GPU passthrough to Docker, so models run on the CPU there.
 
 - [ ] `docker compose version` prints v2+
 - [ ] `docker compose run --rm test` → `OK (skipped=4)`
-- [ ] `MODELS_DIR` contains `google/embeddinggemma-2` and `intfloat/multilingual-e5-small`
+- [ ] `MODELS_DIR` contains `google/embeddinggemma-2`, `intfloat/multilingual-e5-small` and `ollama/`
 - [ ] `docker compose run --rm embed python -m unittest discover -s tests` → `OK`
 - [ ] Sample eval → `recall@10 all=1.000`
 - [ ] `data/europeana/<name>/items.jsonl` exists after a harvest
 - [ ] `search` returns Items and Images with linked evidence
 - [ ] http://localhost:8080 shows pictures for "salmon fishing on rivers"
+- [ ] `docker compose run --rm smoke` → all checks pass; report in `evals/smoke/`
 - [ ] `git status` shows no `.env`, `models/` or `data/europeana/` files
 
 ## Updating and cleaning up

@@ -39,8 +39,10 @@ and web UI (R9), all for the Research Assistant. Course Access Agent: the
 document parser (A1) and the WCAG audit and report (A2) are built; fixing workers,
 rebuild and review are next (see [architecture](docs/architecture.md#11-course-access-agent)).
 Also built: LLM router over local open-weight models on Ollama (P1), the
-data-class gate and tracing (P1b, P2) and the licence guard (P8). Next: the
-model bake-offs (B1-B5), eval harness (P6) and alt-text worker (A3); OCR for scanned PDFs (A7) is next phase.
+data-class gate and tracing (P1b, P2), Ollama as an offline compose service
+(P9), the local-stack smoke test (B1, passed on the demo laptop) and the
+licence guard (P8). Next: the other model bake-offs (B2-B5), eval harness (P6)
+and alt-text worker (A3); OCR for scanned PDFs (A7) is next phase.
 
 ## Quick start
 
@@ -52,4 +54,7 @@ docker compose run --rm fetch-models     # one time, needs internet
 docker compose run --rm embed python scripts/graph_search.py index evals/embed/sample_bakeoff.jsonl
 docker compose run --rm embed python scripts/graph_search.py search "ocean warming"
 docker compose up -d web                 # collections search UI on http://localhost:8080
+docker compose run --rm fetch-ollama     # one time, needs internet: local LLMs for the router
+docker compose up -d ollama
+docker compose run --rm smoke            # local-stack smoke test, report in evals/smoke/
 ```

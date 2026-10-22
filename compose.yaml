@@ -1,9 +1,12 @@
 # docker compose build                    build the images (always first)
 # docker compose run --rm test            unit tests (no models, no database)
 # docker compose run --rm fetch-models    one-time download into MODELS_DIR (needs network)
+# docker compose run --rm fetch-ollama    one-time LLM download into MODELS_DIR/ollama (needs network)
 # docker compose run --rm fetch-europeana  Europeana items into DATA_DIR (needs network)
 # docker compose run --rm embed ...       local models + Neo4j, no internet access
 # docker compose up -d web                collections search UI on http://localhost:8080
+# docker compose up -d ollama             local LLMs for the router (after fetch-ollama)
+# docker compose run --rm smoke           local-stack smoke test (B1), report in evals/smoke/
 #
 # MODELS_DIR is a host directory that several projects can share. MODELS_DIR, DATA_DIR
 # and NEO4J_DATA can point at another drive (e.g. D:) to keep large files off C:.
@@ -19,6 +22,15 @@ x-neo4j-env: &neo4j-env
   NEO4J_URI: bolt://neo4j:7687
   NEO4J_USER: neo4j
   NEO4J_PASSWORD: ${NEO4J_PASSWORD:-campus-ai-local}
+
+# For services that call the LLM router: Ollama in compose unless OLLAMA_URL is set
+# (the team's inference box). The .env key is not OLLAMA_HOST because a native Ollama
+# install exports that in the shell, and compose would pass the shell's value on.
+x-llm-env: &llm-env
+  OLLAMA_HOST: ${OLLAMA_URL:-http://ollama:11434}
+  CAMPUS_AI_MODEL_REASONING: ${CAMPUS_AI_MODEL_REASONING:-}
+  CAMPUS_AI_MODEL_VISION: ${CAMPUS_AI_MODEL_VISION:-}
+  CAMPUS_AI_MODEL_CLASSIFICATION: ${CAMPUS_AI_MODEL_CLASSIFICATION:-}
 
 services:
   test:
@@ -36,7 +48,8 @@ services:
     depends_on:
       neo4j:
         condition: service_healthy
-    environment: *neo4j-env
+    environment:
+      <<: [*neo4j-env, *llm-env]
     volumes:
       - ${MODELS_DIR:-./models}:/models:ro
       - ${DATA_DIR:-./data}:/app/data:ro
@@ -51,7 +64,8 @@ services:
       neo4j:
         condition: service_healthy
         restart: true
-    environment: *neo4j-env
+    environment:
+      <<: [*neo4j-env, *llm-env]
     volumes:
       - ${MODELS_DIR:-./models}:/models:ro
       - ${DATA_DIR:-./data}:/app/data:ro
@@ -97,6 +111,24 @@ services:
       interval: 5s
       retries: 30
 
+  # Local LLMs for the router (P9). Serves weights fetched by fetch-ollama, read-only,
+  # on the internal network: no internet, so it cannot pull a model at runtime.
+  ollama:
+    image: ollama/ollama:0.40.8
+    restart: unless-stopped
+    networks: [graph]
+    environment:
+      OLLAMA_MODELS: /models/ollama
+      OLLAMA_NOPRUNE: "1"  # never delete from the read-only weights
+      OLLAMA_NO_CLOUD: "1"  # no Ollama cloud models (prime directive 2)
+    volumes:
+      - ${MODELS_DIR:-./models}:/models:ro
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 10s
+      retries: 6
+
   fetch-models:
     <<: *model-image
     profiles: [fetch]
@@ -107,6 +139,26 @@ services:
       - ${MODELS_DIR:-./models}:/models
     command: ["python", "scripts/fetch_models.py"]
 
+  # One-time pull of the router's default models (DEFAULT_MODELS in
+  # campus_ai/core/llm/config.py) into MODELS_DIR/ollama. Pass other models as
+  # arguments; each must be in MODEL_LICENCES.
+  fetch-ollama:
+    image: ollama/ollama:0.40.8
+    profiles: [fetch]
+    environment:
+      OLLAMA_MODELS: /models/ollama
+    volumes:
+      - ${MODELS_DIR:-./models}:/models
+    entrypoint:
+      - sh
+      - -c
+      - |
+        ollama serve >/dev/null 2>&1 &
+        until ollama list >/dev/null 2>&1; do sleep 1; done
+        for m in "$$@"; do ollama pull "$$m" || exit 1; done
+      - fetch-ollama
+    command: ["gemma4:12b", "gemma4:e4b"]
+
   fetch-europeana:
     image: campus-ai:test
     pull_policy: never
@@ -116,6 +168,19 @@ services:
     volumes:
       - ${DATA_DIR:-./data}:/app/data
     entrypoint: ["python", "scripts/fetch_europeana.py"]
+    command: []
+
+  # Local-stack smoke test (B1): every service up, no internet, router answers.
+  # Start the stack first (docker compose up -d web ollama); writes evals/smoke/.
+  smoke:
+    image: campus-ai:test
+    pull_policy: never
+    profiles: [smoke]
+    networks: [graph]
+    environment: *llm-env
+    volumes:
+      - ./evals/smoke:/app/evals/smoke
+    entrypoint: ["python", "scripts/smoke_test.py"]
     command: []
 
 networks:

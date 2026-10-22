@@ -59,6 +59,9 @@ also copy weights in from another machine.
 docker compose build                       # test image + embed image
 docker compose run --rm test               # unit tests
 docker compose run --rm fetch-models       # one-time: weights into MODELS_DIR
+docker compose run --rm fetch-ollama       # one-time: router LLMs into MODELS_DIR/ollama
+docker compose up -d web ollama            # UI, API, Neo4j, local LLMs (offline)
+docker compose run --rm smoke              # local-stack smoke test (B1), report in evals/smoke/
 docker compose run --rm embed              # bake-off on local models, offline
 docker compose run --rm embed python scripts/graph_search.py index evals/embed/sample_bakeoff.jsonl
 docker compose run --rm embed python scripts/graph_search.py search "ocean warming"
