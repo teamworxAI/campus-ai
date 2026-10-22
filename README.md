@@ -29,6 +29,7 @@ Details and scope: [AGENTS.md](AGENTS.md#prime-directives-standing-orders-they-o
 | [Design](docs/design.md) | Module internals, file formats, testing, limitations, extending |
 | [Master plan](docs/plans/master_plan.md) | Scope, roadmap, task cards and open decisions (source of truth) |
 | [AGENTS.md](AGENTS.md) | Contributor and coding-agent rules |
+| [Handoff history](docs/handoff/oral_history.md) | The story so far, standing orders, open items, gotchas (read once when joining) |
 
 ## Status
 

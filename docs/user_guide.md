@@ -191,7 +191,7 @@ Add query lines to a JSONL file listing the ids that should be found:
 
 ```bash
 docker compose run --rm embed python scripts/graph_search.py eval my_queries.jsonl -k 10
-# embeddinggemma-2 hybrid: recall@10 all=0.900, en=0.950, fr=0.850 (40 queries)
+# output shape (numbers depend on your queries):
 ```
 
 To compare embedders before indexing (decision D7):
