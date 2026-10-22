@@ -20,10 +20,11 @@ Status (Oct 22, 2026): build in progress. Shared platform (P0, P1, P5, P7,
 P8, P9), the Course Access parser and audit (A1, A2) and the Europeana
 collections search (R8, R9 first cut) and its rights filter (R10) are
 merged in `main`; the data-class gate and tracing (P1b, P2) are built;
-115 unit tests pass. The B1 smoke test passed on the demo laptop (Oct 22,
-RTX 2050, 9/9 checks, report in `evals/smoke/`). Next: the week-1 bake-offs
-that were deferred (B2-B5), the eval harness (P6) and the alt-text worker
-(A3). Open
+the alt-text worker (A3) is built; 128 unit tests pass. The B1 smoke test
+passed on the demo laptop (Oct 22, RTX 2050, 9/9 checks, report in
+`evals/smoke/`). Next: the week-1 bake-offs
+that were deferred (B2-B5), the eval harness (P6) and the structure, table
+and text workers (A4). Open
 decisions are in section 8; section 5 has the remaining schedule.
 
 > ## Prime directives (standing orders; they override everything else)
@@ -433,7 +434,7 @@ Each card is sized for one cloud session and one PR.
 | A1 | Document parser (PDF/PPTX/DOCX -> common structure) on python-docx, python-pptx and pdfplumber (all MIT) | P0 | Built (#11; PyMuPDF version #4 superseded by D8) |
 | A1b | Bake-off B4: Docling + Granite-Docling vs the A1 parser on the gold documents; swap behind `parse(path)` only if it wins | A1, A6 | To do |
 | A2 | Deterministic audit + WCAG-mapped report (`audit.py`, `scripts/audit_document.py`); colour contrast waits on colour extraction | A1 | Built (#13) |
-| A3 | Alt-text worker with a local open-weight vision model (D9) and confidence score | A1, P1 | Next |
+| A3 | Alt-text worker with a local open-weight vision model (D9) and confidence score: proposals for the images the audit flags, through the router's `vision` task; charts, diagrams, equations, images of text, decorative calls and low confidence always go to review; `scripts/alt_text.py` | A1, P1 | Built; probe run with `gemma4:e2b` 6/6 kinds (`evals/course_access/`); B3 on the gold set decides D9 |
 | A3b | Chart rule for A3: extract the chart's data as a table, write the description from it, flag any claim the table does not support | A3 | To do |
 | A4 | Structure, table and text workers | A1 | To do |
 | A4b | OMML -> MathML conversion for DOCX/PPTX equations (deterministic) | A1 | To do |

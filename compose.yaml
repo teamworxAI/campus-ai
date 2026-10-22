@@ -33,9 +33,13 @@ x-llm-env: &llm-env
   CAMPUS_AI_MODEL_CLASSIFICATION: ${CAMPUS_AI_MODEL_CLASSIFICATION:-}
 
 services:
+  # Unit tests, and the CPU-only image for the Course Access scripts (audit,
+  # alt text). On the internal network so they reach Ollama and nothing outside.
   test:
     build: .
     image: campus-ai:test
+    networks: [graph]
+    environment: *llm-env
 
   embed:
     build:
