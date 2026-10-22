@@ -18,8 +18,8 @@ copied from it.
 
 Status (Oct 22, 2026): build in progress. Shared platform (P0, P1, P5, P7,
 P8), the Course Access parser and audit (A1, A2) and the Europeana
-collections search (R8, R9 first cut) are merged in `main`; 82 unit tests
-pass. Next: the week-1 bake-offs that were deferred (B1-B5), the data-class
+collections search (R8, R9 first cut) and its rights filter (R10) are
+merged in `main`; 92 unit tests pass. Next: the week-1 bake-offs that were deferred (B1-B5), the data-class
 gate (P1b), the eval harness (P6) and the alt-text worker (A3). Open
 decisions are in section 8; section 5 has the remaining schedule.
 
@@ -445,7 +445,7 @@ Each card is sized for one cloud session and one PR.
 | R7 | ArcaBC loader, the BC counterpart of R8, writing the same JSONL records | P5, P7, R0b | Blocked on R0b |
 | R8 | Europeana loader. Pilot theme: salmon (*Salmo*, *Oncorhynchus*, salmonids; salmon fishing in titles in 7 languages), about 150 items, open licences only (CC0, PDM, CC BY, CC BY-SA); 400 px thumbnails; full media, audio and video later | P5, P7 | Built (#6) |
 | R9 | Collections search: API (`research_assistant/api.py`) and web UI (`web/`) over Europeana; pictures and texts ranked separately; APA/Chicago/BibTeX citations. Timestamps and image regions wait on audio/video and region detection | R7, R8 | First cut built (#8) |
-| R10 | Rights and governance filter ahead of any collections indexing: Europeana `edm:rights` per item, ArcaBC access flags and TK Labels; restricted items get data class R | R8 | Next |
+| R10 | Rights and governance filter ahead of any collections indexing: Europeana `edm:rights` per item, ArcaBC access flags and TK Labels; restricted items get data class R | R8 | Built: `research_assistant/rights.py` in `graph_search.py index`; R7 must write `source`, `rights`, `access`, `tk_labels` |
 
 Kickoff prompt template for a card:
 

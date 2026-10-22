@@ -106,8 +106,25 @@ Re-running reuses thumbnails already downloaded.
 docker compose run --rm embed python scripts/graph_search.py index data/europeana/salmon/items.jsonl
 ```
 
-This starts Neo4j if needed, embeds every node with EmbeddingGemma 2 and
-writes nodes and links. Indexing the same file again updates it in place.
+This first runs the rights filter (R10): items that are not CC0, Public
+Domain Mark, CC BY or CC BY-SA, have unknown rights, an access limit or a TK
+Label (or other community-protocol marker) are class R and are never
+embedded. Their images, and collections or creators linked only to them, go
+with them. Each excluded record is listed with its source URL, then a line
+such as:
+
+```
+rights filter: kept 5 items (8 nodes), excluded 5 items (7 nodes) as class R; 1 TK Label or community protocol; ...
+```
+
+To see that report without embedding anything (no Neo4j needed):
+
+```bash
+docker compose run --rm embed python scripts/graph_search.py rights data/europeana/salmon/items.jsonl
+```
+
+Indexing then starts Neo4j if needed, embeds every kept node with
+EmbeddingGemma 2 and writes nodes and links. Indexing the same file again updates it in place.
 On CPU, expect about 45 minutes for 300 items with images on 4 cores; a GPU
 (see the build guide) is much faster.
 
@@ -121,6 +138,10 @@ put it, with its media, under `data/`:
 {"id": "thesis:42#fig1", "label": "Image", "modality": "image", "content": "media/fig1.png"}
 {"src": "thesis:42#fig1", "type": "PART_OF", "dst": "thesis:42"}
 ```
+
+Records without a `source` prop count as your own data and need no rights
+statement. Once a record names a `source` (a harvested collection), its
+Items and Images need an open `rights` URI, or the filter excludes them.
 
 ## 3. Search
 
