@@ -416,8 +416,8 @@ Each card is sized for one cloud session and one PR.
 |---|---|---|---|
 | P0 | Project skeleton: `pyproject.toml` (uv), `campus_ai/` package, unittest setup, SessionStart hook | - | Built (#1) |
 | P1 | LLM router over local open-weight models only, on Ollama (local, or the team's inference box). Defaults Gemma 4 (Apache-2.0); refuses models not in its open-licence allow-list | P0 | Built (#2, local-only in #10) |
-| P1b | Data-class gate in the router (P/I/S/R; R never reaches a model) and per-call trace of model, host and class | P1, P2 | Built (this PR); embedder refuses R too |
-| P2 | Tracing module: per-run JSONL log of tool calls, model, host, data class, tokens, latency | P0 | Built (this PR) |
+| P1b | Data-class gate in the router (P/I/S/R; R never reaches a model) and per-call trace of model, host and class | P1, P2 | Built (#18); embedder refuses R too |
+| P2 | Tracing module: per-run JSONL log of tool calls, model, host, data class, tokens, latency | P0 | Built (#18) |
 | P3 | Review queue Streamlit component (approve/edit/reject) | P0 | To do |
 | P4 | MCP server template wrapping a product's public functions | P1 | To do |
 | P5 | Graph core: Neo4j writer, vector + fulltext indexes, hybrid retriever (RRF) | P0, P7 | Built (#5) |
