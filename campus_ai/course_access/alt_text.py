@@ -28,11 +28,11 @@ from dataclasses import asdict, dataclass
 
 from campus_ai.core.llm import generate
 from campus_ai.course_access.audit import ALT_TEXT, audit
+from campus_ai.course_access.model_answers import CONFIDENCE_THRESHOLD, confidence as _confidence, parse_json as _parse
 from campus_ai.course_access.parser import Document, Image
 
 KINDS = ("photo", "illustration", "chart", "diagram", "equation", "text", "decorative", "other")
 ALWAYS_REVIEW = {"chart", "diagram", "equation", "text"}
-CONFIDENCE_THRESHOLD = 0.7
 MAX_ALT_CHARS = 200
 
 SYSTEM = f"""You write alt text for images in university course materials, for students who use a screen reader.
@@ -45,7 +45,6 @@ Rules:
 - confidence: how sure you are that alt and long_description are accurate and complete."""
 
 LEADING_PHRASE = re.compile(r"^(an?\s+)?(image|picture|photo|photograph|graphic|illustration|screenshot)\s+(of|showing)\s+", re.IGNORECASE)
-JSON_OBJECT = re.compile(r"\{.*\}", re.DOTALL)
 MEDIA_TYPES = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "gif": "image/gif", "webp": "image/webp"}
 
 
@@ -99,18 +98,6 @@ def _message(document: Document, image: Image) -> dict:
     ]}
 
 
-def _parse(text: str) -> dict | None:
-    """The JSON object in the model's answer (it may sit in a code fence or after prose), or None."""
-    match = JSON_OBJECT.search(text)
-    if not match:
-        return None
-    try:
-        answer = json.loads(match.group())
-    except json.JSONDecodeError:
-        return None
-    return answer if isinstance(answer, dict) else None
-
-
 def _check(answer: dict | None, index: int, page: int | None, model: str) -> AltText:
     if answer is None:
         return AltText(index, page, "other", False, "", "", 0.0, True, "the model's answer was not JSON", model)
@@ -143,13 +130,6 @@ def _clean(text) -> str:
     text = " ".join(text.split())
     text = LEADING_PHRASE.sub("", text)
     return text[:1].upper() + text[1:]
-
-
-def _confidence(value) -> float:
-    try:
-        return min(1.0, max(0.0, float(value)))
-    except (TypeError, ValueError):
-        return 0.0
 
 
 def report_json(proposals: list[AltText]) -> str:

@@ -466,7 +466,7 @@ indexed into the shared graph.
 | A1 | Document parser: PDF/PPTX/DOCX into one structure | Built on open-source, permissively licensed libraries (python-docx, python-pptx, pdfplumber); 7 tests. Supersedes PR #4, which used PyMuPDF |
 | A2 | Deterministic audit + WCAG-mapped report | Built: 15 rules over 7 WCAG 2.2 criteria, Markdown and JSON reports, and a "not checked" list; no model involved |
 | A3 | Alt-text worker (local vision model, confidence score) | Built: proposals for the images the audit flags, through the LLM router (task `vision`); charts, diagrams, equations, images of text, decorative calls and low-confidence answers always go to review; `scripts/alt_text.py` prints the review sheet. Probe run with `gemma4:e2b`: 6/6 kinds right (`evals/course_access/`). B3 on the gold set pending |
-| A4 | Structure, table and text workers | Planned |
+| A4 | Structure, table and text workers | Built: rules in code for lists, heading levels, slide titles, header rows, layout tables, titles and link text from context; the model only for the document language and for link text the context does not give; every proposal carries confidence, review flag and evidence. `scripts/propose_fixes.py`; corpus run in `evals/course_access/` |
 | A5 | Rebuild accessible DOCX/HTML + verify loop | Planned |
 | A6 | Gold set (40 documents) and eval metrics | Planned; needs P6 and the documents |
 | P3 | Review queue (approve / edit / reject) | Planned |

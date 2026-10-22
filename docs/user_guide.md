@@ -280,6 +280,22 @@ proposals. Add `--json` for the proposals as data, and `--data-class` (P, I
 or S; default I) to declare the document's class. The document and its
 images never leave the machine.
 
+**All proposed fixes.** The structure, table and text workers propose a fix
+for every other issue the audit finds (typed lists, heading levels, repeated
+slide titles, header rows, layout tables mistaken for data, the title, the
+language, link text), each with a confidence, whether a person must review
+it and the evidence:
+
+```bash
+docker compose run --rm -v "$PWD/samples:/samples:ro" test python scripts/propose_fixes.py /samples/week4.docx
+docker compose run --rm -v "$PWD/samples:/samples:ro" test python scripts/propose_fixes.py /samples/week4.pptx --alt-text
+```
+
+Most proposals come from rules and need no model; the language of the
+document and link text that the surrounding text does not give are asked of
+the local model, so the `ollama` service must be running for those. Nothing
+is written back until the rebuild step (A5).
+
 **A corpus of real course documents.** `fetch-course-docs` downloads openly
 licensed lecture slides, lecture notes, course outlines and readings (CC BY
 and CC BY-SA, from Canadian and UK open-education repositories) into
