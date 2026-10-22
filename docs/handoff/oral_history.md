@@ -215,7 +215,7 @@ discover -s tests` for quick checks inside its cloud container. On Oct 22,
 
 **Next cards** (section 5 of the plan): P9 Ollama service in compose (the
 router cannot reach Ollama from inside containers yet); B1 local-stack smoke test on the demo
-laptop; P1b data-class gate with P2 tracing; P6 eval harness; A6 gold set and
+laptop; P6 eval harness; A6 gold set and
 A3 alt-text worker with bake-off B3 (D9); B2 embedder + reranker bake-off on
 the salmon pilot; R10 rights filter. Then A4/A4b/A5, R1/R2/R3.
 

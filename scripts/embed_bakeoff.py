@@ -47,9 +47,10 @@ def recall_at_k(embedder: Embedder, items: list[dict], queries: list[dict], k: i
             print(f"{embedder.name}: skipping {len(group)} {modality} items (unsupported)")
             continue
         ids += [item["id"] for item in group]
-        vectors.append(embedder.embed([item["content"] for item in group], modality=modality))
+        # Bake-off sets are public (class P): evals/ holds no private data.
+        vectors.append(embedder.embed([item["content"] for item in group], modality=modality, data_class="P"))
     corpus = np.vstack(vectors)
-    query_vectors = embedder.embed([q["query"] for q in queries], kind="query")
+    query_vectors = embedder.embed([q["query"] for q in queries], kind="query", data_class="P")
     top = np.argsort(-(query_vectors @ corpus.T), axis=1)[:, :k]
 
     scores = defaultdict(list)

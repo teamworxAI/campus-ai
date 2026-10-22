@@ -18,6 +18,7 @@ from typing import Any, Sequence
 
 import numpy as np
 
+from campus_ai.core import data_classes
 from campus_ai.core.embed import media
 
 MODALITIES = ("text", "image", "audio", "video")
@@ -80,8 +81,14 @@ class Embedder:
         modality: str = "text",
         kind: str = "document",
         dim: int | None = None,
+        *,
+        data_class: str,
     ) -> np.ndarray:
-        """Return one unit-length row per input, with `dim` columns (default: full size)."""
+        """Return one unit-length row per input, with `dim` columns (default: full size).
+
+        `data_class` (P, I, S or R) is the class of the inputs; R is refused (card P1b).
+        """
+        data_classes.check(data_class)
         if modality not in self.modalities:
             raise NotImplementedError(f"{self.name} does not support {modality!r} inputs yet")
         if kind not in KINDS:

@@ -1,8 +1,9 @@
 # Design
 
 Module-level design of the built parts: embedder (P7), graph core (P5),
-Europeana loader (R8), collections search (R9), LLM router (P1) and the
-Course Access parser and audit (A1, A2). The system view is in
+Europeana loader (R8), collections search (R9), LLM router (P1) with its
+data-class gate (P1b), tracing (P2) and the Course Access parser and audit
+(A1, A2). The system view is in
 [`architecture.md`](architecture.md).
 
 ## 1. Embedder: `campus_ai/core/embed/`
@@ -13,8 +14,8 @@ Course Access parser and audit (A1, A2). The system view is in
 from campus_ai.core.embed import get_embedder, truncate
 
 embedder = get_embedder()                       # "embeddinggemma-2" (default) or "e5-small"
-vectors = embedder.embed(["text"], modality="text", kind="document")   # (n, 768) float32, unit length
-query = embedder.embed(["ocean warming"], kind="query")
+vectors = embedder.embed(["text"], modality="text", kind="document", data_class="P")   # (n, 768) float32, unit length
+query = embedder.embed(["ocean warming"], kind="query", data_class="P")
 small = truncate(vectors, 128)                  # Matryoshka prefix, re-normalized
 ```
 
@@ -34,7 +35,7 @@ classDiagram
         +dims: tuple
         +modalities: tuple
         +model: SentenceTransformer (lazy)
-        +embed(inputs, modality, kind, dim) ndarray
+        +embed(inputs, modality, kind, dim, data_class) ndarray
     }
     class media {
         +load_audio(path) ndarray
@@ -46,6 +47,9 @@ classDiagram
 
 ### 1.2 Behaviour
 
+- **Data class.** Every call declares `data_class` (P, I, S or R, keyword
+  only, no default). Class R raises `RestrictedDataError` before the model
+  loads or sees any input (P1b, section 11).
 - **Lazy loading.** The model loads on first `embed`, from local files only.
   A missing directory raises `FileNotFoundError` with the fetch command.
 - **Precision.** bfloat16 on GPUs that support it, else float32. Never
@@ -77,6 +81,7 @@ class Node:
     modality: str = "text"
     content: Any = None      # what gets embedded; defaults to text; a file path for media
     props: dict = {}         # extra properties (rights, url, source, ...)
+    data_class: str = "P"    # P/I/S/R; R is refused before embedding
 
 @dataclass
 class Link:
@@ -88,7 +93,7 @@ class Link:
 | Method | What it does |
 |---|---|
 | `ensure_schema()` | Creates the `entity_id` constraint, the 128-d `entity_vec` vector index (with `kind` as a filter property) and the `entity_text` fulltext index if they don't exist, then waits for them to come online. Refuses if an existing vector index has another size |
-| `upsert(nodes)` | Groups nodes by `(label, modality)`, embeds each group once at full size, then `MERGE`s by `id` and sets the label, `kind`, props, `text`, `modality`, `file` (the media path; null for text), `vec_fast` (prefix) and `vec_full` |
+| `upsert(nodes)` | Groups nodes by `(label, modality, data_class)`, embeds each group once at full size, then `MERGE`s by `id` and sets the label, `kind`, props, `text`, `modality`, `file` (the media path; null for text), `vec_fast` (prefix) and `vec_full` |
 | `link(links)` | Groups by type and `MERGE`s relationships between existing nodes. Links to unknown ids are skipped silently |
 
 Labels and relationship types can't be Cypher parameters, so `name()` accepts
@@ -277,7 +282,8 @@ One JSONL format feeds the indexer from any source, one record per line:
 | `tests/test_licences.py` | Prime directive 1: every installed package under an OSI licence (AGPL and proprietary fail; NVIDIA GPU runtimes are the named exception), every compose/Dockerfile image, every embedder model and every LLM router model (`MODEL_LICENCES`, defaults included) listed with an open licence | None; reads package metadata and repo files. Run in the `embed` image too, to cover PyTorch and CUDA |
 | `tests/test_europeana.py` | Rights filter, mapping, de-duplication, cursor paging, key in header, thumbnail caching | HTTP `get` mocked |
 | `tests/test_collections.py` | Cards, licence labels, citations, picture-match thresholds, search service, API endpoints and `/media` restrictions | `FakeDriver` and a fake retriever |
-| `tests/test_llm_router.py` | Routing to `OLLAMA_HOST`, image blocks, open-licence allowlist, no cloud backends | Ollama HTTP call mocked |
+| `tests/test_llm_router.py` | Routing to `OLLAMA_HOST`, image blocks, open-licence allowlist, no cloud backends, data-class gate, one trace record per call | Ollama HTTP call mocked; traces in a temp directory |
+| `tests/test_tracing.py` | Run files, metadata-only records, span outcomes and latency, data-class checks | None; traces in a temp directory |
 | `tests/test_course_access_parser.py`, `tests/test_course_access_audit.py` | A1 parsing per format; A2 rules and reports | None; small documents built in the tests |
 | `tests/test_package.py` | Every package imports | None |
 
@@ -424,7 +430,7 @@ docker compose run --rm -v "$PWD/samples:/samples:ro" test python scripts/audit_
 ```python
 from campus_ai.core.llm import generate
 
-reply = generate([{"role": "user", "content": "..."}], task="vision", system=None)
+reply = generate([{"role": "user", "content": "..."}], task="vision", data_class="I", system=None)
 reply.text, reply.model, reply.input_tokens, reply.output_tokens, reply.stop_reason
 ```
 
@@ -439,7 +445,49 @@ reply.text, reply.model, reply.input_tokens, reply.output_tokens, reply.stop_rea
   (default `http://localhost:11434`) with streaming off; text and base64
   image blocks become Ollama's `content` and `images`. There is no other
   backend.
+- **Data class and trace.** Every call declares the class of its messages
+  (section 11); class R is refused before any model call. Each call, refused
+  or not, writes one `llm` trace record (section 12).
 - **Runtime.** No compose service calls the router yet; Ollama in compose
   is card P9 (planned).
-- **Planned.** The data-class gate (P1b: P/I/S/R, R never reaches a model)
-  and per-call tracing of model, host and class (P2).
+
+## 11. Data-class gate (P1b): `campus_ai/core/data_classes.py`
+
+```python
+from campus_ai.core.data_classes import DATA_CLASSES, RestrictedDataError, check
+
+check("I")   # returns "I"; "R" raises RestrictedDataError, anything else ValueError
+```
+
+The classes are those of plan section 2: P public, I institutional, S
+sensitive, R restricted. The two model entry points call `check` first:
+`llm.generate(..., data_class=...)` and `Embedder.embed(..., data_class=...)`.
+Both arguments are required, so no call can skip the gate. Above them,
+`Node.data_class` and `HybridRetriever.search(data_class=...)` default to P,
+which is what the graph holds today (open Europeana items);
+`graph_search.py index` reads an optional `data_class` per JSONL record. The
+rights filter (R10) drops class-R records before indexing; the gate is the
+backstop, so an R node that reaches `upsert` is refused, not embedded.
+
+## 12. Tracing (P2): `campus_ai/core/tracing.py`
+
+```python
+from campus_ai.core import tracing
+
+with tracing.run("audit-lecture-3"):              # one file per run
+    with tracing.span("tool", tool="alt_text", data_class="I") as trace:
+        trace["model"] = "gemma4:12b"             # add what the block learns
+    tracing.record("tool", tool="rebuild", outcome="ok")
+```
+
+- **Where.** `$CAMPUS_AI_TRACE_DIR/<run id>.jsonl`, default `./traces`
+  (git-ignored). Run ids are `<UTC timestamp>-<name>-<6 hex>`, e.g.
+  `20261022T181500Z-audit-lecture-3-a1b2c3`; outside a `run()` block, calls
+  share one id per process (`<UTC timestamp>-<pid>`).
+- **Records.** One JSON object per line: `time` (UTC ISO), `run`, `event`,
+  and only these metadata fields: `tool`, `task`, `model`, `host`,
+  `data_class`, `input_tokens`, `output_tokens`, `latency_ms`, `outcome`
+  (`ok`, `refused` for class R, `error`), `error` (exception type only).
+  `record` refuses any other field, so prompts, documents and outputs (and
+  so restricted content) never reach a trace.
+- **Standard library only**; a lock keeps lines whole across threads.
