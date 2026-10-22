@@ -370,7 +370,7 @@ indexed into the shared graph.
 | Card | What | State |
 |---|---|---|
 | A1 | Document parser: PDF/PPTX/DOCX into one structure | Built on open-source, permissively licensed libraries (python-docx, python-pptx, pdfplumber); 7 tests. Supersedes PR #4, which used PyMuPDF |
-| A2 | Deterministic audit + WCAG-mapped report | Planned |
+| A2 | Deterministic audit + WCAG-mapped report | Built: 15 rules over 7 WCAG 2.2 criteria, Markdown and JSON reports, and a "not checked" list; no model involved |
 | A3 | Alt-text worker (local vision model, confidence score) | Planned; the LLM router (P1) is built |
 | A4 | Structure, table and text workers | Planned |
 | A5 | Rebuild accessible DOCX/HTML + verify loop | Planned |
