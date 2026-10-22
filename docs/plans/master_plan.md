@@ -16,7 +16,12 @@ copied from it.
 | Demo moment | Drop a messy lecture PDF, get an accessible version and a report in under 2 minutes | Pick a live Horizon call, get a ranked, evidence-backed EU partner shortlist and a consortium brief |
 | Shared core used | LLM router, review UI, evaluation harness | LLM router, graph core (Neo4j writer, indexing, hybrid retriever), evaluation harness |
 
-Status: draft for iteration. Open decisions are listed in section 8.
+Status (Oct 22, 2026): build in progress. Shared platform (P0, P1, P5, P7,
+P8), the Course Access parser and audit (A1, A2) and the Europeana
+collections search (R8, R9 first cut) are merged in `main`; 82 unit tests
+pass. Next: the week-1 bake-offs that were deferred (B1-B5), the data-class
+gate (P1b), the eval harness (P6) and the alt-text worker (A3). Open
+decisions are in section 8; section 5 has the remaining schedule.
 
 > ## Prime directives (standing orders; they override everything else)
 >
@@ -125,12 +130,16 @@ Layout:
 
 ```text
 campus_ai/
-  core/                 # llm router, graph, eval, tracing, review UI, region config
-  course_access/        # Course Access Agent
-  research_assistant/      # Research Assistant
+  core/llm/             # LLM router over Ollama, open-licence allow-list (built)
+  core/embed/           # EmbeddingGemma 2 + text baseline, media decoding (built)
+  core/graph/           # Neo4j store + hybrid retriever (built)
+  course_access/        # parser.py, audit.py (built); workers, rebuild (planned)
+  research_assistant/   # europeana.py, collections.py, api.py (built)
+scripts/                # fetch_models, fetch_europeana, graph_search, audit_document, embed_bakeoff
+web/                    # collections search UI (nginx + static files)
 evals/                  # gold sets and eval reports per product
-tests/                  # unittest, external services mocked
-docs/plans/             # this plan and per-product specs
+tests/                  # unittest, external services mocked; licence guard
+docs/                   # architecture, design, build and user guides; plans/; research/; handoff/
 ```
 
 ## 3. Product A: Course Access Agent
@@ -338,17 +347,18 @@ citations, human approval before outreach.
 - Embedder bake-off (week 1): EmbeddingGemma 2 vs a text-only baseline on
   the same queries, including French and other EU-language queries.
 
-## 5. Four-week schedule
+## 5. Schedule
 
-Assumes Web Summit Lisbon is in early November; week 4 ends about Oct 30.
+Web Summit Lisbon is in early to mid November (confirm the exact dates and
+the demo slot). Weeks 0-3 (Oct 3-23) are done; what was built is in section
+7 and in `docs/handoff/oral_history.md`. The original week-1 bake-offs were
+deferred and now come first.
 
 | Week | Shared platform | Course Access Agent | Research Assistant |
 |---|---|---|---|
-| 0 (Oct 3-4) | Harness setup (section 6); confirm hosting and tools; decisions D1-D7 | Collect 40 gold documents | Download CORDIS and OpenAlex samples; contact BC ELN about ArcaBC |
-| 1 (Oct 5-9) | Skeleton, LLM router, graph core, eval harness; tracing; review UI skeleton | Parser + deterministic audit; WCAG report | Loaders and graph schema; ingest SFU + CORDIS |
-| 2 (Oct 12-16) | MCP server template | Workers + rebuild; first end-to-end run | Router, call analyst, partner scout; first shortlist |
-| 3 (Oct 19-23) | Eval dashboards in CI | Verify loop, review queue, eval tuning | Network worker, eligibility, evaluator; back-test |
-| 4 (Oct 26-30) | Security review, cost check | Demo script, sample pack, one-pager | Demo script, live-call demo, one-pager |
+| Oct 22-25 | P9 Ollama in compose; B1 local-stack smoke test on the demo laptop (D5); P1b data-class gate; P6 eval harness | Collect gold documents; A6 gold set; A3 alt-text worker + B3 (D9) | B2 embedder + reranker bake-off on the salmon pilot; R10 rights filter for Europeana |
+| Oct 26-Nov 1 | P2 tracing; P3 review queue; B5 judge calibration | A4 workers, A4b OMML->MathML, A5 rebuild + verify loop | R1/R2 OpenAlex + CORDIS loaders, R3 schema; R7 only if R0b is signed |
+| Nov 2-Lisbon | Demo laptop dry run (again), freeze | Demo script, sample pack, one-pager | Demo script (collections search + expert search), one-pager |
 
 Exit criteria per week are the eval targets above, measured on the gold
 sets. A week is not done until its eval report is committed.
@@ -359,26 +369,30 @@ This section is about the development process. Claude Code helps write the
 code; it is not part of either product, and nothing it uses ships. The prime
 directives apply to everything that does ship and run.
 
-### 6.1 One-time setup (week 0)
-- `CLAUDE.md` at repo root pointing to `AGENTS.md` and this plan; one short
-  `CLAUDE.md` per product folder with its spec and test commands.
-- SessionStart hook so cloud sessions install dependencies and can run
-  tests (`session-start-hook` skill).
-- Project subagents in `.claude/agents/`:
-  - `eval-runner`: runs a product's gold set and reports deltas.
-  - `a11y-reviewer`: reviews diffs against WCAG rules.
-  - `data-steward`: checks new loaders for licensing, PII and GDPR issues.
+### 6.1 Harness setup
+Done:
+- `CLAUDE.md` at repo root imports `AGENTS.md` (rules and prime directives).
+- SessionStart hook (`.claude/hooks/session-start.sh`, registered in
+  `.claude/settings.json`): in cloud sessions it starts Docker and builds the
+  `test` image; `.claude/compose.cloud.yaml` adds proxy settings for builds
+  there. The ~10 GB `embed` image is built on demand.
+- `docs/handoff/oral_history.md`: full history, standing orders and the
+  coordinator workflow, for any new session taking over.
+
+Not yet done (add when a card needs them):
+- Project subagents in `.claude/agents/`: `eval-runner` (gold-set deltas),
+  `a11y-reviewer` (WCAG review of diffs), `data-steward` (licence, PII and
+  GDPR checks on new loaders).
 - Project skills in `.claude/skills/`: `wcag-remediation`,
   `horizon-call-analysis`, `add-graph-loader`.
-- Permission allowlist for test and eval commands
-  (`fewer-permission-prompts` skill).
+- Permission allowlist for test and eval commands.
 
 ### 6.2 Iteration loop for every task
 
 ```text
 GitHub issue (task card from section 7)
   -> Claude Code cloud session on its own branch
-  -> plan mode: agent proposes approach, you approve
+  -> plan mode only when a person is watching (unattended sessions stall in plan mode)
   -> implement with unit tests (mock Neo4j, LLMs, network)
   -> eval-runner subagent: gold-set deltas
   -> /code-review, then /simplify
@@ -393,44 +407,45 @@ GitHub issue (task card from section 7)
 - Multi-agent workflows (fan-out over many documents or calls) only for eval
   sweeps, and only when you ask for them, since they use a lot of tokens.
 
-## 7. Task cards (first wave)
+## 7. Task cards
 
 Each card is sized for one cloud session and one PR.
 
-| ID | Card | Depends on |
-|---|---|---|
-| P0 | Project skeleton: `pyproject.toml` (uv), `campus_ai/` package, unittest setup, SessionStart hook | - |
-| P1 | LLM router over local open-weight models only, on Ollama (local, or the team's inference box), with tests. **Built** (#2, made local-only in #10): defaults Gemma 4 (Apache-2.0); the router refuses models not in its open-licence allowlist | P0 |
-| P8 | Licence guard: a test that lists every Python package, image and model weight in the stack and fails on any licence that is not OSI-approved (the two named exceptions listed: free GPU vendor runtimes, Docker Desktop for Windows development). **Built:** `tests/test_licences.py`, runs in both images | P0 |
-| P5 | Graph core: Neo4j writer, vector + fulltext indexes, hybrid retriever | P0, P7 |
-| P1b | Data-class gate in the router (P/I/S/R; R never reaches a model) and per-call trace of model, host and class | P1, P2 |
-| P6 | Eval harness: gold-set format, RAGAS + deterministic metrics, report | P0 |
-| P2 | Tracing module: per-run JSONL log of tool calls, tokens, cost | P0 |
-| P3 | Review queue Streamlit component (approve/edit/reject) | P0 |
-| P4 | MCP server template wrapping a product's public functions | P1 |
-| A1 | Document parser (PDF/PPTX/DOCX -> common structure). Built on python-docx, python-pptx and pdfplumber (all MIT); the PyMuPDF version (PR #4) is superseded (D8) | P0 |
-| A2 | Deterministic audit + WCAG-mapped report. **Built:** `campus_ai/course_access/audit.py`, `scripts/audit_document.py`; colour contrast waits on colour extraction | A1 |
-| A3 | Alt-text worker with a local open-weight vision model (D9) and confidence score | A1, P1 |
-| A4 | Structure, table and text workers | A1 |
-| A1b | Bake-off B4: Docling + Granite-Docling vs the A1 parser on the gold documents; swap behind `parse(path)` only if it wins | A1, A6 |
-| A3b | Chart rule for A3: extract the chart's data as a table, write the description from it, flag any claim the table does not support | A3 |
-| A4b | OMML -> MathML conversion for DOCX/PPTX equations (deterministic) | A1 |
-| A5 | Rebuild accessible DOCX/HTML + verify loop | A2-A4 |
-| A6 | Gold set + eval metrics in `evals/course_access/` | A2, P6 |
-| A7 | **Next phase:** OCR for scanned (image-only) PDFs with an open-source offline engine (e.g. Tesseract), feeding the same Document structure | A1 |
-| R0 | REE integration spec with RIO: fields, access method, refresh, consent | - |
-| R1 | OpenAlex loader (SFU authors, topics), REE loader once R0 is agreed | P5, R0 |
-| R2 | CORDIS loader (projects, participants) + calls loader | P5 |
-| R3 | Graph schema + indexing for Researcher/Project/Call; reranker step; every vector index records the embedding model id | R1, R2 |
-| R4 | Router + call analyst + partner scout + expert search (journey 4) | R3, P1 |
-| R5 | Network worker, eligibility rules, citation evaluator; code checks that every cited span exists in its source before any LLM judge runs | R4 |
-| R6 | Back-test eval (recall@10) | R3, P6 |
-| P7 | Embedder module with EmbeddingGemma 2 + bake-off vs text baseline (D7) | P0, P6 |
-| R0b | Data agreement with BC ELN for ArcaBC (arcabc.ca): permission to ingest, the interface to use, rights handling, and the pilot collection. **In progress; until signed, no code or session touches arcabc.ca** | - |
-| R7 | ArcaBC loader, the BC counterpart of R8: one fetch step through the interface agreed in R0b, writing the same JSONL records (items, media units, collections, holders, creators, rights statements). Blocked on R0b | P5, P7, R0b |
-| R8 | Europeana loader for the matching collection. Pilot theme: salmon, as a subject (*Salmo*, *Oncorhynchus*, salmonids) or as salmon fishing in titles in 7 languages, without specimen photos: about 150 items, nearly all on topic (looser queries were half noise: people named Salmon, salmon-coloured fashion, herbarium sheets named after a botanist); open licences only (CC0, PDM, CC BY, CC BY-SA), until the ArcaBC collection (R0b) fixes the theme. Images use Europeana's 400 px thumbnails; full-size media, audio and video need each provider's host and come later | P5, P7 |
-| R9 | Collections search: multimodal retrieval, citations with timestamps and image regions. First cut built: API (`campus_ai/research_assistant/api.py`) and web UI (`web/`) over Europeana; pictures and texts ranked separately; APA/Chicago/BibTeX citations. Timestamps and image regions wait on audio/video and region detection | R7, R8 |
-| R10 | Rights and governance filter ahead of any collections indexing: Europeana `edm:rights` per item, ArcaBC access flags and TK Labels; restricted items get data class R | R0b |
+| ID | Card | Depends on | Status |
+|---|---|---|---|
+| P0 | Project skeleton: `pyproject.toml` (uv), `campus_ai/` package, unittest setup, SessionStart hook | - | Built (#1) |
+| P1 | LLM router over local open-weight models only, on Ollama (local, or the team's inference box). Defaults Gemma 4 (Apache-2.0); refuses models not in its open-licence allow-list | P0 | Built (#2, local-only in #10) |
+| P1b | Data-class gate in the router (P/I/S/R; R never reaches a model) and per-call trace of model, host and class | P1, P2 | Next |
+| P2 | Tracing module: per-run JSONL log of tool calls, model, host, data class, tokens, latency | P0 | Next |
+| P3 | Review queue Streamlit component (approve/edit/reject) | P0 | To do |
+| P4 | MCP server template wrapping a product's public functions | P1 | To do |
+| P5 | Graph core: Neo4j writer, vector + fulltext indexes, hybrid retriever (RRF) | P0, P7 | Built (#5) |
+| P6 | Eval harness: gold-set format, RAGAS + deterministic metrics, report | P0 | Next |
+| P7 | Embedder module with EmbeddingGemma 2 + text baseline + bake-off script (D7) | P0 | Built (#3); real bake-off B2 pending |
+| P8 | Licence guard: test that fails on any non-OSI licence in packages, images and model weights (two named exceptions) | P0 | Built (#9) |
+| P9 | Ollama in compose: an offline Ollama service from local weights on the internal network, and `OLLAMA_HOST` / `CAMPUS_AI_MODEL_*` passed to the services that call the router (today none is, and `localhost:11434` is unreachable from containers) | P1 | Next (before A3 runs in Docker) |
+| A1 | Document parser (PDF/PPTX/DOCX -> common structure) on python-docx, python-pptx and pdfplumber (all MIT) | P0 | Built (#11; PyMuPDF version #4 superseded by D8) |
+| A1b | Bake-off B4: Docling + Granite-Docling vs the A1 parser on the gold documents; swap behind `parse(path)` only if it wins | A1, A6 | To do |
+| A2 | Deterministic audit + WCAG-mapped report (`audit.py`, `scripts/audit_document.py`); colour contrast waits on colour extraction | A1 | Built (#13) |
+| A3 | Alt-text worker with a local open-weight vision model (D9) and confidence score | A1, P1 | Next |
+| A3b | Chart rule for A3: extract the chart's data as a table, write the description from it, flag any claim the table does not support | A3 | To do |
+| A4 | Structure, table and text workers | A1 | To do |
+| A4b | OMML -> MathML conversion for DOCX/PPTX equations (deterministic) | A1 | To do |
+| A5 | Rebuild accessible DOCX/HTML + verify loop | A2-A4 | To do |
+| A6 | Gold set + eval metrics in `evals/course_access/` | A2, P6 | Next (needs documents) |
+| A7 | OCR for scanned (image-only) PDFs with an open-source offline engine (e.g. Tesseract) | A1 | Next phase |
+| R0 | REE integration spec with RIO: fields, access method, refresh, consent | - | Waiting: email drafted Oct 22, to be sent by the team |
+| R0b | Data agreement with BC ELN for ArcaBC (arcabc.ca): permission, interface, rights handling, pilot collection. Until signed, no code or session touches arcabc.ca | - | Waiting: email drafted Oct 22, to be sent by the team |
+| R1 | OpenAlex loader (SFU authors, topics); REE loader once R0 is agreed | P5, R0 | To do |
+| R2 | CORDIS loader (projects, participants) + calls loader | P5 | To do |
+| R3 | Graph schema + indexing for Researcher/Project/Call; reranker step; every vector index records the embedding model id | R1, R2 | To do |
+| R4 | Router + call analyst + partner scout + expert search (journey 4) | R3, P1 | To do |
+| R5 | Network worker, eligibility rules, citation evaluator; code checks every cited span exists in its source before any LLM judge runs | R4 | To do |
+| R6 | Back-test eval (recall@10) | R3, P6 | To do |
+| R7 | ArcaBC loader, the BC counterpart of R8, writing the same JSONL records | P5, P7, R0b | Blocked on R0b |
+| R8 | Europeana loader. Pilot theme: salmon (*Salmo*, *Oncorhynchus*, salmonids; salmon fishing in titles in 7 languages), about 150 items, open licences only (CC0, PDM, CC BY, CC BY-SA); 400 px thumbnails; full media, audio and video later | P5, P7 | Built (#6) |
+| R9 | Collections search: API (`research_assistant/api.py`) and web UI (`web/`) over Europeana; pictures and texts ranked separately; APA/Chicago/BibTeX citations. Timestamps and image regions wait on audio/video and region detection | R7, R8 | First cut built (#8) |
+| R10 | Rights and governance filter ahead of any collections indexing: Europeana `edm:rights` per item, ArcaBC access flags and TK Labels; restricted items get data class R | R8 | Next |
 
 Kickoff prompt template for a card:
 
@@ -470,10 +485,10 @@ Commit, push to your branch, and open a PR with the eval results.
 | GDPR complaints about profiling | Public data only, removal process, evidence shown for every match |
 | REE data access not agreed in time | Build and demo on public OpenAlex/ORCID data for SFU authors; swap in REE data once RIO agrees. Respect REE profile choices (e.g. not accepting students) |
 | ArcaBC permission not granted in time, or rights and cultural protocols block indexing | Demo on Europeana with ArcaBC shown as pending; start ArcaBC with one openly licensed collection agreed with BC ELN; rights checked per item |
-| Local models weaker than frontier APIs on alt text and reasoning | Bake-offs B3/B5 with pass rules; human review stays mandatory for charts, diagrams and equations |
+| Local open-weight models weaker than hosted ones on alt text and reasoning | Bake-offs B3/B5 (D9) with pass rules; confidence scores; every chart, diagram, equation and low-confidence fix goes to human review |
 | Hardware for each institution or the demo laptop | Size from the B1 smoke test; get Canadian and EU GPU quotes (the research found no Canadian prices); CPU path stays as fallback |
-| EmbeddingGemma 2 is brand new | Bake-off in week 1; embedder behind one interface so it can be swapped |
-| Local open-weight models are weaker than hosted ones for alt text and reasoning | Bake-off (D9); confidence scores; every chart, diagram, equation and low-confidence fix goes to human review |
+| EmbeddingGemma 2 is brand new | Bake-off B2 before the demo; embedder behind one interface so it can be swapped |
 | Local models are slow on CPU-only machines | GPU optional via free vendor runtime; batch work (indexing, remediation) runs ahead of the demo; measured: pilot index 17 min on 4 CPU cores, 80 s on an RTX 2050 |
 | A dependency or model changes to a non-open licence | Licence guard test (P8) on every build; pin versions |
 | Max usage limits slow the build | Cap parallel heavy sessions at 3; push bulk work to subagents and off-peak routines |
+| Time to Lisbon is short (about 2.5 weeks from Oct 22) | Demo scope fixed in section 5; Europeana-only collections demo if R0b is late; freeze a week before |

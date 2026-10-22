@@ -10,9 +10,10 @@ Agentic AI products for higher education in BC, Canada and the EU.
 ## Prime directives
 
 1. **Open source only. No paid licences, ever.** Code, dependencies, images,
-   tools and model weights are all under OSI-approved licences; campus-ai
-   itself is [Apache-2.0](LICENSE). Free GPU vendor runtimes are the one
-   allowance, and are optional.
+   tools and model weights are all under OSI-approved licences, permissive
+   preferred, no AGPL; campus-ai itself is [Apache-2.0](LICENSE). Two named
+   exceptions: free GPU vendor runtimes (optional) and Docker Desktop as a
+   developer tool on Windows workstations.
 2. **Everything runs offline.** All models run locally from open weights. No
    cloud model APIs; nothing downloads at runtime.
 
@@ -36,7 +37,9 @@ core with hybrid retrieval (P5), Europeana loader (R8), collections search API
 and web UI (R9), all for the Research Assistant. Course Access Agent: the
 document parser (A1) and the WCAG audit and report (A2) are built; fixing workers,
 rebuild and review are next (see [architecture](docs/architecture.md#11-course-access-agent)).
-Also built: LLM router over local open-weight models on Ollama (P1) and the licence guard (P8). Next: eval harness; OCR for scanned PDFs is next phase.
+Also built: LLM router over local open-weight models on Ollama (P1) and the
+licence guard (P8). Next: the model bake-offs (B1-B5), data-class gate (P1b),
+eval harness (P6) and alt-text worker (A3); OCR for scanned PDFs (A7) is next phase.
 
 ## Quick start
 

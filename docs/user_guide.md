@@ -133,7 +133,7 @@ docker compose run --rm embed python scripts/graph_search.py search "salmon fish
 | `-k` | 10 | Number of results |
 | `--label` | all | Keep only this node label; repeatable (`--label Image --label Item`) |
 | `--modality` | `text` | For a media query, pass a file path as the query and its modality |
-| `--backend` | `embeddinggemma-2` | Must match the backend the graph was indexed with |
+| `--backend` | `embeddinggemma-2` | Goes before the command (`graph_search.py --backend e5-small search …`); must match the backend the graph was indexed with |
 
 ### Reading results
 

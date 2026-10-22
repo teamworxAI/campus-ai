@@ -1,7 +1,9 @@
 # Design
 
-Module-level design of the built parts: embedder (P7), graph core (P5) and
-Europeana loader (R8). The system view is in [`architecture.md`](architecture.md).
+Module-level design of the built parts: embedder (P7), graph core (P5),
+Europeana loader (R8), collections search (R9), LLM router (P1) and the
+Course Access parser and audit (A1, A2). The system view is in
+[`architecture.md`](architecture.md).
 
 ## 1. Embedder: `campus_ai/core/embed/`
 
@@ -20,7 +22,7 @@ small = truncate(vectors, 128)                  # Matryoshka prefix, re-normaliz
 |---|---|
 | `name` | Backend name (`embeddinggemma-2`, `e5-small`) |
 | `model_id` | Hugging Face ID; weights load from `$MODELS_DIR/<model_id>` |
-| `dims` | Supported sizes, full size first: `(768, 512, 256, 128)` |
+| `dims` | Supported sizes, full size first: `(768, 512, 256, 128)` for EmbeddingGemma 2, `(384,)` for e5 |
 | `modalities` | `text`, `image`, `audio`, `video` for EmbeddingGemma 2; `text` for e5 |
 | `query_kwargs` / `document_kwargs` | Task prompts applied to text (`SearchQuery` / `Document`) |
 
@@ -86,7 +88,7 @@ class Link:
 | Method | What it does |
 |---|---|
 | `ensure_schema()` | Creates the `entity_id` constraint, the 128-d `entity_vec` vector index (with `kind` as a filter property) and the `entity_text` fulltext index if they don't exist, then waits for them to come online. Refuses if an existing vector index has another size |
-| `upsert(nodes)` | Groups nodes by `(label, modality)`, embeds each group once at full size, then `MERGE`s by `id` and sets the label, `kind`, props, text, `vec_fast` (prefix) and `vec_full` |
+| `upsert(nodes)` | Groups nodes by `(label, modality)`, embeds each group once at full size, then `MERGE`s by `id` and sets the label, `kind`, props, `text`, `modality`, `file` (the media path; null for text), `vec_fast` (prefix) and `vec_full` |
 | `link(links)` | Groups by type and `MERGE`s relationships between existing nodes. Links to unknown ids are skipped silently |
 
 Labels and relationship types can't be Cypher parameters, so `name()` accepts
@@ -141,8 +143,12 @@ migrates graphs indexed before this change in place, without re-embedding.
 ```python
 Hit(id="europeana:/…", labels=["Entity", "Item"], text="…", score=0.0328,
     neighbors=[{"type": "IN", "outgoing": True, "id": "europeana:collection:…",
-                "labels": [...], "text": "…"}])
+                "labels": [...], "text": "…"}],
+    found_by=["meaning", "words"],   # vector index, fulltext index
+    similarity=0.61)                 # cosine to the query at 768-d
 ```
+
+Planned: a reranker step (Qwen3-Reranker-4B, card R3, bake-off B2).
 
 ## 4. Europeana loader (R8)
 
@@ -181,22 +187,45 @@ flowchart TD
 | `id` | `Item.id = "europeana:" + id` |
 | `title` + `dcDescription` (de-duplicated, whitespace-normalized, ≤ 2,000 chars) | `Item.text` (embedded and fulltext-indexed) |
 | `rights[0]` | `Item.rights`, `Image.rights`; item dropped unless open |
-| `guid` | `Item.url` |
+| `guid` (query string dropped: it carries tracking parameters and the API key) | `Item.url` |
 | `type`, `provider`, `year`, `language` | `Item` props |
-| thumbnail of `edmPreview` | `Image` node (`modality=image`, no text), `PART_OF` its Item |
+| thumbnail of `edmPreview` | `Image` node (`id` = item id + `#image`, `modality=image`, no text, `file` = thumbnail path), `PART_OF` its Item |
 | `edmDatasetName[0]` | `Collection`, linked by `IN` |
 | `dataProvider[0]` | `Institution`, linked from the Collection by `HELD_BY` |
 | `dcCreator` (names only; URIs skipped) | `Creator`, linked by `CREATED_BY` |
 
 Open rights: `creativecommons.org/publicdomain/zero/`, `/publicdomain/mark/`,
 `/licenses/by/`, `/licenses/by-sa/`. NC and ND licences and
-rightsstatements.org statements are excluded.
+rightsstatements.org statements are excluded. This is the loader's own
+filter; the shared rights and governance filter (R10) is planned.
 
 **Why a separate Image node.** An Item's vector encodes its metadata text;
 the Image's vector encodes the picture alone. A text query can then match a
 photo on what it shows, even when the caption is in another language or
 says nothing useful. Graph expansion links each Image hit back to its Item
 for citation.
+
+### 4.3 Collections search (R9): `collections.py`, `api.py`
+
+`CollectionsSearch` wraps `HybridRetriever` (50 candidates) and returns
+`Card`s with title, description, source, type, year, URL, rights, licence
+label, collection, holder, creators and image:
+
+- `pictures(query, k, modality)` searches `Image` nodes only, maps each hit
+  to its Item (`id` before `#`), and marks items whose own text also matched
+  the words.
+- `texts(query, k)` searches `Item` nodes and keeps those without a picture.
+- `item(id)` returns one card with APA, Chicago and BibTeX citations and up
+  to 4 similar pictures.
+- Image queries label each card "Same picture" (cosine ≥ 0.98), "Similar"
+  (≥ 0.76) or "Not close"; the API's `match` field applies the same
+  thresholds to the best hit. Thresholds were calibrated on the salmon pilot.
+
+`api.py` exposes these as `GET /api/health`, `GET /api/search`,
+`POST /api/search/image`, `GET /api/items/{id}` and `GET /media/{path}`
+(architecture section 5.3). One lock serialises embedding; uploads are
+checked for type (JPEG, PNG, WebP, GIF) and size (10 MB) and kept only in a
+temporary file for the search.
 
 ## 5. File formats
 
@@ -220,12 +249,16 @@ One JSONL format feeds the indexer from any source, one record per line:
 |---|---|---|
 | `tests/test_embed*.py` | Backends, truncation, media decoding, bake-off | Model replaced by a deterministic fake |
 | `tests/test_graph.py` | Schema, upsert grouping, linking, fusion, fulltext query building, retriever flow, JSONL loading | `FakeDriver` records Cypher; a bag-of-words fake model. Integration tests run against a real Neo4j when `NEO4J_URI` is set and the embed image is used |
-| `tests/test_licences.py` | Prime directive 1: every installed package under an OSI licence (AGPL and proprietary fail; NVIDIA GPU runtimes are the named exception), every compose/Dockerfile image and every embedder model listed with an open licence | None; reads package metadata and repo files. Run in the `embed` image too, to cover PyTorch and CUDA |
+| `tests/test_licences.py` | Prime directive 1: every installed package under an OSI licence (AGPL and proprietary fail; NVIDIA GPU runtimes are the named exception), every compose/Dockerfile image, every embedder model and every LLM router model (`MODEL_LICENCES`, defaults included) listed with an open licence | None; reads package metadata and repo files. Run in the `embed` image too, to cover PyTorch and CUDA |
 | `tests/test_europeana.py` | Rights filter, mapping, de-duplication, cursor paging, key in header, thumbnail caching | HTTP `get` mocked |
+| `tests/test_collections.py` | Cards, licence labels, citations, picture-match thresholds, search service, API endpoints and `/media` restrictions | `FakeDriver` and a fake retriever |
+| `tests/test_llm_router.py` | Routing to `OLLAMA_HOST`, image blocks, open-licence allowlist, no cloud backends | Ollama HTTP call mocked |
+| `tests/test_course_access_parser.py`, `tests/test_course_access_audit.py` | A1 parsing per format; A2 rules and reports | None; small documents built in the tests |
+| `tests/test_package.py` | Every package imports | None |
 
-`docker compose run --rm test` runs everything that needs no models (3
-integration tests skip). `docker compose run --rm embed python -m unittest
-discover -s tests` also runs the Neo4j integration tests.
+`docker compose run --rm test` runs everything that needs no models (4
+tests skip: 2 need PyAV, 2 need Neo4j). `docker compose run --rm embed
+python -m unittest discover -s tests` also runs those.
 
 ## 7. Known limitations
 
@@ -262,7 +295,7 @@ Switching the graph to it needs a fresh graph (`docker compose down -v`).
 ## 9. Course Access Agent
 
 The system view and status are in [`architecture.md`](architecture.md#11-course-access-agent).
-Only A1 exists so far. It reads files with open-source, permissively licensed libraries only: python-docx and python-pptx (MIT) and pdfplumber on pdfminer.six (MIT). The first version (PR #4) used PyMuPDF, which is AGPL and was replaced under prime directive 1. Everything
+A1 (parser) and A2 (audit) exist; A3-A7 are planned. A1 reads files with open-source, permissively licensed libraries only: python-docx and python-pptx (MIT) and pdfplumber on pdfminer.six (MIT). The first version (PR #4) used PyMuPDF, which is AGPL and was replaced under prime directive 1. Everything
 here is bound by the prime directives (`AGENTS.md`): open-source libraries only,
 and any model (alt text, OCR) runs locally from open weights.
 
@@ -356,7 +389,32 @@ docker compose run --rm -v "$PWD/samples:/samples:ro" test python scripts/audit_
 | Limit | Handled by |
 |---|---|
 | No OCR: image-only (scanned) PDFs produce images and no text | Next phase: card A7, open-source offline OCR |
-| Untagged PDF: no headings or lists; existing PDF tags and alt text are not read | A4 infers structure; A2 reports the PDF as untagged |
-| Reading order is the file's, which may be wrong (e.g. a PPTX text box added last) | A2 flags suspect order; A4 proposes a fix for review |
+| Untagged PDF: no headings or lists; existing PDF tags and alt text are not read | A4 infers structure; A2 already reports `no-headings` and lists PDF tags under "not checked" |
+| Reading order is the file's, which may be wrong (e.g. a PPTX text box added last) | A2 lists reading order (1.3.2) under "not checked"; planned: A4 proposes a fix for review |
 | Equations, charts and SmartArt come through as images or plain text | Always routed to the review queue (master plan 3.2) |
-| Reading order on complex PDF layouts (columns, sidebars) follows position, not the author's intent | A2 flags pages with several text columns; A4 proposes an order for review |
+| Reading order on complex PDF layouts (columns, sidebars) follows position, not the author's intent | Planned: A4 proposes an order for review (A2 has no column check yet) |
+
+## 10. LLM router (P1): `campus_ai/core/llm/`
+
+```python
+from campus_ai.core.llm import generate
+
+reply = generate([{"role": "user", "content": "..."}], task="vision", system=None)
+reply.text, reply.model, reply.input_tokens, reply.output_tokens, reply.stop_reason
+```
+
+- **Tasks** (`config.TASKS`): `reasoning` and `vision` (default
+  `gemma4:12b`, 16,000 output tokens), `classification` (`gemma4:e4b`,
+  1,024). Override per task with `CAMPUS_AI_MODEL_<TASK>`.
+- **Allowlist.** `config.model()` refuses any model not in `MODEL_LICENCES`
+  (Gemma 4, Qwen 3, Qwen3-VL, Granite 3.3, Mistral Small 3.2, OLMo 2; all
+  Apache-2.0). Gemma 3 is excluded: its Gemma Terms of Use are not an open
+  licence. Adding a model needs a licence check and a D10 register row.
+- **Backend.** `backends.ollama` posts to `$OLLAMA_HOST/api/chat`
+  (default `http://localhost:11434`) with streaming off; text and base64
+  image blocks become Ollama's `content` and `images`. There is no other
+  backend.
+- **Runtime.** No compose service calls the router yet; Ollama in compose
+  is card P9 (planned).
+- **Planned.** The data-class gate (P1b: P/I/S/R, R never reaches a model)
+  and per-call tracing of model, host and class (P2).
