@@ -1,0 +1,20 @@
+{"id": "europeana:/example/cc0", "label": "Item", "modality": "text", "content": "Salmon weir on a river, 1910.", "props": {"source": "europeana", "url": "https://www.europeana.eu/item/example/cc0", "rights": "http://creativecommons.org/publicdomain/zero/1.0/"}}
+{"id": "europeana:/example/cc0#image", "label": "Image", "modality": "image", "content": "media/cc0.jpg", "props": {"source": "europeana", "rights": "http://creativecommons.org/publicdomain/zero/1.0/"}}
+{"src": "europeana:/example/cc0#image", "type": "PART_OF", "dst": "europeana:/example/cc0"}
+{"id": "europeana:/example/pdm", "label": "Item", "modality": "text", "content": "Fishing boats in the harbour.", "props": {"source": "europeana", "url": "https://www.europeana.eu/item/example/pdm", "rights": "http://creativecommons.org/publicdomain/mark/1.0/"}}
+{"id": "europeana:/example/by", "label": "Item", "modality": "text", "content": "Smoked salmon, market stall.", "props": {"source": "europeana", "url": "https://www.europeana.eu/item/example/by", "rights": "http://creativecommons.org/licenses/by/4.0/"}}
+{"id": "europeana:/example/by-sa", "label": "Item", "modality": "text", "content": "Salmon fly patterns, plate 3.", "props": {"source": "europeana", "url": "https://www.europeana.eu/item/example/by-sa", "rights": "http://creativecommons.org/licenses/by-sa/4.0/"}}
+{"id": "europeana:/example/by-nc", "label": "Item", "modality": "text", "content": "Salmon ladder, postcard.", "props": {"source": "europeana", "url": "https://www.europeana.eu/item/example/by-nc", "rights": "http://creativecommons.org/licenses/by-nc/4.0/"}}
+{"id": "europeana:/example/by-nc#image", "label": "Image", "modality": "image", "content": "media/by-nc.jpg", "props": {"source": "europeana"}}
+{"src": "europeana:/example/by-nc#image", "type": "PART_OF", "dst": "europeana:/example/by-nc"}
+{"id": "europeana:/example/inc", "label": "Item", "modality": "text", "content": "Cannery workers, 1932.", "props": {"source": "europeana", "url": "https://www.europeana.eu/item/example/inc", "rights": "http://rightsstatements.org/vocab/InC/1.0/"}}
+{"id": "europeana:/example/no-rights", "label": "Item", "modality": "text", "content": "River survey notebook.", "props": {"source": "europeana", "url": "https://www.europeana.eu/item/example/no-rights"}}
+{"id": "europeana:collection:example_open", "label": "Collection", "modality": "text", "content": "Example open collection", "props": {"source": "europeana"}}
+{"src": "europeana:/example/cc0", "type": "IN", "dst": "europeana:collection:example_open"}
+{"id": "europeana:institution:example-museum", "label": "Institution", "modality": "text", "content": "Example Museum", "props": {"source": "europeana"}}
+{"src": "europeana:collection:example_open", "type": "HELD_BY", "dst": "europeana:institution:example-museum"}
+{"id": "europeana:creator:example-photographer", "label": "Creator", "modality": "text", "content": "Example Photographer", "props": {"source": "europeana"}}
+{"src": "europeana:/example/inc", "type": "CREATED_BY", "dst": "europeana:creator:example-photographer"}
+{"id": "arcabc:example/open", "label": "Item", "modality": "text", "content": "Synthetic open thesis record (no ArcaBC data).", "props": {"source": "arcabc", "url": "https://example.org/arcabc/open", "rights": "http://creativecommons.org/licenses/by/4.0/", "access": "open"}}
+{"id": "arcabc:example/campus-only", "label": "Item", "modality": "text", "content": "Synthetic campus-only record (no ArcaBC data).", "props": {"source": "arcabc", "url": "https://example.org/arcabc/campus-only", "rights": "http://creativecommons.org/licenses/by/4.0/", "access": "campus only"}}
+{"id": "arcabc:example/tk", "label": "Item", "modality": "text", "content": "Synthetic TK-Labelled record (no ArcaBC data).", "props": {"source": "arcabc", "url": "https://example.org/arcabc/tk", "rights": "http://creativecommons.org/publicdomain/mark/1.0/", "tk_labels": ["TK Attribution"]}}
