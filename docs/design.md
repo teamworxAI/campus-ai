@@ -415,14 +415,51 @@ docker compose run --rm -v "$PWD/samples:/samples:ro" test python scripts/audit_
 docker compose run --rm -v "$PWD/samples:/samples:ro" test python scripts/audit_document.py /samples/lecture.pdf --json
 ```
 
-### 9.3 Limits that the next cards must handle
+### 9.3 Alt-text worker (A3): `campus_ai/course_access/alt_text.py`
+
+```python
+from campus_ai.course_access.alt_text import propose, report_markdown
+
+proposals = propose(doc, data_class="I")   # one AltText per image the audit flags
+print(report_markdown(proposals, "lecture-03.pptx"))
+```
+
+The worker is the first caller of the LLM router. Code decides everything
+that can be decided without judgement; the model only describes.
+
+| Step | Who | What |
+|---|---|---|
+| Which images | code | The audit's `image-missing-alt` and `image-placeholder-alt` issues (`images_needing_alt`); decorative images and good alt text are left alone |
+| What the model sees | code | The image (base64), the document title and format, the page or slide, the text just before and after (`Image.nearby_text`) and any placeholder alt to replace |
+| The answer | model | One JSON object: `kind` (photo, illustration, chart, diagram, equation, text, decorative, other), `decorative`, `alt` (one sentence), `long_description` (axes and values for a chart, parts for a diagram, the equation, the text of an image of text) and `confidence` 0-1. Task `vision` on the router, so D9 and `CAMPUS_AI_MODEL_VISION` choose the model |
+| Checks | code | JSON found even inside prose or a code fence, else the proposal is sent to review as unparsed; unknown kinds become `other`; confidence clamped to 0-1; a leading "image of" or "picture of" is removed; decorative means empty alt |
+| Review routing | code | Always: charts, diagrams, equations, images of text, proposals to mark an image decorative, unparsed answers. Also: confidence below 0.7, empty alt, alt over 200 characters. `AltText.needs_review` and `review_reason` say which |
+
+`report_markdown` is the review sheet (one section per image with alt, long
+description, review reason and model); `report_json` is for the review queue
+(P3) and the rebuild step (A5), which applies approved proposals. Nothing is
+written to the document here.
+
+The confidence is the model's own estimate. In the probe run with
+`gemma4:e2b` it was 1.00 for every image, so it carries no signal on that
+model; the deterministic routing above, not the threshold, is what keeps
+wrong descriptions from going out, and bake-off B3 must calibrate confidence
+(or replace it with a judge) on the A6 gold set.
+
+`evals/course_access/alt_text_probes.py` draws six images with known kinds
+(bar chart, flow diagram, equation, text slide, divider, shapes), runs the
+worker on them and writes a report next to itself: a shape check for the
+configured model, not the bake-off. Card A3b (charts: extract the data as a
+table first, then check every claim against it) is not built.
+
+### 9.4 Limits that the next cards must handle
 
 | Limit | Handled by |
 |---|---|
 | No OCR: image-only (scanned) PDFs produce images and no text | Next phase: card A7, open-source offline OCR |
 | Untagged PDF: no headings or lists; existing PDF tags and alt text are not read | A4 infers structure; A2 already reports `no-headings` and lists PDF tags under "not checked" |
 | Reading order is the file's, which may be wrong (e.g. a PPTX text box added last) | A2 lists reading order (1.3.2) under "not checked"; planned: A4 proposes a fix for review |
-| Equations, charts and SmartArt come through as images or plain text | Always routed to the review queue (master plan 3.2) |
+| Equations, charts and SmartArt come through as images or plain text | A3 describes them and always routes them to review (master plan 3.2); A3b adds the chart data check |
 | Reading order on complex PDF layouts (columns, sidebars) follows position, not the author's intent | Planned: A4 proposes an order for review (A2 has no column check yet) |
 
 ## 10. LLM router (P1): `campus_ai/core/llm/`

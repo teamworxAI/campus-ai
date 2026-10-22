@@ -261,7 +261,24 @@ Put the files in a folder (here `samples/`) and mount it read-only as shown.
 The report lists each problem with its WCAG criterion, where it is and what
 will fix it, then what the automatic checks can't judge (such as colour
 contrast and whether existing alt text is accurate). Add `--json` for a
-machine-readable report. Fixing comes with the next cards (A3–A5).
+machine-readable report.
+
+**Alt text proposals.** For the images the audit flags, the local vision
+model proposes alt text (the `ollama` service must be running and the vision
+model downloaded, see the build guide):
+
+```bash
+docker compose run --rm -v "$PWD/samples:/samples:ro" test python scripts/alt_text.py /samples/week4.pptx
+```
+
+The review sheet gives, per image, the kind (chart, diagram, photo...), the
+proposed alt text, a long description where one is needed, and whether a
+person must review it and why. Charts, diagrams, equations, images of text
+and anything the model wants to mark decorative always go to review. Nothing
+is written into the document: the rebuild step (A5) applies approved
+proposals. Add `--json` for the proposals as data, and `--data-class` (P, I
+or S; default I) to declare the document's class. The document and its
+images never leave the machine.
 
 ## 8. Troubleshooting
 

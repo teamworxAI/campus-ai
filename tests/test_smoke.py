@@ -21,7 +21,7 @@ def load_script():
 
 smoke = load_script()
 
-MODELS = sorted({config.model(task) for task in config.TASKS})
+MODELS = sorted(set(config.DEFAULT_MODELS.values()))  # not config.model(): the test image may carry CAMPUS_AI_MODEL_* overrides
 OLLAMA = {
     "/api/version": {"version": "0.40.8"},
     "/api/tags": {"models": [{"name": m} for m in MODELS]},
@@ -60,7 +60,7 @@ class SmokeTestTests(unittest.TestCase):
         with mock.patch.object(smoke.urllib.request, "urlopen", urlopen or fake_urlopen()), \
              mock.patch.object(smoke.socket, "create_connection", side_effect=connect), \
              mock.patch.object(smoke, "generate", autospec=True, side_effect=generate), \
-             mock.patch.dict("os.environ", {"OLLAMA_HOST": "http://ollama:11434"}):
+             mock.patch.dict("os.environ", {"OLLAMA_HOST": "http://ollama:11434"}, clear=True):
             return {r["check"]: r for r in smoke.run()}
 
     def test_all_pass(self):
@@ -135,8 +135,9 @@ class ComposeTests(unittest.TestCase):
         self.assertRegex(ollama, r"image: ollama/ollama:\d+\.\d+\.\d+\n")
 
     def test_router_callers_get_ollama_host(self):
-        for name in ("embed", "api", "smoke"):
+        for name in ("test", "embed", "api", "smoke"):
             self.assertIn("*llm-env", self.service(name), name)
+            self.assertIn("networks: [graph]", self.service(name), name)
 
 
 if __name__ == "__main__":
