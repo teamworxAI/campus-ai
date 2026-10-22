@@ -7,9 +7,13 @@ JSONL input: the bake-off format, plus optional labels, captions and links.
     {"src": "d2", "type": "IN", "dst": "c1"}
     {"query": "...", "lang": "fr", "relevant": ["d1"]}
 
-Media paths are relative to the JSONL file. Run in the embed service, which
+Media paths are relative to the JSONL file. `index` first runs the rights
+filter (R10, `campus_ai/research_assistant/rights.py`): class-R records are
+never embedded, and the counts kept and excluded are printed; `rights` prints
+the same report without embedding or Neo4j. Run in the embed service, which
 reaches Neo4j over an internal network only:
 
+    docker compose run --rm embed python scripts/graph_search.py rights evals/rights/sample_records.jsonl
     docker compose run --rm embed python scripts/graph_search.py index evals/embed/sample_bakeoff.jsonl
     docker compose run --rm embed python scripts/graph_search.py search "salmon and ocean warming"
     docker compose run --rm embed python scripts/graph_search.py eval evals/embed/sample_bakeoff.jsonl
@@ -24,6 +28,7 @@ from pathlib import Path
 
 from campus_ai.core.embed import BACKENDS, DEFAULT_BACKEND, get_embedder
 from campus_ai.core.graph import GraphStore, HybridRetriever, Link, Node, connect
+from campus_ai.research_assistant.rights import Screened, screen
 
 
 def load(path: Path) -> tuple[list[Node], list[Link], list[dict]]:
@@ -54,6 +59,16 @@ def line(text: str | None, width: int) -> str:
     return " ".join((text or "").split())[:width]
 
 
+def screened(path: Path) -> Screened:
+    """The file's nodes and links with class-R records removed; prints what was excluded."""
+    nodes, links, _ = load(path)
+    result = screen(nodes, links)
+    for node, reason in result.excluded:
+        print(f"  excluded {node.id} ({reason}) {node.props.get('url', '')}".rstrip())
+    print(result.report())
+    return result
+
+
 def show(hits) -> None:
     for rank, hit in enumerate(hits, start=1):
         label = next((label for label in hit.labels if label != "Entity"), "Entity")
@@ -68,6 +83,7 @@ def main() -> None:
     parser.add_argument("--backend", default=DEFAULT_BACKEND, choices=list(BACKENDS))
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("index", help="embed and write items and links").add_argument("path", type=Path)
+    commands.add_parser("rights", help="rights filter report only, nothing embedded").add_argument("path", type=Path)
     search = commands.add_parser("search", help="hybrid search")
     search.add_argument("query")
     search.add_argument("--modality", default="text", help="for a media query, pass its file path as the query")
@@ -77,16 +93,19 @@ def main() -> None:
     evaluate.add_argument("path", type=Path)
     evaluate.add_argument("-k", type=int, default=10)
     args = parser.parse_args()
+    if args.command == "rights":
+        screened(args.path)
+        return
 
     embedder = get_embedder(args.backend)
     with connect() as driver:
         if args.command == "index":
-            nodes, links, _ = load(args.path)
+            result = screened(args.path)
             store = GraphStore(driver, embedder)
             store.ensure_schema()
-            store.upsert(nodes)
-            store.link(links)
-            print(f"indexed {len(nodes)} nodes and {len(links)} links with {embedder.name}")
+            store.upsert(result.nodes)
+            store.link(result.links)
+            print(f"indexed {len(result.nodes)} nodes and {len(result.links)} links with {embedder.name}")
         elif args.command == "search":
             show(HybridRetriever(driver, embedder).search(args.query, args.k, args.modality, args.labels))
         else:

@@ -8,11 +8,10 @@ internals see [`design.md`](design.md).
 **Status (October 2026).** Shared core: built the embedder (P7), the graph
 core (P5), the local-only LLM router (P1) with its data-class gate (P1b),
 tracing (P2) and the licence guard (P8).
-Research Assistant: built the Europeana loader (R8) and collections search
-with its web UI (R9). Course Access Agent: built the document parser (A1) and
+Research Assistant: built the Europeana loader (R8), collections search
+with its web UI (R9) and the rights filter ahead of indexing (R10). Course Access Agent: built the document parser (A1) and
 the deterministic audit (A2); the rest is planned (section 11). Still
-planned: Ollama in compose (P9), review queue (P3), MCP servers (P4), eval harness (P6), reranker (R3), rights filter
-(R10) and the ArcaBC loader (R7, blocked on R0b). Diagrams mark planned parts with dashed lines.
+planned: Ollama in compose (P9), review queue (P3), MCP servers (P4), eval harness (P6), reranker (R3) and the ArcaBC loader (R7, blocked on R0b). Diagrams mark planned parts with dashed lines.
 
 ## 1. System context
 
@@ -85,7 +84,7 @@ in [`AGENTS.md`](../AGENTS.md)):
 | Fetch and process are separate | `fetch-models` and `fetch-europeana` are the only services with internet access; they write files, never the graph |
 | Simple codebase | Small modules in `campus_ai/core/`; one JSONL format feeds the indexer from any source |
 | Evidence for every answer | The retriever returns each hit with its linked nodes (collection, holder, creator) and every item keeps its rights statement and source URL |
-| Data rights | Only openly licensed Europeana items are kept; harvested data is never committed or baked into images. The data-class gate (P1b) makes every router call and every embedding declare its class (P/I/S/R) and refuses R before any model sees it. Planned: the rights and governance filter (R10) that marks restricted items R |
+| Data rights | The rights filter (R10) classes every harvested record P or R before indexing: only CC0, PDM, CC BY and CC BY-SA items without access limits or TK Labels are embedded; class R stays a metadata link in the JSONL. Harvested data is never committed or baked into images. Behind it, the data-class gate (P1b) makes every router call and every embedding declare its class (P/I/S/R) and refuses R before any model sees it |
 | Traceable model calls | Every router call writes a metadata-only JSONL trace record (P2: model, host, data class, tokens, latency, outcome), never prompts or outputs |
 
 ## 3. Runtime: containers and networks
@@ -174,6 +173,7 @@ campus_ai/
     audit.py      deterministic WCAG checks, Markdown/JSON report                       (A2)
   research_assistant/
     europeana.py  Europeana record -> graph records                                     (R8)
+    rights.py     rights filter: data class P or R per record, before indexing          (R10)
     collections.py  search service: cards, citations, similar pictures                  (R9)
     api.py        FastAPI app for collections search                                    (R9)
 web/
@@ -182,10 +182,11 @@ web/
 scripts/
   fetch_models.py      download embedder weights into MODELS_DIR
   embed_bakeoff.py     recall@k per embedder on a JSONL set (decision D7)
-  graph_search.py      index / search / eval against Neo4j
+  graph_search.py      index / search / eval against Neo4j; rights (filter report only)
   fetch_europeana.py   harvest Europeana into data/europeana/<name>/
   audit_document.py    audit one course document, print the report (A2)
 evals/embed/      sample bake-off set
+evals/rights/     rights filter fixture (synthetic Europeana and ArcaBC-shaped records)
 tests/            unittest suites, external services mocked
 ```
 
@@ -258,6 +259,7 @@ sequenceDiagram
     end
     FE->>Disk: items.jsonl (Item, Image, Collection, Institution, Creator + links)
     Op->>EMB: graph_search.py index data/europeana/salmon/items.jsonl
+    EMB->>EMB: rights filter (R10): drop class R, print kept / excluded
     EMB->>NEO: ensure_schema (constraint, vector + fulltext indexes)
     EMB->>EMB: embed per (label, modality) group at 768-d
     EMB->>NEO: MERGE nodes (text, props, vec_fast 128-d, vec_full 768-d)
