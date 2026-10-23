@@ -59,7 +59,7 @@ def apply(document: Document, fixes: list[Fix] = (), alt_texts: list[AltText] = 
             image.alt = "" if alt.decorative else (alt.alt or image.alt)
     inserts: list[tuple[int, Heading]] = []
     for fix in fixes:
-        if fix.value is None:
+        if fix.value is None or fix.action == "ocr":  # ocr: the recognised text is already in the blocks
             continue
         if fix.action == "set-title":
             out.title = str(fix.value)

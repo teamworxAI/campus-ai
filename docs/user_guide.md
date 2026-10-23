@@ -336,7 +336,10 @@ Put the files in a folder (here `samples/`) and mount it read-only as shown.
 The report lists each problem with its WCAG criterion, where it is and what
 will fix it, then what the automatic checks can't judge (such as colour
 contrast and whether existing alt text is accurate). Add `--json` for a
-machine-readable report.
+machine-readable report. Scanned PDF pages (images of text) are read with the
+built-in offline OCR (Tesseract, English and French): the audit lists each as
+a scanned page with the words recovered and the confidence, and a person must
+check the recognised text, which can hold errors.
 
 **Alt text proposals.** For the images the audit flags, the local vision
 model proposes alt text (the `ollama` service must be running and the vision
