@@ -27,6 +27,7 @@ from campus_ai.core.llm import config, generate
 SERVICES = {
     "neo4j": "http://neo4j:7474",
     "api": "http://api:8000/api/health",
+    "course-access": "http://course-access:8000/api/course-access/health",
     "web": "http://web/",
 }
 # A public address that must be unreachable: the graph network is internal.

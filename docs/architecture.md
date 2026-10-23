@@ -10,9 +10,9 @@ core (P5), the local-only LLM router (P1) with its data-class gate (P1b),
 tracing (P2), the licence guard (P8), Ollama in compose (P9) and the
 local-stack smoke test (B1, passed on the demo laptop). Research Assistant:
 built the Europeana loader (R8), collections search with its web UI (R9) and
-the rights filter ahead of indexing (R10). Course Access Agent: built the
-document parser (A1) and the deterministic audit (A2); the rest is planned
-(section 11). Still planned: review queue (P3), MCP servers (P4), eval
+the rights filter ahead of indexing (R10). Course Access Agent: built end to
+end, parser, audit, workers, rebuild and verify (A1-A5) with the review queue
+(P3) in the web app (section 11). Still planned: MCP servers (P4), eval
 harness (P6), reranker (R3) and the ArcaBC loader (R7, blocked on R0b).
 Diagrams mark planned parts with dashed lines.
 
@@ -469,7 +469,7 @@ indexed into the shared graph.
 | A4 | Structure, table and text workers | Built: rules in code for lists, heading levels, slide titles, header rows, layout tables, titles and link text from context; the model only for the document language and for link text the context does not give; every proposal carries confidence, review flag and evidence. `scripts/propose_fixes.py`; corpus run in `evals/course_access/` |
 | A5 | Rebuild accessible DOCX/HTML + verify loop | Built: approved proposals applied to the parsed document, accessible DOCX and HTML written, the DOCX audited again with the same checks, and an accessibility statement with found, applied, waiting, remaining and introduced. `scripts/remediate.py` runs A1-A5 end to end; corpus run in `evals/course_access/` |
 | A6 | Gold set (40 documents) and eval metrics | Planned; needs P6 and the documents |
-| P3 | Review queue (approve / edit / reject) | Planned |
+| P3 | Review queue (approve / edit / reject) | Built: the `course-access` service behind `web` (`/review/`); jobs live in the `course-access-work` volume on this machine; approved proposals and undisputed rule-based ones are applied at rebuild, rejected and waiting ones never |
 
 ### 11.2 Pipeline
 
@@ -489,8 +489,6 @@ flowchart TD
     V -->|issues remain| R
     V --> H[P3 Review queue<br/>diagrams, charts, equations,<br/>low-confidence fixes]
     H --> O[Accessible file + WCAG report<br/>+ conformance statement]
-    classDef planned stroke-dasharray: 5 5
-    class R,W1,W2,W3,W4,B,V,H,O planned
 ```
 
 Principles specific to this product (master plan 3.2):

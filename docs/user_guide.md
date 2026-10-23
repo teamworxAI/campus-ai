@@ -19,9 +19,10 @@ flowchart LR
 ## The web app
 
 ```bash
-docker compose up -d web       # starts neo4j, api and web; first start loads the model (~20 s)
-# open http://localhost:8080   (WEB_PORT in .env changes the port)
-docker compose stop web api    # stop
+docker compose up -d web ollama   # starts neo4j, api, course-access, ollama and web; first start loads the model (~20 s)
+# open http://localhost:8080          collections search (WEB_PORT in .env changes the port)
+# open http://localhost:8080/review/  Course Access review queue
+docker compose stop web api course-access ollama    # stop
 ```
 
 - **Words / By image.** Type a question in any language, or switch to *By
@@ -296,8 +297,22 @@ document and link text that the surrounding text does not give are asked of
 the local model, so the `ollama` service must be running for those. Nothing
 is written back by this step.
 
-**The accessible version.** `remediate.py` runs the whole pipeline: parse,
-audit, propose, apply the approved proposals, rebuild, audit again:
+**The review queue (web).** http://localhost:8080/review/ is the same
+pipeline with a person in the loop. Upload a document (tick *Also propose alt
+text* to run the vision model); the page shows what the audit found and every
+proposal with its evidence and confidence, grouped by worker, with the image
+next to each alt-text proposal. Approve, edit the value first if needed, or
+reject each one; rule-based proposals that need no review are applied unless
+you reject them, and anything marked *needs review* is applied only when you
+approve it. *Build the accessible version* writes the DOCX, HTML, report,
+review sheet and statement, re-audits the DOCX and shows the before/after
+numbers; the files download from the same page. Documents and outputs stay
+in the `course-access-work` volume on this machine (`COURSE_ACCESS_WORK` in
+`.env` points it at a folder); delete a job from the queue to remove them.
+
+**The accessible version (command line).** `remediate.py` runs the whole
+pipeline without the queue: parse, audit, propose, apply the approved
+proposals, rebuild, audit again:
 
 ```bash
 docker compose run --rm -v "$PWD/samples:/samples" test python scripts/remediate.py /samples/week4.pptx --out /samples/out

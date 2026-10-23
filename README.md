@@ -40,13 +40,14 @@ document parser (A1), the WCAG audit and report (A2) and the alt-text worker
 (A3, local vision model), the structure, table and text workers (A4) and the
 rebuild and verify step (A5) are built, so a course document goes in and an
 accessible DOCX and HTML, a report and a statement come out, every proposal
-carrying a confidence and a review flag; the review queue (P3) is next (see
+carrying a confidence and a review flag, and the review queue (P3) where a person
+approves, edits or rejects each one before the rebuild (see
 [architecture](docs/architecture.md#11-course-access-agent)).
 Also built: LLM router over local open-weight models on Ollama (P1), the
 data-class gate and tracing (P1b, P2), Ollama as an offline compose service
 (P9), the local-stack smoke test (B1, passed on the demo laptop) and the
 licence guard (P8). Next: the other model bake-offs (B2-B5), the eval harness
-(P6) and the review queue (P3); OCR for scanned PDFs (A7) is next phase.
+(P6) and the MCP server template (P4); OCR for scanned PDFs (A7) is next phase.
 
 ## Quick start
 
@@ -57,7 +58,7 @@ docker compose run --rm test
 docker compose run --rm fetch-models     # one time, needs internet
 docker compose run --rm embed python scripts/graph_search.py index evals/embed/sample_bakeoff.jsonl
 docker compose run --rm embed python scripts/graph_search.py search "ocean warming"
-docker compose up -d web                 # collections search UI on http://localhost:8080
+docker compose up -d web                 # collections search on http://localhost:8080, review queue on /review/
 docker compose run --rm fetch-ollama     # one time, needs internet: local LLMs for the router
 docker compose up -d ollama
 docker compose run --rm smoke            # local-stack smoke test, report in evals/smoke/

@@ -5,7 +5,8 @@
 # docker compose run --rm fetch-europeana  Europeana items into DATA_DIR (needs network)
 # docker compose run --rm fetch-course-docs  open course documents for the A6 gold set (needs network)
 # docker compose run --rm embed ...       local models + Neo4j, no internet access
-# docker compose up -d web                collections search UI on http://localhost:8080
+# docker compose up -d web                collections search UI on http://localhost:8080,
+#                                         Course Access review queue on http://localhost:8080/review/
 # docker compose up -d ollama             local LLMs for the router (after fetch-ollama)
 # docker compose run --rm smoke           local-stack smoke test (B1), report in evals/smoke/
 #
@@ -84,6 +85,27 @@ services:
       start_period: 120s
       retries: 6
 
+  # Course Access review queue (P3): audit, proposals and the accessible rebuild for
+  # uploaded course documents, which stay in the work volume on this machine. CPU-only
+  # image; language and vision models come from `ollama` through the router.
+  course-access:
+    image: campus-ai:test
+    pull_policy: never
+    restart: unless-stopped
+    networks: [graph]
+    environment:
+      <<: *llm-env
+      WORK_DIR: /app/work
+    volumes:
+      - ${COURSE_ACCESS_WORK:-course-access-work}:/app/work
+    command: ["uvicorn", "campus_ai.course_access.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/course-access/health', timeout=5)"]
+      interval: 10s
+      timeout: 10s
+      start_period: 30s
+      retries: 6
+
   # Static UI + reverse proxy. The only service with a published port; it holds
   # no model or data, and joins `edge` because an internal network can't publish.
   web:
@@ -92,6 +114,8 @@ services:
     networks: [graph, edge]
     depends_on:
       api:
+        condition: service_healthy
+      course-access:
         condition: service_healthy
     ports:
       - "127.0.0.1:${WEB_PORT:-8080}:80"
@@ -209,3 +233,4 @@ networks:
 
 volumes:
   neo4j-data:
+  course-access-work:
