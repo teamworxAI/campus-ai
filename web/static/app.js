@@ -350,7 +350,48 @@ function callRow(c) {
       h("h3", {}, h("a", { href: c.url, rel: "noopener", target: "_blank", text: `${c.identifier}: ${c.title}` })),
       h("p", { class: "meta", text: [c.call_title || c.call, c.status, when].filter(Boolean).join(" · ") }),
       (c.clusters || []).length || (c.actions || []).length ? h("p", { class: "muted", text: [...(c.clusters || []), ...(c.actions || [])].join(" · ") }) : null),
-    h("span", { class: "badges" }, h("span", { class: "badge eu", text: c.status })));
+    h("div", { class: "row" },
+      h("span", { class: "badge eu", text: c.status }),
+      h("a", { class: "btn", href: `#/brief?call=${encodeURIComponent(c.id)}`, text: "Draft a consortium" })));
+}
+
+// Journey 3: the partner shortlist for a call, the eligibility check and a citation-checked brief for review.
+async function renderBrief(params) {
+  const callId = params.get("call"), q = params.get("q") || "";
+  document.title = "Consortium brief · Research Assistant";
+  const input = h("input", { id: "q", class: "q", type: "search", name: "q", value: q, maxlength: "2000",
+    placeholder: "or describe the project idea", autocomplete: "off" });
+  const form = h("form", { class: "search", role: "search", onsubmit: (e) => {
+    e.preventDefault();
+    if (input.value.trim()) location.hash = "#/brief?q=" + encodeURIComponent(input.value.trim());
+  } }, h("label", { for: "q", class: "sr", text: "Project idea" }), input, h("button", { type: "submit", class: "btn primary", text: "Draft" }));
+  const results = h("section", { id: "results", class: "results", "aria-live": "polite" });
+  app.replaceChildren(
+    h("section", { class: "hero" }, h("div", { class: "wrap" }, h("h1", { text: "Draft a consortium for a call" }), form,
+      h("p", { class: "muted", text: "The shortlist and the eligibility check are rules over public records. The brief is a draft from the local model; every sentence that cites an id outside the evidence is dropped, and the research office approves before any outreach." }))),
+    h("main", { id: "main", class: "wrap layout" }, results));
+  if (!callId && !q) { results.append(h("div", { class: "state", text: "Pick a call on the Horizon calls page, or describe the idea." })); return; }
+  results.append(h("div", { class: "state", role: "status", text: "Finding partners, checking the rules and drafting the brief (the local model can take a few minutes)…" }));
+  try {
+    const data = await api("/api/brief", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(callId ? { call_id: callId } : { query: q }) });
+    const el = data.eligibility;
+    results.replaceChildren(
+      data.call ? h("div", { class: "head-row" }, h("h2", {}, h("a", { href: data.call.url, rel: "noopener", target: "_blank", text: `${data.call.identifier}: ${data.call.title}` }))) : h("h2", { text: data.query }),
+      h("section", { class: "panel" }, h("h2", { text: el.ok ? "Consortium rule: met" : "Consortium rule: not met yet" }),
+        h("p", { text: `${el.action || "no action type given"}: ${el.rule}.` }),
+        h("p", { text: "Countries: " + el.countries.map(([c, kind]) => `${c} (${kind})`).join(", ") }),
+        ...el.problems.map((p) => h("p", { class: "muted", text: p }))),
+      h("h2", { text: "Shortlist" }),
+      h("ol", { class: "list" }, data.partners.map(partnerRow)),
+      h("section", { class: "panel" }, h("h2", { text: "Brief for review" }),
+        data.brief.error ? h("p", { class: "muted", text: "The model did not answer: " + data.brief.error }) : h("pre", { class: "cite-text", text: data.brief.brief }),
+        data.brief.dropped && data.brief.dropped.length ? h("p", { class: "muted", text: `${data.brief.dropped.length} sentence(s) dropped for citing ids outside the evidence.` }) : null,
+        data.brief.uncited && data.brief.uncited.length ? h("p", { class: "muted", text: `${data.brief.uncited.length} sentence(s) cite nothing; check them.` }) : null,
+        h("p", { class: "muted", text: data.brief.model ? `Model: ${data.brief.model}. Nothing is sent: this is a draft for the research office.` : "Nothing is sent: this is a draft for the research office." })));
+  } catch (error) {
+    results.replaceChildren(h("div", { class: "state", role: "alert", text: "Failed: " + error.message }));
+  }
 }
 
 async function renderJourney(kind, params) {
@@ -399,10 +440,11 @@ function setNav(kind) {
 
 function route() {
   const hash = location.hash || "#/";
-  const journey = hash.match(/^#\/(experts|partners|calls)(\?.*)?$/);
+  const journey = hash.match(/^#\/(experts|partners|calls|brief)(\?.*)?$/);
   if (journey) {
-    setNav(journey[1]);
-    return renderJourney(journey[1], new URLSearchParams((journey[2] || "").slice(1)));
+    setNav(journey[1] === "brief" ? "calls" : journey[1]);
+    const params = new URLSearchParams((journey[2] || "").slice(1));
+    return journey[1] === "brief" ? renderBrief(params) : renderJourney(journey[1], params);
   }
   setNav("collections");
   if (hash.startsWith("#/item/")) {

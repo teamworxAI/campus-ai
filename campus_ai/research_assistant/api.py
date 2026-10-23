@@ -25,6 +25,7 @@ from fastapi.responses import FileResponse
 
 from campus_ai.research_assistant import collections
 from campus_ai.research_assistant.collections import CollectionsSearch, picture_match
+from campus_ai.research_assistant.consortium import brief, eligibility
 from campus_ai.research_assistant.matching import COUNTRY_SETS, ResearchSearch
 
 MAX_UPLOAD = 10 * 1024 * 1024
@@ -90,6 +91,32 @@ def create_app(service: CollectionsSearch | None = None, research: ResearchSearc
         with lock:
             found = graph().calls(q, k, status)
         return {"query": q, "status": status, "calls": found}
+
+    @app.post("/api/brief")
+    def consortium_brief(body: dict) -> dict:
+        """Journey 3: partners for a call (by id) or an idea (text), the eligibility check and a citation-checked brief."""
+        query, call_id = (body.get("query") or "").strip(), body.get("call_id")
+        countries = body.get("countries") or "associated"
+        if countries not in COUNTRY_SETS:
+            raise HTTPException(422, f"countries must be one of {', '.join(COUNTRY_SETS)}")
+        k = max(1, min(int(body.get("k") or 6), 12))
+        home = {"name": body.get("home_name") or "Simon Fraser University", "country": (body.get("home_country") or "CA").upper()}
+        with lock:
+            call = graph().call(call_id) if call_id else None
+            if call_id and not call:
+                raise HTTPException(404, "no such call topic")
+            text = query or (f"{call['title']}. {call.get('call_title') or ''}" if call else "")
+            if not text:
+                raise HTTPException(422, "give a call_id or a query")
+            found = graph().partners(text, k, countries, home=home["country"])
+        chosen = [p for p in found if not body.get("members") or p["id"] in body["members"]]
+        actions = (call or {}).get("actions") or []
+        check = eligibility(chosen + [{"country": home["country"]}], actions[0] if actions else "", (call or {}).get("parts") or [])
+        try:
+            draft = brief(call, chosen, home)
+        except Exception as error:  # the model being down is reported, not fatal: the shortlist and check stand
+            draft = {"brief": "", "error": f"{type(error).__name__}: {str(error)[:200]}", "needs_review": True}
+        return {"query": text, "call": call, "home": home, "partners": chosen, "eligibility": check, "brief": draft}
 
     @app.get("/api/calls/for/{researcher_id:path}")
     def calls_for(researcher_id: str, k: int = Query(10, ge=1, le=30), status: str = Query("open")) -> dict:

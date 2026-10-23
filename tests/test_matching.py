@@ -140,6 +140,10 @@ class FakeResearch:
     def calls_for(self, researcher_id, k=10, status="open"):
         return {"researcher": {"id": researcher_id, "name": "Ryan Allen"} if researcher_id == "openalex:A1" else None, "calls": self.calls("", k, status)}
 
+    def call(self, call_id):
+        return {"id": call_id, "identifier": "HORIZON-X", "title": "Smoke", "call_title": "Health", "status": "Open", "deadlines": [],
+                "actions": ["HORIZON-RIA"], "parts": ["HORIZON.2.1"]} if call_id == "topic:A" else None
+
     def counts(self):
         return {"Researcher": 1}
 
@@ -161,6 +165,31 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(self.client.get("/api/calls/for/openalex:nobody").status_code, 404)
         self.assertEqual(self.client.get("/api/experts", params={"q": ""}).status_code, 422)
         self.assertEqual(self.client.get("/api/health").json()["graph"], {"Researcher": 1})
+
+    def test_brief_endpoint(self):
+        from campus_ai.core.llm import LLMResponse
+        from campus_ai.research_assistant import consortium
+
+        answer = LLMResponse("## Fit to the call\nFits [topic:A].\n## Proposed partners\nWIEN [cordis:org:1]. Ghost [cordis:org:9].\n"
+                             "## Gaps and next steps\nMore partners.", "m", 1, 1, "stop")
+        with mock.patch.object(consortium, "generate", return_value=answer):
+            r = self.client.post("/api/brief", json={"call_id": "topic:A"})
+        self.assertEqual(r.status_code, 200, r.text)
+        body = r.json()
+        self.assertEqual(body["query"], "Smoke. Health")
+        self.assertEqual([p["name"] for p in body["partners"]], ["WIEN"])
+        self.assertEqual(body["eligibility"]["action"], "HORIZON-RIA")
+        self.assertFalse(body["eligibility"]["ok"])  # AT + CA only: two countries
+        self.assertIn("only 2 different eligible countries", body["eligibility"]["problems"][0])
+        self.assertNotIn("cordis:org:9", body["brief"]["brief"])
+        self.assertIn("WIEN [cordis:org:1].", body["brief"]["brief"])
+        self.assertTrue(body["brief"]["needs_review"])
+        self.assertEqual(self.client.post("/api/brief", json={"call_id": "topic:nope"}).status_code, 404)
+        self.assertEqual(self.client.post("/api/brief", json={}).status_code, 422)
+        with mock.patch.object(consortium, "generate", side_effect=ConnectionError("No Ollama")):
+            down = self.client.post("/api/brief", json={"query": "smoke"}).json()
+        self.assertIn("ConnectionError", down["brief"]["error"])
+        self.assertEqual([p["name"] for p in down["partners"]], ["WIEN"])
 
 
 if __name__ == "__main__":

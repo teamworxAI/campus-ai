@@ -136,6 +136,14 @@ class ResearchSearch:
                 break
         return out
 
+    def call(self, call_id: str) -> dict | None:
+        rows = self.run(
+            "MATCH (t:Entity {id: $id}) OPTIONAL MATCH (t)-[:PART_OF]->(c:Entity) "
+            "RETURN t.id AS id, t.identifier AS identifier, t.title AS title, t.call AS call, t.call_title AS call_title, "
+            "t.status AS status, t.opening AS opening, t.deadlines AS deadlines, t.url AS url, t.actions AS actions, "
+            "t.parts AS parts, collect(c.name) AS clusters", id=call_id)
+        return rows[0] if rows and rows[0].get("identifier") else None
+
     def calls_for(self, researcher_id: str, k: int = 10, status: str = "open") -> dict:
         rows = self.run("MATCH (r:Entity {id: $id}) RETURN r.name AS name, r.text AS text", id=researcher_id)
         if not rows:

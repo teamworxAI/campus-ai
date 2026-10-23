@@ -38,6 +38,18 @@ dates, deadlines and the portal page. Everything is retrieval and graph
 arithmetic over public records; no model writes any of it, and every item
 links to its source.
 
+**Draft a consortium.** From a call on the Horizon calls page, *Draft a
+consortium* builds the partner shortlist for that call, applies the Horizon
+Europe consortium rule (three independent entities in three different
+member or associated states with at least one member state for RIA and IA;
+one entity for CSA and single-beneficiary actions; Canada counts as
+associated in the Pillar II clusters only) and asks the local model for a
+short brief. The brief must cite the ids of the partners and projects it
+mentions; every sentence that cites anything else is dropped before you see
+it, and sentences that cite nothing are counted so you can check them. It
+is a draft for the research office, and nothing is sent from here. On the
+laptop the model takes a few minutes; the `ollama` service must be running.
+
 - **Words / By image.** Type a question in any language, or switch to *By
   image* and drop a picture to find similar ones. Image search only knows the
   indexed collections, so it always has *some* nearest pictures. The page shows
