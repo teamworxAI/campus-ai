@@ -443,7 +443,7 @@ Each card is sized for one cloud session and one PR.
 | A7 | OCR for scanned (image-only) PDFs with an open-source offline engine (e.g. Tesseract) | A1 | Next phase |
 | R0 | REE integration spec with RIO: fields, access method, refresh, consent | - | Waiting: email drafted Oct 22, to be sent by the team |
 | R0b | Data agreement with BC ELN for ArcaBC (arcabc.ca): permission, interface, rights handling, pilot collection. Until signed, no code or session touches arcabc.ca | - | Waiting: email drafted Oct 22, to be sent by the team |
-| R1 | OpenAlex loader (SFU authors, topics); REE loader once R0 is agreed | P5, R0 | To do |
+| R1 | OpenAlex loader (SFU authors, topics); REE loader once R0 is agreed. `fetch-openalex` harvests an institution's recent works (CC0, class P) into `DATA_DIR/openalex/<name>/`; `research_assistant/openalex.py` maps them to Researcher, Publication, Topic, SDG and Institution nodes with AUTHORED, ABOUT, WORKS_ON, SUPPORTS, CONTRIBUTES_TO, AFFILIATED_WITH and COAUTHORED_WITH links (schema 4.2) | P5, R0 | OpenAlex part built; SFU graph indexed on the laptop and probed (`evals/research_assistant/`). REE part waits for R0 |
 | R2 | CORDIS loader (projects, participants) + calls loader | P5 | To do |
 | R3 | Graph schema + indexing for Researcher/Project/Call; reranker step; every vector index records the embedding model id | R1, R2 | To do |
 | R4 | Router + call analyst + partner scout + expert search (journey 4) | R3, P1 | To do |
