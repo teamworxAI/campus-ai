@@ -41,8 +41,9 @@ def yes_probability(logits: np.ndarray) -> np.ndarray:
 class Reranker:
     """Scores documents against a query, 0..1 (higher is a better match).
 
-    `max_length` caps each prompt in tokens (the document is cut, never the
-    prompt's frame); `batch_size` pairs go through the model at once.
+    `max_length` caps each prompt in tokens (the query to a third of it, the
+    document to the rest; never the prompt's frame); `batch_size` pairs go
+    through the model at once.
     """
 
     def __init__(self, name: str = DEFAULT_RERANKER, instruction: str = INSTRUCTION, batch_size: int = 8,
@@ -80,12 +81,22 @@ class Reranker:
         if not documents:
             return []
         model, tokenizer = self.load()
-        prefix = tokenizer.encode(PREFIX, add_special_tokens=False)
-        suffix = tokenizer.encode(SUFFIX, add_special_tokens=False)
+
+        def encode(text: str) -> list[int]:
+            return tokenizer.encode(text, add_special_tokens=False)
+
+        # PREFIX + pair_text(...) + SUFFIX, built from pieces so that a long query is cut to a third of
+        # the budget and each document to what is left, never the prompt's frame.
+        # The newline goes with the query: the tokenizer merges it with a final "?" or "." (as in the card's).
+        head = encode(f"{PREFIX}<Instruct>: {self.instruction}\n<Query>:")
+        asked = encode(f" {query}\n")
+        if len(asked) > self.max_length // 3:
+            asked = asked[:self.max_length // 3 - 1] + encode("\n")
+        middle, tail = encode("<Document>:"), encode(SUFFIX)
+        room = self.max_length - len(head) - len(asked) - len(middle) - len(tail)
+        frame = head + asked + middle
+        ids = [frame + encode(f" {doc}")[:room] + tail for doc in documents]
         no, yes = tokenizer.convert_tokens_to_ids("no"), tokenizer.convert_tokens_to_ids("yes")
-        bodies = tokenizer([pair_text(self.instruction, query, doc) for doc in documents], add_special_tokens=False,
-                           truncation=True, max_length=self.max_length - len(prefix) - len(suffix))["input_ids"]
-        ids = [prefix + body + suffix for body in bodies]
         order = sorted(range(len(ids)), key=lambda i: len(ids[i]))  # similar lengths per batch: less padding
         scores = np.zeros(len(ids))
         try:
@@ -98,7 +109,9 @@ class Reranker:
             for start in range(0, len(order), self.batch_size):
                 chunk = order[start:start + self.batch_size]
                 batch = tokenizer.pad({"input_ids": [ids[i] for i in chunk]}, padding=True, return_tensors="pt")
-                last = model(**batch.to(model.device)).logits[:, -1, :]  # left padding: the last token is real
+                # Left padding: the last token is real. Only its logits are computed: the full
+                # (batch, length, vocabulary) tensor would not fit a 4 GB GPU.
+                last = model(**batch.to(model.device), logits_to_keep=1).logits[:, -1, :]
                 pair = last[:, [no, yes]]
                 pair = pair.float().cpu().numpy() if hasattr(pair, "cpu") else np.asarray(pair)
                 scores[chunk] = yes_probability(pair)

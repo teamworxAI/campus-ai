@@ -21,18 +21,14 @@ class FakeTokenizer:
 
     def __init__(self):
         self.vocab = {"no": 0, "yes": 1, "<pad>": 2}
-        self.texts = []
-        self.max_length = None
+        self.seen = []
 
     def encode(self, text, add_special_tokens=True):
+        self.seen.append(text)
         return [self.vocab.setdefault(word, len(self.vocab)) for word in text.split()]
 
     def convert_tokens_to_ids(self, token):
         return self.vocab[token]
-
-    def __call__(self, texts, add_special_tokens=True, truncation=False, max_length=None):
-        self.texts, self.max_length = list(texts), max_length
-        return {"input_ids": [self.encode(text)[:max_length] for text in texts]}
 
     def pad(self, encoded, padding=True, return_tensors=None):
         rows = encoded["input_ids"]
@@ -49,7 +45,8 @@ class FakeModel:
         self.tokenizer = tokenizer
         self.batches = []
 
-    def __call__(self, input_ids):
+    def __call__(self, input_ids, logits_to_keep=0):
+        assert logits_to_keep == 1, "only the last token's logits are needed"
         self.batches.append(input_ids)
         salmon = self.tokenizer.vocab.get("salmon", -1)
         logits = np.zeros((*input_ids.shape, len(self.tokenizer.vocab)), dtype=np.float32)
@@ -70,18 +67,29 @@ class RerankerTests(unittest.TestCase):
             Reranker("bge-reranker")
 
     def test_prompt_format_follows_the_model_card(self):
-        reranker = fake_reranker(instruction="Find projects", max_length=400)
-        reranker.score("salmon rivers", ["a salmon study", "wildfire smoke"], data_class="P")
-        tokenizer, model = reranker._tokenizer, reranker._model
-        self.assertEqual(tokenizer.texts[0], "<Instruct>: Find projects\n<Query>: salmon rivers\n<Document>: a salmon study")
+        reranker = fake_reranker(instruction="Find projects")
+        docs = ["a salmon study", "wildfire smoke"]
+        reranker.score("salmon rivers", docs, data_class="P")
+        tokenizer, (batch,) = reranker._tokenizer, reranker._model.batches
         self.assertEqual(pair_text("i", "q", "d"), "<Instruct>: i\n<Query>: q\n<Document>: d")
-        prefix, suffix = tokenizer.encode(PREFIX), tokenizer.encode(SUFFIX)
-        self.assertEqual(tokenizer.max_length, 400 - len(prefix) - len(suffix))  # the document is cut, never the frame
-        for row in model.batches[0]:
-            real = [t for t in row.tolist() if t != 2]
-            self.assertEqual(real[:len(prefix)], prefix)
-            self.assertEqual(real[-len(suffix):], suffix)
-            self.assertEqual(row.tolist()[-len(suffix):], suffix)  # padded on the left
+        # as the model card builds it: prefix tokens + pair tokens + suffix tokens
+        expected = [tokenizer.encode(PREFIX) + tokenizer.encode(pair_text("Find projects", "salmon rivers", doc))
+                    + tokenizer.encode(SUFFIX) for doc in docs]
+        rows = [[t for t in row.tolist() if t != 2] for row in batch]
+        self.assertEqual(sorted(rows, key=len), sorted(expected, key=len))
+        suffix = tokenizer.encode(SUFFIX)
+        self.assertTrue(all(row.tolist()[-len(suffix):] == suffix for row in batch))  # padded on the left
+
+    def test_long_query_and_documents_are_cut_never_the_frame(self):
+        reranker = fake_reranker(max_length=150)
+        reranker.score(" ".join(f"q{i}" for i in range(200)), [" ".join(f"d{i}" for i in range(200))], data_class="P")
+        tokenizer, ((row,),) = reranker._tokenizer, reranker._model.batches
+        words = {v: k for k, v in tokenizer.vocab.items()}
+        text = [words[t] for t in row.tolist()]
+        self.assertEqual(len(text), 150)  # the document fills what the query leaves
+        self.assertEqual(sum(w.startswith("q") and w[1:].isdigit() for w in text), 49)  # a third of 150, less the newline
+        self.assertEqual(text[-len(tokenizer.encode(SUFFIX)):], SUFFIX.split())
+        self.assertIn("d0", text)
 
     def test_scores_are_yes_probabilities_in_input_order(self):
         reranker = fake_reranker(batch_size=2)
@@ -97,7 +105,7 @@ class RerankerTests(unittest.TestCase):
         reranker = fake_reranker()
         with self.assertRaises(RestrictedDataError):
             reranker.score("q", ["an access-limited item"], data_class="R")
-        self.assertEqual((reranker._tokenizer.texts, reranker._model.batches), ([], []))
+        self.assertEqual((reranker._tokenizer.seen, reranker._model.batches), ([], []))
         with self.assertRaises(TypeError):
             reranker.score("q", ["no class declared"])
 
