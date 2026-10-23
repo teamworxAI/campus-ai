@@ -67,6 +67,8 @@ docker compose run --rm embed python scripts/graph_search.py index evals/embed/s
 docker compose run --rm embed python scripts/graph_search.py search "ocean warming"
 docker compose run --rm fetch-europeana --rows 300   # needs EUROPEANA_API_KEY
 docker compose run --rm fetch-course-docs           # open course documents for the A6 gold set
+docker compose run --rm fetch-openalex              # an institution's researchers and works (OpenAlex, CC0)
+docker compose run --rm embed python scripts/graph_search.py index data/openalex/sfu/records.jsonl
 docker compose run --rm embed python scripts/graph_search.py index data/europeana/salmon/items.jsonl
 ```
 

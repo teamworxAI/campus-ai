@@ -101,6 +101,31 @@ sample of titles in `items.jsonl` before indexing.
 Only items under CC0, the Public Domain Mark, CC BY or CC BY-SA are kept.
 Re-running reuses thumbnails already downloaded.
 
+## 1b. Harvest researchers from OpenAlex
+
+For expert search (Research Assistant journey 4), harvest an institution's
+recent works from OpenAlex, open scholarly metadata under CC0:
+
+```bash
+docker compose run --rm fetch-openalex                                  # SFU, since 2021, the 3000 most-cited works
+docker compose run --rm fetch-openalex --ror 03rmrcq20 --name ubc --max-works 500
+docker compose run --rm embed python scripts/graph_search.py index data/openalex/sfu/records.jsonl
+docker compose run --rm embed python scripts/graph_search.py search "wildfire smoke and health" --label Researcher
+```
+
+`DATA_DIR/openalex/<name>/` gets `works.jsonl` (the trimmed API records) and
+`records.jsonl`: one Researcher per author affiliated with the institution
+(name, topics, recent titles: public facts from their publications, nothing
+inferred about the person), one Publication per work with its abstract, the
+OpenAlex Topics and UN SDG tags, the Institution, and the links between
+them, including co-authorship counts. Papers with more than 30 authors are
+left out. OpenAlex meters its API: without a key, one small daily budget is
+shared by everyone behind your IP address (about one page of 200 works);
+put a free key from https://openalex.org/settings/api in `OPENALEX_API_KEY`
+in `.env` for a budget of your own. If the budget runs out mid-harvest, the
+works collected so far are kept and mapped. REE's own profile fields (research statement, accepting students, SDG
+tags) join the graph once SFU's Research Intelligence team agrees (R0).
+
 ## 2. Index
 
 ```bash

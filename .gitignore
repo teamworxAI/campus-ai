@@ -223,6 +223,7 @@ __marimo__/
 data/private/
 data/europeana/
 data/course_access/
+data/openalex/
 evals/**/raw/
 
 # Local model weights (MODELS_DIR default)

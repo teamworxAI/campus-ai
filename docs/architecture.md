@@ -365,9 +365,23 @@ erDiagram
 | `entity_vec` | vector, cosine, 128-d, filterable by `kind` | `Entity.vec_fast` | Candidate search, optionally within labels |
 | `entity_text` | fulltext (Lucene) | `Entity.text` | Keyword candidates |
 
-The planned research graph (section 4.2 of the master plan: Researcher,
-Publication, Project, Call, Topic) uses the same `Entity` convention, so one
-retriever searches people, projects and collections together.
+The research graph (section 4.2 of the master plan) uses the same `Entity`
+convention, so one retriever searches people, projects and collections
+together. R1 fills its first part from OpenAlex (`fetch-openalex`, then
+`graph_search.py index data/openalex/<name>/records.jsonl`):
+
+| Node | id | text (embedded) | Links out |
+|---|---|---|---|
+| `Researcher` | `openalex:A…` | name, institution, top topics, recent titles | `AFFILIATED_WITH` Institution, `AUTHORED` Publication, `WORKS_ON {count}` Topic, `CONTRIBUTES_TO {count}` SDG, `COAUTHORED_WITH {count}` Researcher |
+| `Publication` | `openalex:W…` | title + abstract | `ABOUT {score}` Topic, `SUPPORTS {score}` SDG |
+| `Topic` | `openalex:T…` | name (subfield, field) | |
+| `SDG` | `openalex:sdg:n` | UN goal name | |
+| `Institution` | ROR URL | name | |
+
+Only authors affiliated with the harvested institution become researchers;
+their text holds public facts from their publications and nothing inferred
+about the person. Project and Call nodes come with R2; REE profile fields
+with R0.
 
 ## 7. Key decisions
 
