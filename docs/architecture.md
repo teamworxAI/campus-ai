@@ -380,8 +380,22 @@ together. R1 fills its first part from OpenAlex (`fetch-openalex`, then
 
 Only authors affiliated with the harvested institution become researchers;
 their text holds public facts from their publications and nothing inferred
-about the person. Project and Call nodes come with R2; REE profile fields
-with R0.
+about the person. REE profile fields come with R0.
+
+R2 adds the EU side from CORDIS and the Funding & Tenders portal
+(`fetch-cordis`, then `graph_search.py index data/cordis/horizon/records.jsonl`):
+
+| Node | id | text (embedded) | Links out |
+|---|---|---|---|
+| `Project` | `cordis:<id>` | acronym, title, objective | `ABOUT` Topic, `UNDER_TOPIC` CallTopic, `FUNDED_UNDER` Cluster |
+| `Organization` | `cordis:org:<id>` | name, country, type, fields of its projects, recent acronyms | `PARTICIPATED_IN {role, ec_contribution}` Project |
+| `Topic` (EuroSciVoc) | `esv:<code>` | term and path | |
+| `CallTopic` | `topic:<identifier>` | identifier, title, call, keywords | `PART_OF` Cluster |
+| `Cluster` | `horizon:<part>` | programme part name | |
+
+So a researcher's topics, a project's subject terms and an open call's
+keywords all sit in one vector space, which is what partner and call
+matching (R4) searches.
 
 ## 7. Key decisions
 

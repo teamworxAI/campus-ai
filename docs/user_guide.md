@@ -125,6 +125,29 @@ in `.env` for a budget of your own. If the budget runs out mid-harvest, the
 works collected so far are kept and mapped. REE's own profile fields (research statement, accepting students, SDG
 tags) join the graph once SFU's Research Intelligence team agrees (R0).
 
+## 1c. Harvest Horizon Europe projects and calls
+
+For partner and call matching (journeys 1 to 3), download the EU side: every
+Horizon Europe project with its participants (CORDIS, the Publications
+Office's monthly bundle) and every call topic with its status and deadlines
+(the Funding & Tenders portal's daily reference file). Both are EU open data
+under CC BY 4.0 and need no key; together about 170 MB.
+
+```bash
+docker compose run --rm fetch-cordis                        # all 24k projects, 36k organisations
+docker compose run --rm fetch-cordis --max-projects 3000    # the most recently started 3000, for a quick graph
+docker compose run --rm embed python scripts/graph_search.py index data/cordis/horizon/records.jsonl
+docker compose run --rm embed python scripts/graph_search.py search "wildfire smoke and health" --label Organization
+```
+
+`records.jsonl` holds one Project per funded project (acronym, title,
+objective, dates, budget, participating countries), one Organization per
+participant (name, country, type, the subject terms of its projects, its
+recent project acronyms), the EuroSciVoc Topics, the Horizon Europe
+programme parts (Clusters) and the CallTopics (open, forthcoming and closed,
+with deadlines and keywords), with the links between them. The downloaded
+files are kept; `--force` fetches them again.
+
 ## 2. Index
 
 ```bash

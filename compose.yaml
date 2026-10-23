@@ -5,6 +5,7 @@
 # docker compose run --rm fetch-europeana  Europeana items into DATA_DIR (needs network)
 # docker compose run --rm fetch-course-docs  open course documents for the A6 gold set (needs network)
 # docker compose run --rm fetch-openalex    an institution's researchers and works from OpenAlex (needs network)
+# docker compose run --rm fetch-cordis      Horizon Europe projects and call topics (needs network)
 # docker compose run --rm embed ...       local models + Neo4j, no internet access
 # docker compose up -d web                collections search UI on http://localhost:8080
 # docker compose up -d ollama             local LLMs for the router (after fetch-ollama)
@@ -190,6 +191,17 @@ services:
     volumes:
       - ${DATA_DIR:-./data}:/app/data
     entrypoint: ["python", "scripts/fetch_openalex.py"]
+    command: []
+
+  # One-time download of Horizon Europe projects (CORDIS) and call topics (Funding &
+  # Tenders), EU open data, into DATA_DIR/cordis/horizon for partner and call matching.
+  fetch-cordis:
+    image: campus-ai:test
+    pull_policy: never
+    profiles: [fetch]
+    volumes:
+      - ${DATA_DIR:-./data}:/app/data
+    entrypoint: ["python", "scripts/fetch_cordis.py"]
     command: []
 
   fetch-europeana:

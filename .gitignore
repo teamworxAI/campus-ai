@@ -224,6 +224,7 @@ data/private/
 data/europeana/
 data/course_access/
 data/openalex/
+data/cordis/
 evals/**/raw/
 
 # Local model weights (MODELS_DIR default)
