@@ -32,6 +32,21 @@ class JsonlLoadTests(unittest.TestCase):
         self.assertEqual([(l.src, l.dst) for l in links], [("a", "b")])
         self.assertEqual(queries, [{"query": "q", "relevant": ["a"]}])
 
+    def test_label_filter_keeps_those_nodes_and_their_links(self):
+        from unittest import mock
+
+        from campus_ai.core.graph import Link, Node
+        from campus_ai.research_assistant.rights import Screened
+
+        graph_search = load_module("graph_search")
+        result = Screened([Node("t", "CallTopic", "x"), Node("p", "Project", "y"), Node("c", "Cluster", "z")],
+                          [Link("t", "PART_OF", "c"), Link("p", "UNDER_TOPIC", "t"), Link("p", "FUNDED_UNDER", "c")])
+        with mock.patch("sys.stdout"):
+            kept = graph_search.only(result, ["CallTopic"])
+        self.assertEqual([n.id for n in kept.nodes], ["t"])
+        self.assertEqual([l.type for l in kept.links], ["PART_OF", "UNDER_TOPIC"])
+        self.assertIs(graph_search.only(result, None), result)
+
 
 if __name__ == "__main__":
     unittest.main()

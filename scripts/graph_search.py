@@ -71,6 +71,17 @@ def screened(path: Path) -> Screened:
     return result
 
 
+def only(result: Screened, labels: list[str] | None) -> Screened:
+    """The nodes with one of `labels` and the links touching them (everything when no labels are given)."""
+    if not labels:
+        return result
+    nodes = [node for node in result.nodes if node.label in labels]
+    ids = {node.id for node in nodes}
+    links = [link for link in result.links if link.src in ids or link.dst in ids]
+    print(f"--label {', '.join(labels)}: {len(nodes)} nodes and {len(links)} links of {len(result.nodes)} and {len(result.links)}")
+    return Screened(nodes, links, result.excluded)
+
+
 def show(hits) -> None:
     for rank, hit in enumerate(hits, start=1):
         label = next((label for label in hit.labels if label != "Entity"), "Entity")
@@ -84,7 +95,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--backend", default=DEFAULT_BACKEND, choices=list(BACKENDS))
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("index", help="embed and write items and links").add_argument("path", type=Path)
+    index = commands.add_parser("index", help="embed and write items and links (MERGE by id: existing nodes are updated)")
+    index.add_argument("path", type=Path)
+    index.add_argument("--label", action="append", dest="labels",
+                       help="index only nodes with this label, and the links that touch them (e.g. --label CallTopic)")
     commands.add_parser("rights", help="rights filter report only, nothing embedded").add_argument("path", type=Path)
     search = commands.add_parser("search", help="hybrid search")
     search.add_argument("query")
@@ -102,7 +116,7 @@ def main() -> None:
     embedder = get_embedder(args.backend)
     with connect() as driver:
         if args.command == "index":
-            result = screened(args.path)
+            result = only(screened(args.path), args.labels)
             store = GraphStore(driver, embedder)
             store.ensure_schema()
             store.upsert(result.nodes)

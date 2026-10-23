@@ -7,7 +7,8 @@ import zipfile
 from pathlib import Path
 from unittest import mock
 
-from campus_ai.research_assistant.cordis import call_topic, date, number, to_records
+from campus_ai.research_assistant.cordis import (MAX_DESCRIPTION, call_topic, date, description_sections, html_text, number,
+                                                 to_records, topic_detail_props)
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("fetch_cordis", ROOT / "scripts" / "fetch_cordis.py")
@@ -111,12 +112,74 @@ class MappingTests(unittest.TestCase):
         json.dumps(records)
 
 
+DETAIL = {
+    "identifier": "HORIZON-CL1-2026-05", "title": "Future smoke",
+    "description": ('<p class="topicdescriptionkind">Expected Outcome:</p><p>Projects are expected to contribute to:</p>'
+                    '<ul><li data-list="bullet"><span class="ql-ui"></span>Better <strong>exposure</strong> models &amp; data.</li>'
+                    '<li>Health systems ready for smoke.</li></ul>'
+                    '<p class="topicdescriptionkind">Scope:</p><p>Proposals should   bring clinicians and SMEs together.</p>'
+                    '<p class="topicdescriptionkind">null</p><div><p>The budget is EUR 9 million.</p></div>'),
+    "actions": [{"types": [{"typeOfAction": "HORIZON-RIA HORIZON Research and Innovation Actions"}]}],
+    "budgetOverviewJSONItem": {"budgetTopicActionMap": {"1": [
+        {"action": "HORIZON-CL1-2026-05 - HORIZON-RIA HORIZON Research and Innovation Actions", "budgetYearMap": {"2026": "6000000", "2027": "3000000"},
+         "expectedGrants": 3},
+        {"action": "HORIZON-CL1-2026-99 - another topic of the call", "budgetYearMap": {"2026": "1"}, "expectedGrants": 9}]}},
+    "conditions": ('<div><h4>General conditions</h4><div><h4>1. Admissibility Conditions</h4><p>described in Annex A</p></div>'
+                   '<div><h4>3. Other Eligible Conditions</h4><p>Clinical partners from at least two countries must take part.</p></div></div>'),
+}
+
+
+class TopicDetailTests(unittest.TestCase):
+    def test_html_text(self):
+        self.assertEqual(html_text("<p>One &amp; <b>two</b></p><ul><li>a</li><li>b</li></ul><p>﻿</p>"), "One & two\n- a\n- b")
+        self.assertEqual(html_text(None), "")
+
+    def test_sections_and_props(self):
+        sections = description_sections(DETAIL["description"])
+        self.assertEqual(sections["Expected outcome"], "Projects are expected to contribute to:\n- Better exposure models & data.\n- Health systems ready for smoke.")
+        self.assertEqual(sections["Scope"], "Proposals should bring clinicians and SMEs together.")
+        self.assertNotIn("null", sections)
+        self.assertEqual(description_sections("<p>No headings at all.</p>"), {"Scope": "No headings at all."})
+        props = topic_detail_props(DETAIL)
+        self.assertEqual((props["budget"], props["expected_grants"]), (9000000.0, 3))  # the other topic's line is not counted
+        self.assertEqual(props["action_type"], "HORIZON-RIA HORIZON Research and Innovation Actions")
+        self.assertEqual(props["conditions"], "Clinical partners from at least two countries must take part.")
+
+    def test_call_topic_with_and_without_details(self):
+        plain = call_topic(GRANTS[1])
+        self.assertEqual(plain["content"], "HORIZON-CL1-2026-05: Future smoke. Call: Health 2026.")
+        self.assertNotIn("scope", plain["props"])
+        rich = call_topic(GRANTS[1], DETAIL)
+        self.assertEqual(rich["content"], "HORIZON-CL1-2026-05: Future smoke. Call: Health 2026.\n"
+                                          "Expected outcome: Projects are expected to contribute to:\n- Better exposure models & data.\n"
+                                          "- Health systems ready for smoke.\nScope: Proposals should bring clinicians and SMEs together.")
+        self.assertEqual(rich["props"]["scope"], "Proposals should bring clinicians and SMEs together.")
+        self.assertEqual(call_topic(GRANTS[0])["props"]["keywords"], ["wildfire", "air quality"])
+        records = to_records(PROJECTS, ORGS, ESV, TOPICS, LEGAL, GRANTS, {"HORIZON-CL1-2026-05": DETAIL})
+        topic = next(r for r in records if r.get("id") == "topic:HORIZON-CL1-2026-05")
+        self.assertIn("Scope: Proposals should", topic["content"])
+        json.dumps(records)
+
+    def test_description_is_capped(self):
+        long = {**DETAIL, "description": '<p class="topicdescriptionkind">Expected Outcome:</p><p>' + "word " * 2000 + "</p>"
+                                         '<p class="topicdescriptionkind">Scope:</p><p>' + "scope " * 2000 + "</p>"}
+        node = call_topic(GRANTS[1], long)
+        head = "HORIZON-CL1-2026-05: Future smoke. Call: Health 2026.\n"
+        self.assertEqual(len(node["content"]), len(head) + MAX_DESCRIPTION)
+        self.assertLessEqual(len(node["props"]["scope"]), MAX_DESCRIPTION)
+
+
 def csv_text(rows, columns):
     out = io.StringIO()
     out.write(";".join(columns) + "\n")
     for row in rows:
         out.write(";".join('"' + str(row.get(c, "")).replace('"', '""') + '"' for c in columns) + "\n")
     return out.getvalue()
+
+
+class Resp(io.BytesIO):
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
 
 
 class FetchTests(unittest.TestCase):
@@ -135,7 +198,7 @@ class FetchTests(unittest.TestCase):
             (folder / "grantsTenders.json").write_text(json.dumps({"fundingData": {"GrantTenderObj": GRANTS}}), encoding="utf-8")
             with mock.patch.object(fetcher.urllib.request, "urlopen") as urlopen, \
                  mock.patch.dict("os.environ", {"DATA_DIR": tmp}), mock.patch("sys.stdout", io.StringIO()) as out:
-                self.assertEqual(fetcher.main(["--max-projects", "1"]), 0)
+                self.assertEqual(fetcher.main(["--max-projects", "1", "--topics", "none"]), 0)
             urlopen.assert_not_called()  # the files were there
             records = [json.loads(l) for l in (folder / "records.jsonl").read_text(encoding="utf-8").splitlines()]
         ids = {r.get("id") for r in records if "label" in r}
@@ -144,10 +207,35 @@ class FetchTests(unittest.TestCase):
         self.assertIn("kept cordis-HORIZONprojects-csv.zip", out.getvalue())
         self.assertIn("1 projects ->", out.getvalue())
 
+    def test_topic_pages_are_fetched_cached_and_failures_skipped(self):
+        items = GRANTS + [{**GRANTS[1], "identifier": "HORIZON-CL1-2026-06", "status": {"abbreviation": "Open"}},
+                          {**GRANTS[1], "identifier": "HORIZON-CL1-2026-07", "status": {"abbreviation": "Open"}}]
+        pages = {"horizon-cl1-2026-05": {"TopicDetails": DETAIL}, "horizon-cl1-2026-06": {"TopicDetails": {**DETAIL, "identifier": "HORIZON-CL1-2026-06"}}}
+
+        def urlopen(request, timeout=None):
+            self.assertEqual(request.get_header("User-agent"), fetcher.USER_AGENT)
+            key = request.full_url.rsplit("/", 1)[1][:-5]
+            if key not in pages:
+                raise fetcher.urllib.error.HTTPError(request.full_url, 404, "Not Found", {}, None)
+            return Resp(json.dumps(pages[key]).encode())
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(fetcher.urllib.request, "urlopen", side_effect=urlopen) as opened, \
+             mock.patch.object(fetcher.time, "sleep") as sleep, mock.patch("sys.stdout", io.StringIO()) as out:
+            folder = Path(tmp) / "topics"
+            counts = fetcher.fetch_topics(items, folder, fetcher.TOPIC_STATUS["current"])
+            self.assertEqual(counts, {"fetched": 2, "kept": 0, "failed": 1})
+            self.assertEqual(sorted(p.name for p in folder.iterdir()), ["HORIZON-CL1-2026-05.json", "HORIZON-CL1-2026-06.json"])
+            self.assertEqual(opened.call_count, 3)  # the closed topic, the other programme and the tender are not asked for
+            self.assertEqual(sleep.call_count, 2)  # sequential, with a pause between requests
+            self.assertIn("skipped HORIZON-CL1-2026-07: HTTPError", out.getvalue())
+            again = fetcher.fetch_topics(items, folder, fetcher.TOPIC_STATUS["open"])  # cache hit for 06; 07 tried again
+            self.assertEqual(again, {"fetched": 0, "kept": 1, "failed": 1})
+            (folder / "BROKEN.json").write_text("{not json", encoding="utf-8")
+            details = fetcher.topic_details(folder)
+        self.assertEqual(sorted(details), ["HORIZON-CL1-2026-05", "HORIZON-CL1-2026-06"])
+        self.assertEqual(fetcher.topic_details(Path(tmp) / "missing"), {})
+
     def test_download_streams_to_disk(self):
-        class Resp(io.BytesIO):
-            def __enter__(self): return self
-            def __exit__(self, *a): return False
         with tempfile.TemporaryDirectory() as tmp, mock.patch.object(fetcher.urllib.request, "urlopen", return_value=Resp(b"PK..." * 10)), \
              mock.patch("sys.stdout", io.StringIO()):
             target = Path(tmp) / "bundle.zip"
