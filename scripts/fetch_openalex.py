@@ -72,7 +72,7 @@ def main(argv=None) -> int:
     out = Path(os.environ.get("DATA_DIR", "data")) / "openalex" / args.name
     out.mkdir(parents=True, exist_ok=True)
     institution = get(f"institutions/ror:{args.ror}", {"select": "id,display_name,country_code"})
-    print(f"{institution['display_name']} ({institution['country_code']}), {institution['id']}")
+    print(f"{institution.get('display_name', args.ror)} ({institution.get('country_code', '?')})")
     collected, interrupted = [], None
     with (out / "works.jsonl").open("w", encoding="utf-8") as f:
         try:
