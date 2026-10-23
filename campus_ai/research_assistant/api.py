@@ -7,6 +7,10 @@
     POST /api/search/image (form field "file") pictures similar to an uploaded image
     GET  /api/items/{id}                       one item with citations and similar pictures
     GET  /media/{path}                         images in media/ folders under DATA_DIR
+    GET  /api/experts?q=wildfire+smoke         researchers for a topic, with their evidence (R4, journey 4)
+    GET  /api/partners?q=...&countries=eu      EU organisations for a call or idea, via matching projects (journey 1)
+    GET  /api/calls?q=...&status=open          open and forthcoming Horizon Europe topics (journey 2)
+    GET  /api/calls/for/{researcher_id}        the same for one researcher's own profile text
 """
 
 from __future__ import annotations
@@ -21,15 +25,17 @@ from fastapi.responses import FileResponse
 
 from campus_ai.research_assistant import collections
 from campus_ai.research_assistant.collections import CollectionsSearch, picture_match
+from campus_ai.research_assistant.matching import COUNTRY_SETS, ResearchSearch
 
 MAX_UPLOAD = 10 * 1024 * 1024
+CALL_STATUS = ("open", "forthcoming", "all")
 IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 MEDIA_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".gif"}  # never JSONL, keys or other data
 
 
-def create_app(service: CollectionsSearch | None = None) -> FastAPI:
-    """The app; builds the real service (model + Neo4j) at startup unless one is given."""
-    state: dict = {"service": service}
+def create_app(service: CollectionsSearch | None = None, research: ResearchSearch | None = None) -> FastAPI:
+    """The app; builds the real services (model + Neo4j) at startup unless they are given."""
+    state: dict = {"service": service, "research": research}
     lock = threading.Lock()  # one embedding at a time: the model is the bottleneck anyway
 
     @asynccontextmanager
@@ -42,18 +48,58 @@ def create_app(service: CollectionsSearch | None = None) -> FastAPI:
             embedder, driver = get_embedder(), connect()
             embedder.embed(["warm-up"], kind="query", data_class="P")  # load the model before the first request
             state["service"] = CollectionsSearch(driver, embedder)
+        if state["research"] is None:  # same graph and model as collections search
+            given = state["service"]
+            state["research"] = ResearchSearch(given.driver, given.retriever.embedder, given.database)
         yield
         if driver:
             driver.close()
 
-    app = FastAPI(title="campus-ai collections search", lifespan=lifespan)
+    app = FastAPI(title="campus-ai research assistant", lifespan=lifespan)
 
     def search() -> CollectionsSearch:
         return state["service"]
 
+    def graph() -> ResearchSearch:
+        return state["research"]
+
     @app.get("/api/health")
     def health() -> dict:
-        return {"status": "ok", "items": search().count()}
+        return {"status": "ok", "items": search().count(), "graph": graph().counts()}
+
+    @app.get("/api/experts")
+    def experts(q: str = Query(min_length=1, max_length=500), k: int = Query(10, ge=1, le=30)) -> dict:
+        with lock:
+            found = graph().experts(q, k)
+        return {"query": q, "experts": found}
+
+    @app.get("/api/partners")
+    def partners(q: str = Query(min_length=1, max_length=2000), k: int = Query(10, ge=1, le=30),
+                 countries: str = Query("associated")) -> dict:
+        if countries not in COUNTRY_SETS:
+            raise HTTPException(422, f"countries must be one of {', '.join(COUNTRY_SETS)}")
+        with lock:
+            found = graph().partners(q, k, countries)
+        return {"query": q, "countries": countries, "partners": found}
+
+    @app.get("/api/calls")
+    def calls(q: str = Query(min_length=1, max_length=2000), k: int = Query(10, ge=1, le=30),
+              status: str = Query("open")) -> dict:
+        if status not in CALL_STATUS:
+            raise HTTPException(422, f"status must be one of {', '.join(CALL_STATUS)}")
+        with lock:
+            found = graph().calls(q, k, status)
+        return {"query": q, "status": status, "calls": found}
+
+    @app.get("/api/calls/for/{researcher_id:path}")
+    def calls_for(researcher_id: str, k: int = Query(10, ge=1, le=30), status: str = Query("open")) -> dict:
+        if status not in CALL_STATUS:
+            raise HTTPException(422, f"status must be one of {', '.join(CALL_STATUS)}")
+        with lock:
+            found = graph().calls_for(researcher_id, k, status)
+        if not found["researcher"]:
+            raise HTTPException(404, "no such researcher")
+        return found
 
     @app.get("/api/search")
     def search_text(q: str = Query(min_length=1, max_length=300), k: int = Query(12, ge=1, le=50)) -> dict:

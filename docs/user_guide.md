@@ -24,6 +24,20 @@ docker compose up -d web       # starts neo4j, api and web; first start loads th
 docker compose stop web api    # stop
 ```
 
+**Experts, EU partners, Horizon calls.** The three research pages in the top
+bar work once the OpenAlex and CORDIS graphs are indexed (sections 1b and
+1c). *Experts* ranks researchers for a plain-language topic and lists the
+topics and publications behind each match, with a link to the calls that
+fit that researcher. *EU partners* takes a call topic or a project idea,
+finds the Horizon Europe projects that match and ranks the organisations
+that took part in them (coordinators count more), each with its projects
+as evidence; only Horizon Europe member and associated countries are
+listed, and never the asking side's own country. *Horizon calls* lists open
+and forthcoming topics for a description or a lab's profile, with opening
+dates, deadlines and the portal page. Everything is retrieval and graph
+arithmetic over public records; no model writes any of it, and every item
+links to its source.
+
 - **Words / By image.** Type a question in any language, or switch to *By
   image* and drop a picture to find similar ones. Image search only knows the
   indexed collections, so it always has *some* nearest pictures. The page shows
