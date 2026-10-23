@@ -19,7 +19,7 @@ import re
 from collections import Counter
 from dataclasses import asdict, dataclass
 
-from campus_ai.course_access.parser import Document, Heading, Image, Link, ListItem, Paragraph, Table
+from campus_ai.course_access.parser import Document, Equation, Heading, Image, Link, ListItem, Paragraph, Table
 
 # WCAG 2.2 success criteria used by the rules: number -> (name, level).
 CRITERIA = {
@@ -38,7 +38,8 @@ NOT_CHECKED = [
     "1.3.2 Meaningful Sequence: whether the reading order makes sense",
     "1.3.1 Info and Relationships: PDF structure tags (the parser reads untagged text)",
     "3.1.2 Language of Parts: passages in another language",
-    "Equations, charts and diagrams: always sent to human review",
+    "Equations that are images, charts and diagrams: always sent to human review",
+    "Native equations are preserved as MathML (OMML in DOCX/PPTX), but whether their reading is right needs a person",
 ]
 
 # Fixers, matching the agent design (master plan 3.2).
@@ -84,6 +85,10 @@ def audit(document: Document) -> list[Issue]:
                                 TABLES, **where))
         elif isinstance(block, Link):
             issues += [Issue(**x, **where) for x in _link_checks(block)]
+        elif isinstance(block, Equation) and not block.text.strip():
+            issues.append(Issue("equation-empty", "1.1.1",
+                                "Equation has no readable content, so a screen reader has nothing to speak.",
+                                PERSON, **where))
         elif isinstance(block, Paragraph) and FAKE_LIST.match(block.text):
             issues.append(Issue("fake-list", "1.3.1",
                                 f"Text looks like a list item but isn't marked up as one: {block.text[:60]!r}",
