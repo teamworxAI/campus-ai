@@ -10,10 +10,13 @@ core (P5), the local-only LLM router (P1) with its data-class gate (P1b),
 tracing (P2), the licence guard (P8), Ollama in compose (P9) and the
 local-stack smoke test (B1, passed on the demo laptop). Research Assistant:
 built the Europeana loader (R8), collections search with its web UI (R9) and
-the rights filter ahead of indexing (R10). Course Access Agent: built end to
-end, parser, audit, workers, rebuild and verify (A1-A5) with the review queue
-(P3) in the web app (section 11). Still planned: MCP servers (P4), eval
-harness (P6), reranker (R3) and the ArcaBC loader (R7, blocked on R0b).
+the rights filter ahead of indexing (R10), the OpenAlex and CORDIS loaders
+(R1, R2), expert, partner and call search (R4 first cut), the consortium rule
+and citation-checked brief (R5) and the R6 back-test. Course Access Agent:
+built end to end, parser, audit, workers, rebuild and verify (A1-A5) with the
+review queue (P3) in the web app (section 11). Still planned: MCP servers
+(P4), eval harness (P6), reranker (R3), R5's network worker and the ArcaBC
+loader (R7, blocked on R0b).
 Diagrams mark planned parts with dashed lines.
 
 ## 1. System context

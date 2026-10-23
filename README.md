@@ -47,8 +47,11 @@ approves, edits or rejects each one before the rebuild (see
 Also built: LLM router over local open-weight models on Ollama (P1), the
 data-class gate and tracing (P1b, P2), Ollama as an offline compose service
 (P9), the local-stack smoke test (B1, passed on the demo laptop) and the
-licence guard (P8). Next: the other model bake-offs (B2-B5), the eval harness
-(P6) and the MCP server template (P4); OCR for scanned PDFs (A7) is next phase.
+licence guard (P8). The Research Assistant's Experts, EU partners, Horizon
+calls and Draft-a-consortium pages run over OpenAlex and the full Horizon
+Europe bundle (R1, R2, R4, R5, with the R6 back-test). Next: the eval harness
+(P6), the model bake-offs (B2-B5) and the Lisbon dry run; OCR for scanned PDFs
+(A7) is next phase.
 
 ## Quick start
 

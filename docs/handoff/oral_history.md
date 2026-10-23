@@ -215,16 +215,14 @@ bursts and said "proceed" or "continue". What was built, in merge order:
   fixes alone and 0 introduced. Every proposal carries a confidence, a review
   flag and its evidence; the small model reports confidence 1.0 for almost
   everything, so the deterministic routing is the real guard until B3.
-- **P3 review queue** (#26, open at hand-off): a FastAPI service and a static
-  page at `/review/`, not Streamlit (decision: no new dependency, same stack
-  as R9).
+- **P3 review queue** (#26): a FastAPI service and a static page at
+  `/review/`, not Streamlit (decision: no new dependency, same stack as R9).
 - **R1 OpenAlex** (#27), **R2 CORDIS and calls** (#28), **R4 expert, partner
   and call search** (#29), **R5 consortium rule and citation-checked brief**
   (#30): the Research Assistant's Experts, EU partners, Horizon calls and
   Draft-a-consortium pages work on the laptop over 3000 SFU works and the
   full Horizon Europe bundle (24k projects, 36k organisations, 3808 call
-  topics). The R6 back-test gives recall@10 0.32 on the full graph. #27-#30
-  are stacked drafts, each against `main`, to be merged in order.
+  topics). The R6 back-test gives recall@10 0.32 on the full graph.
 - Two core fixes found by indexing the full bundle, independent PRs: #31
   (JSONL loaders split on newlines only; CORDIS objectives contain U+2028)
   and #32 (the R10 rights screen dropped every node of a graph without
@@ -233,6 +231,12 @@ bursts and said "proceed" or "continue". What was built, in merge order:
 The user gave an OpenAlex API key in chat on Oct 23; it is in the laptop's
 `.env` only. It is also in that session's transcript, so rotate it if the
 transcript is ever shared.
+
+All of it (#19 to #33) was merged by the end of Oct 23; `main` has 186
+unit tests passing. The user asked, after the first PR cited a report they
+could not find locally, that everything cited in a PR be committed in the
+repo: eval reports are, data under `DATA_DIR` and `.env` are not, by the
+rules in `AGENTS.md`.
 
 ## 3. Standing orders
 
@@ -346,11 +350,21 @@ reviews; it rarely writes product code itself.
 | Cloud session hook | `.claude/hooks/session-start.sh` (starts Docker, builds `test` with `docker buildx bake`) |
 
 **The running app on the user's laptop** (`C:\Repos\campus-ai`): Neo4j,
-`api` and `web` with `restart: unless-stopped`, collections search on
-http://localhost:8080 over the 151-item salmon pilot (376 nodes). `.env`
-there sets `MODELS_DIR=D:/models`, `DATA_DIR=D:/campus-ai/data`,
-`COMPOSE_FILE=compose.yaml;compose.gpu.yaml` (GPU for `embed` and `api`) and
-`EUROPEANA_API_KEY` (the leaked one, until rotated). Docker Desktop's disk
+`api`, `course-access`, `ollama` and `web` with `restart: unless-stopped`;
+http://localhost:8080 serves collections search over the 151-item salmon
+pilot, the Experts, EU partners, Horizon calls and Draft-a-consortium pages
+over 3000 SFU works (2226 researchers) and the full Horizon Europe bundle
+(24k projects, 36k organisations, 3808 call topics; 71k nodes in the Neo4j
+volume), and the Course Access review queue at `/review/`. Harvests live in
+`D:/campus-ai/data/{europeana,course_access,openalex,cordis}`; Ollama's
+weights in `D:/models/ollama` (`gemma4:e2b` only; `.env` points the three
+router tasks at it). `.env` there sets `MODELS_DIR=D:/models`,
+`DATA_DIR=D:/campus-ai/data`, `COMPOSE_FILE=compose.yaml;compose.gpu.yaml`,
+`CAMPUS_AI_MODEL_*=gemma4:e2b`, `OPENALEX_API_KEY` and `EUROPEANA_API_KEY`
+(the leaked one, until rotated). After pulling `main`, run `docker compose
+build` and `docker compose up -d web ollama`, then `docker compose exec web
+nginx -s reload` if the `web` container was not recreated; the graph in the
+Neo4j volume needs no re-index unless the loaders change. Docker Desktop's disk
 image is still on C:; the user can move it (Settings > Resources > Advanced)
 when it suits them, since that restarts Docker and their other projects.
 Bring the app back with `docker compose up -d web`.
@@ -369,10 +383,19 @@ discover -s tests` for quick checks inside its cloud container. On Oct 22,
 - Delete stale branches once the user agrees: `p5-graph-core`,
   `r8-europeana`, `docs-architecture`, `r9-collections-search`,
   `p8-licence-guard`, `a1-document-parser`, `a1-document-parser-open`,
-  `p1-local-only`, `integrate-stack`, `a2-audit` (all merged).
-- OK to `ollama pull gemma4:e4b` (about 5.5 GB) on the laptop for A3 testing?
-  The 12B model mostly runs on CPU there (4 GB GPU); it belongs on the
-  inference box.
+  `p1-local-only`, `integrate-stack`, `a2-audit`, and from Oct 22-23
+  `p9-ollama-compose`, `a3-alt-text`, `a6-course-corpus`,
+  `a1-pptx-title-paragraphs`, `a4-workers`, `a5-rebuild`, `p3-review-queue`,
+  `r1-openalex`, `r2-cordis`, `r4-matching`, `r5-consortium`,
+  `fix-jsonl-line-separators`, `fix-rights-screen-research-graph`,
+  `docs-handoff-oct23` (all merged).
+- Models on the laptop: only `gemma4:e2b` is downloaded (via `fetch-ollama`,
+  Oct 22). `gemma4:e4b` (7 GB) would improve alt text and the brief; the
+  12B model belongs on the inference box (4 GB GPU here).
+- Decide on NC-licensed course material for the A6 corpus (KPU Discrete Math
+  slides, MIT OCW, LOUIS biology slides were found and left out); CUNY's CC BY
+  lectures sit behind a bot check and need downloading by hand.
+- Rotate the OpenAlex API key if the Oct 23 session transcript is shared.
 - Gold-set labels (D6): 20 openly licensed course documents are harvested by
   `fetch-course-docs` (Oct 22) and audited (`evals/course_access/`); a
   specialist still has to label them. More CC BY documents welcome; NC-licensed
@@ -388,10 +411,9 @@ discover -s tests` for quick checks inside its cloud container. On Oct 22,
 - Answer: remove the early plan copy on `sfu-aria/student-assistant` branch
   `ccr-b486116f-phsbvu`?
 
-**Next cards** (section 5 of the plan, after the Oct 22-23 session): merge
-#26 and the stack #27-#30 plus the fixes #31 and #32, then rebuild the
-`embed` image and re-index on the demo laptop. Then: P6 eval harness (the
-eval scripts under `evals/` are the raw material); B2 embedder + reranker
+**Next cards** (section 5 of the plan, after the Oct 22-23 session; all of
+that session's PRs are merged): P6 eval harness (the eval scripts under
+`evals/` are the raw material); B2 embedder + reranker
 bake-off (R3; the back-test script measures it); B3 alt-text bake-off once a
 specialist labels the A6 corpus; R5's network worker once EU-side
 researchers are in the graph; the call analyst over full topic descriptions
