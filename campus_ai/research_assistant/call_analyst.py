@@ -40,10 +40,12 @@ SYSTEM = """You analyse a Horizon Europe call topic for a university research of
 {"topics": [{"text": "...", "span": "..."}],
  "expected_outcomes": [{"text": "...", "span": "..."}],
  "partner_profile": [{"text": "...", "span": "..."}]}
-- topics: 3 to 8 short phrases (2-6 words) naming the research and innovation subjects the call is about.
+- topics: 3 to 8 short phrases (2-6 words) in your own words naming the research and innovation subjects of the Expected outcome and Scope sections (not a copy of the keyword list).
 - expected_outcomes: the outcomes the call expects, one per item, quoted or closely paraphrased from the text.
-- partner_profile: the kinds of organisation a consortium for this call needs, e.g. "clinical partner", "SME for exploitation", "public authority as end user", "social sciences and humanities expertise".
-- span: for every item, copy word for word the passage of the topic text (at least a few words, at most one sentence) that supports it. Never write a span that is not in the text; leave an item out instead."""
+- partner_profile: the kinds of organisation or expertise a consortium for this call needs, e.g. "clinical partner", "SME for exploitation", "public authority as end user", "social sciences and humanities expertise".
+- Every item, in every list, is an object with "text" and "span", never a bare string. span: copy word for word the passage of the topic text (at least a few words, at most one sentence) that supports the item. Never write a span that is not in the text; leave the item out instead.
+Example item for a text saying "Proposals should involve hospitals and patient organisations in the pilots.":
+{"text": "clinical partner", "span": "Proposals should involve hospitals and patient organisations in the pilots"}"""
 
 
 def normalise(text: str) -> str:
