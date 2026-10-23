@@ -26,7 +26,7 @@ from campus_ai.core.embed import BACKENDS, Embedder, get_embedder
 
 def load(path: Path) -> tuple[list[dict], list[dict]]:
     items, queries = [], []
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in path.read_text(encoding="utf-8").split("\n"):  # newlines only, never U+2028 (see graph_search)
         if line.strip():
             record = json.loads(line)
             if "query" in record:
