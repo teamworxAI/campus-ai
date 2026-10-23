@@ -125,7 +125,10 @@ DETAIL = {
          "expectedGrants": 3},
         {"action": "HORIZON-CL1-2026-99 - another topic of the call", "budgetYearMap": {"2026": "1"}, "expectedGrants": 9}]}},
     "conditions": ('<div><h4>General conditions</h4><div><h4>1. Admissibility Conditions</h4><p>described in Annex A</p></div>'
-                   '<div><h4>3. Other Eligible Conditions</h4><p>Clinical partners from at least two countries must take part.</p></div></div>'),
+                   '<div><h4>2. Eligible Countries</h4><p>described in Annex B of the Work Programme General Annexes.</p></div>'
+                   '<div><h4>3. Other Eligible Conditions</h4><p>Clinical partners from at least two countries must take part.</p>'
+                   '<p>If projects use satellite-based earth observation, beneficiaries must make use of Copernicus.</p></div>'
+                   '<div><h4>5a. Evaluation and award</h4><p>Award criteria are in the annexes.</p></div></div>'),
 }
 
 

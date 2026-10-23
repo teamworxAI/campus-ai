@@ -38,6 +38,10 @@ MAX_DESCRIPTION = 4000  # characters of a topic's description kept in its text
 MAX_CONDITIONS = 1000
 SECTION = re.compile(r'<p[^>]*class="topicdescriptionkind"[^>]*>(.*?)</p>', re.S | re.I)
 SECTION_NAMES = {"expected outcome": "Expected outcome", "expected outcomes": "Expected outcome", "scope": "Scope"}
+CONDITION_HEADING = re.compile(r"<h4[^>]*>(.*?)</h4>", re.S | re.I)
+ELIGIBILITY = re.compile(r"eligible countries|other eligib|specific conditions", re.I)
+# Lines in nearly every topic's conditions: pointers to the General Annexes and standard clauses.
+BOILERPLATE = re.compile(r"described in|^A number of non-EU/non-Associated|^Not applicable|^If projects use satellite-based", re.I)
 BLOCKS = {"p", "div", "li", "ul", "ol", "br", "h1", "h2", "h3", "h4", "h5", "h6", "tr", "table", "section"}
 
 
@@ -87,14 +91,13 @@ def description_sections(html: str | None) -> dict[str, str]:
 
 
 def conditions_text(html: str | None) -> str:
-    """The topic-specific part of the conditions: lines that are not a pointer to the general annexes."""
+    """The topic-specific eligibility conditions: the eligibility sections without the lines every topic repeats."""
+    pieces = CONDITION_HEADING.split(html or "")
     keep = []
-    for line in html_text(html).split("\n"):
-        plain = line.lstrip("- ").lower()
-        if plain.startswith("described in") or re.match(r"^\d+\.\s", plain) or plain in ("general conditions",):
-            continue
-        keep.append(line)
-    return "\n".join(keep)[:MAX_CONDITIONS]
+    for heading, body in zip(pieces[1::2], pieces[2::2]):
+        if ELIGIBILITY.search(html_text(heading)):
+            keep += [line for line in html_text(body).split("\n") if not BOILERPLATE.search(line)]
+    return "\n".join(dict.fromkeys(keep))[:MAX_CONDITIONS]
 
 
 def topic_detail_props(detail: dict) -> dict:

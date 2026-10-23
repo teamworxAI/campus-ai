@@ -245,7 +245,8 @@ Data sources:
   not scraping), enriched with OpenAlex and ORCID. Other BC universities
   after the pilot.
 - EU side: Horizon Europe projects and participants (CORDIS open data), open
-  calls (EU Funding & Tenders portal), EU author profiles (OpenAlex).
+  calls with their full topic descriptions (EU Funding & Tenders portal,
+  grants file and topicDetails pages), EU author profiles (OpenAlex).
 - Optional Canadian funding: NSERC/SSHRC award open data.
 - Four user journeys:
   1. "Find EU partners for this call" (research office).

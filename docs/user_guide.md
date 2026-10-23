@@ -39,6 +39,23 @@ dates, deadlines and the portal page. Everything is retrieval and graph
 arithmetic over public records; no model writes any of it, and every item
 links to its source.
 
+**Analyse this call.** Each call on the Horizon calls page has *Analyse
+this call*. The top panel comes straight from the funding records: action
+type and the consortium rule it implies, whether a Canadian partner counts,
+deadlines, budget, programme part, keywords and the topic's own eligibility
+conditions. Below it the local model reads the topic's full description
+(its "Expected outcome" and "Scope" sections, fetched once by
+`fetch-cordis`) and lists the research topics, the expected outcomes and
+the kinds of partner the call needs (a clinical partner, an SME for
+exploitation, ...). Each item shows the passage of the topic text it rests
+on; an item whose quoted passage is not in the text is dropped, and the
+page says how many were. *Find partners for this call* runs the EU partners
+search on those topics and that partner profile rather than on the call's
+title. The first analysis of a call takes a minute or two on the laptop;
+it is then kept until the `api` service restarts. A topic whose page was
+not fetched (closed topics, or `--topics none`) is read from its title and
+keywords only, and the page says so.
+
 **Draft a consortium.** From a call on the Horizon calls page, *Draft a
 consortium* builds the partner shortlist for that call, applies the Horizon
 Europe consortium rule (three independent entities in three different
