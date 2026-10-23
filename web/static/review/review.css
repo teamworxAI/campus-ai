@@ -1,0 +1,28 @@
+.main { padding-top: 28px; padding-bottom: 56px; display: flex; flex-direction: column; gap: 24px; }
+.upload { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.upload label.file { display: inline-flex; align-items: center; gap: 8px; }
+.upload .check { display: inline-flex; align-items: center; gap: 8px; }
+.queue { width: 100%; border-collapse: collapse; background: var(--surface); }
+.queue th, .queue td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.queue th { font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); }
+.numbers { display: flex; flex-wrap: wrap; gap: 16px 32px; }
+.numbers div { display: flex; flex-direction: column; }
+.numbers b { font-size: 28px; font-family: var(--serif); }
+.numbers span { font-size: 13px; color: var(--muted); }
+.group h2 { font-family: var(--serif); font-size: 22px; margin: 24px 0 12px; }
+.proposal { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 24px; }
+.proposal.decided-approve { border-left: 5px solid #1f8f6b; }
+.proposal.decided-reject { border-left: 5px solid #b3372b; opacity: 0.75; }
+.proposal .where { font-size: 13px; color: var(--muted); }
+.proposal .value { font-size: 16px; margin: 4px 0; }
+.proposal .evidence { font-size: 14px; color: var(--ink-2); }
+.proposal .flag { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--tint); color: var(--accent-ink); margin-right: 8px; }
+.proposal .flag.review { background: #fff1e6; color: #8a4b0e; }
+.proposal .actions { display: flex; flex-direction: column; gap: 8px; align-items: stretch; min-width: 140px; }
+.proposal .actions .btn { justify-content: center; }
+.proposal textarea, .proposal input[type="text"] { width: 100%; box-sizing: border-box; font: inherit; font-size: 15px; padding: 8px 10px; border: 1px solid var(--control); border-radius: 8px; }
+.proposal img { max-width: 320px; max-height: 240px; border: 1px solid var(--line); border-radius: 6px; display: block; margin: 6px 0; }
+.downloads { display: flex; flex-wrap: wrap; gap: 10px; }
+.notice { background: var(--tint); border-radius: 8px; padding: 10px 14px; }
+.error { background: #fde8e6; color: #7a1f14; border-radius: 8px; padding: 10px 14px; }
+@media (max-width: 720px) { .proposal { grid-template-columns: 1fr; } }

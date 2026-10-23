@@ -66,7 +66,7 @@ class SmokeTestTests(unittest.TestCase):
     def test_all_pass(self):
         results = self.run_checks()
         self.assertTrue(all(r["ok"] for r in results.values()), results)
-        self.assertEqual(set(results), {"neo4j", "api", "web", "offline", "ollama", "loaded"}
+        self.assertEqual(set(results), {"neo4j", "api", "course-access", "web", "offline", "ollama", "loaded"}
                          | {f"router:{t}" for t in config.TASKS})
         self.assertIn("0.40.8", results["ollama"]["detail"])
         self.assertIn("'OK'", results["router:classification"]["detail"])

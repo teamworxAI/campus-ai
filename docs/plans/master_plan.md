@@ -89,7 +89,7 @@ decisions are in section 8; section 5 has the remaining schedule.
 | Agent loop | Plain Python workflows calling local models through the LLM router (tool use and structured outputs with open-weight models); deterministic steps in plain Python. No hosted agent SDKs | `campus_ai/<product>/agent.py` |
 | Skills | Domain procedures as plain files (`SKILL.md` + scripts) the local agent loop reads: WCAG remediation playbook, Horizon call analysis | `campus_ai/<product>/skills/` |
 | MCP servers | One per product, thin wrappers over the product's functions | `campus_ai/<product>/mcp_server.py` |
-| Review queue | One approval UI pattern (Streamlit) for both products: item, proposed change, evidence, approve/edit/reject | `campus_ai/core/review_ui.py` |
+| Review queue | One approval UI pattern for both products: item, proposed change, evidence, approve/edit/reject. Built (P3) as a FastAPI service plus a static page in the existing `web` front end, not Streamlit: no new dependency or image, same offline stack as collections search | `campus_ai/course_access/api.py`, `web/static/review/` (Course Access first; the Research Assistant's outreach review reuses the pattern) |
 | Evaluation | RAGAS (Apache-2.0) + deterministic metrics, per-product gold sets; any LLM judge is a local model, never a hosted one | `campus_ai/core/eval/`, `evals/` |
 | Tracing | Log every run: tool calls, model, host, data class, tokens, latency, outcome; metadata only, never inputs or outputs (no cost: models are local) | `campus_ai/core/tracing.py` |
 
@@ -424,7 +424,7 @@ Each card is sized for one cloud session and one PR.
 | P1 | LLM router over local open-weight models only, on Ollama (local, or the team's inference box). Defaults Gemma 4 (Apache-2.0); refuses models not in its open-licence allow-list | P0 | Built (#2, local-only in #10) |
 | P1b | Data-class gate in the router (P/I/S/R; R never reaches a model) and per-call trace of model, host and class | P1, P2 | Built (#18); embedder refuses R too |
 | P2 | Tracing module: per-run JSONL log of tool calls, model, host, data class, tokens, latency | P0 | Built (#18) |
-| P3 | Review queue Streamlit component (approve/edit/reject) | P0 | To do |
+| P3 | Review queue (approve/edit/reject): `course-access` service (`campus_ai/course_access/api.py`) and `web/static/review/`; upload, audit, proposals with evidence and confidence, approve/edit/reject each, rebuild, download DOCX/HTML/statement. FastAPI + static page rather than Streamlit (decision: no new dependency, same stack as R9) | P0 | Built (Course Access); the Research Assistant's review reuses it when R4 lands |
 | P4 | MCP server template wrapping a product's public functions | P1 | To do |
 | P5 | Graph core: Neo4j writer, vector + fulltext indexes, hybrid retriever (RRF) | P0, P7 | Built (#5) |
 | P6 | Eval harness: gold-set format, RAGAS + deterministic metrics, report | P0 | Next |
