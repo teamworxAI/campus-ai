@@ -197,6 +197,43 @@ lists what the checks can't judge. A messy sample handout with 7 planted
 problems: all 7 found, no false positives. Neither has met real course
 documents yet.
 
+## 2c. The laptop session (Oct 22-23)
+
+Written by the session that ran on the user's laptop after the handoff,
+from "read the plan and iterate". Fourteen PRs in a day; the user merged in
+bursts and said "proceed" or "continue". What was built, in merge order:
+
+- **P9 Ollama in compose** landed through #19 (a parallel cloud session got
+  there first; this session's #20 was closed and its laptop fixes folded into
+  #19): the `ollama` service on the internal network, `fetch-ollama`, the
+  B1 smoke test passing 9/9 on the laptop. Lesson: check `gh pr list` before
+  starting a card; sessions run in parallel.
+- **A3 alt text** (#21), **A6 corpus** (#22: 20 CC BY documents from Canadian
+  and UK OER repositories via `fetch-course-docs`), **A1 fix** (#23), **A4
+  workers** (#24), **A5 rebuild and verify** (#25): the Course Access pipeline
+  runs end to end; on the corpus 862 audit issues became 360 with rule-based
+  fixes alone and 0 introduced. Every proposal carries a confidence, a review
+  flag and its evidence; the small model reports confidence 1.0 for almost
+  everything, so the deterministic routing is the real guard until B3.
+- **P3 review queue** (#26, open at hand-off): a FastAPI service and a static
+  page at `/review/`, not Streamlit (decision: no new dependency, same stack
+  as R9).
+- **R1 OpenAlex** (#27), **R2 CORDIS and calls** (#28), **R4 expert, partner
+  and call search** (#29), **R5 consortium rule and citation-checked brief**
+  (#30): the Research Assistant's Experts, EU partners, Horizon calls and
+  Draft-a-consortium pages work on the laptop over 3000 SFU works and the
+  full Horizon Europe bundle (24k projects, 36k organisations, 3808 call
+  topics). The R6 back-test gives recall@10 0.32 on the full graph. #27-#30
+  are stacked drafts, each against `main`, to be merged in order.
+- Two core fixes found by indexing the full bundle, independent PRs: #31
+  (JSONL loaders split on newlines only; CORDIS objectives contain U+2028)
+  and #32 (the R10 rights screen dropped every node of a graph without
+  collection items).
+
+The user gave an OpenAlex API key in chat on Oct 23; it is in the laptop's
+`.env` only. It is also in that session's transcript, so rotate it if the
+transcript is ever shared.
+
 ## 3. Standing orders
 
 These carry over to any session working for this user on campus-ai.
@@ -302,6 +339,9 @@ reviews; it rarely writes product code itself.
 | Course Access parser and audit | `campus_ai/course_access/`, `scripts/audit_document.py` |
 | Europeana loader, collections search API, web UI | `campus_ai/research_assistant/`, `scripts/fetch_europeana.py`, `web/` |
 | Licence guard | `tests/test_licences.py` |
+| Course Access workers, rebuild, review queue | `campus_ai/course_access/{alt_text,workers,rebuild,api}.py`, `scripts/{alt_text,propose_fixes,remediate}.py`, `web/static/review/` |
+| Research Assistant loaders and journeys | `campus_ai/research_assistant/{openalex,cordis,matching,consortium}.py`, `scripts/fetch_{openalex,cordis}.py` |
+| Eval runs and reports (dated) | `evals/course_access/`, `evals/research_assistant/`, `evals/smoke/` |
 | Docker | `Dockerfile`, `compose.yaml` (`test`, `embed`, `fetch-models`, `fetch-ollama`, Neo4j, Ollama, API, web, `smoke`), `compose.gpu.yaml`, `.claude/compose.cloud.yaml` |
 | Cloud session hook | `.claude/hooks/session-start.sh` (starts Docker, builds `test` with `docker buildx bake`) |
 
@@ -348,14 +388,37 @@ discover -s tests` for quick checks inside its cloud container. On Oct 22,
 - Answer: remove the early plan copy on `sfu-aria/student-assistant` branch
   `ccr-b486116f-phsbvu`?
 
-**Next cards** (section 5 of the plan): B1 passed on the demo laptop on Oct 22
-(`docker compose run --rm smoke`, 9/9 with `gemma4:e2b`, report in
-`evals/smoke/`; the laptop's user environment exports `OLLAMA_HOST`, which is
-why compose reads `OLLAMA_URL` instead); P6 eval harness; A6 gold set and
-A3 alt-text worker with bake-off B3 (D9); B2 embedder + reranker bake-off on
-the salmon pilot; R10 rights filter. Then A4/A4b/A5, R1/R2/R3.
+**Next cards** (section 5 of the plan, after the Oct 22-23 session): merge
+#26 and the stack #27-#30 plus the fixes #31 and #32, then rebuild the
+`embed` image and re-index on the demo laptop. Then: P6 eval harness (the
+eval scripts under `evals/` are the raw material); B2 embedder + reranker
+bake-off (R3; the back-test script measures it); B3 alt-text bake-off once a
+specialist labels the A6 corpus; R5's network worker once EU-side
+researchers are in the graph; the call analyst over full topic descriptions
+(the grants file has titles and keywords only); A4b OMML to MathML; A7 OCR.
+Demo prep: the dry run on the laptop with everything indexed.
 
 ## 7. Lessons and gotchas
+
+**From the Oct 22-23 laptop session**
+- The `embed` image is only rebuilt when you ask. Core changes merged on
+  `main` (R10's rights screen, for one) do not reach `docker compose run embed`
+  until `docker compose build embed`; research-graph indexing "worked" for a
+  day on a stale image. Rebuild `embed` after merging anything under `core/`
+  or `research_assistant/`.
+- Git Bash mangles container paths in `-v` mounts (`/app/x` becomes
+  `C:/Program Files/Git/app/x`) and creates stray folders like
+  `evals/course_access;C`. Use `MSYS_NO_PATHCONV=1` or PowerShell.
+- A "reasoning" call to `gemma4:e2b` can think for over ten minutes on a
+  trivial question; short answers go through the classification task. The
+  brief (R5) uses reasoning and takes about two minutes on the laptop.
+- OpenAlex meters its API: one small daily budget per IP without a key.
+  CUNY Academic Works and some Pressbooks sites answer 403 to scripts.
+- `str.splitlines()` cuts on U+2028 and NEL; JSONL must split on newlines.
+- The harness's permission classifier blocked `gh pr comment` and
+  `gh pr close` once; `gh pr create` and `gh pr edit` work.
+
+**Earlier**
 
 - The cloud proxy blocks huggingface.co, arxiv.org, sfu.ca, blog.google and
   others for web fetch; search snippets get through. Mark such facts
