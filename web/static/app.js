@@ -304,10 +304,107 @@ async function openCite(id) {
 document.getElementById("cite-copy").addEventListener("click", () =>
   copy(document.getElementById("cite-text").textContent, document.getElementById("cite-status")));
 
+// ---------- research journeys (R4): experts, EU partners, Horizon calls ----------
+// Every result lists the graph evidence behind it: the publications, projects or call records.
+
+const JOURNEYS = {
+  experts: { title: "Find an SFU expert or supervisor for a topic", placeholder: "e.g. wildfire smoke and public health",
+    path: "/api/experts", key: "experts", source: "OpenAlex, public publication records",
+    note: "Ranked by fit to the topic. Each researcher is listed with the topics and publications behind the match, never by anything else." },
+  partners: { title: "Find EU partners for a call or project idea", placeholder: "paste the call topic, or describe the project",
+    path: "/api/partners", key: "partners", source: "CORDIS, Horizon Europe projects",
+    note: "Organisations are reached through the Horizon Europe projects that match, so each one comes with the projects that are the evidence." },
+  calls: { title: "Which open Horizon Europe calls fit this work?", placeholder: "describe the research, or paste a lab's profile",
+    path: "/api/calls", key: "calls", source: "Funding & Tenders portal, open and forthcoming topics",
+    note: "Open and forthcoming topics only, with deadlines and the portal page. Closed topics are kept in the graph for the back-test." },
+};
+
+function expertRow(r) {
+  const e = r.evidence;
+  return h("li", { class: "row-card" },
+    h("div", { class: "row-main" },
+      h("h3", {}, r.url ? h("a", { href: r.url, rel: "noopener", target: "_blank", text: r.name }) : r.name),
+      h("p", { class: "meta", text: [r.institution, e.works ? `${e.works} works since 2021` : null].filter(Boolean).join(" · ") }),
+      e.topics.length ? h("p", { class: "muted", text: "Topics: " + e.topics.slice(0, 5).join("; ") }) : null,
+      e.publications.length ? h("ul", { class: "evidence" }, e.publications.map((p) => h("li", {},
+        p.url ? h("a", { href: p.url, rel: "noopener", target: "_blank", text: p.title }) : p.title, p.year ? ` (${p.year})` : ""))) : null),
+    h("div", { class: "row" },
+      h("a", { class: "btn", href: `#/calls?for=${encodeURIComponent(r.id)}`, text: "Calls for this researcher" })));
+}
+
+function partnerRow(o) {
+  return h("li", { class: "row-card" },
+    h("div", { class: "row-main" },
+      h("h3", {}, o.url ? h("a", { href: o.url, rel: "noopener", target: "_blank", text: o.name }) : o.name),
+      h("p", { class: "meta", text: [o.country, o.activity, o.city, `${o.projects_total} Horizon Europe projects`].filter(Boolean).join(" · ") }),
+      o.fields.length ? h("p", { class: "muted", text: "Fields: " + o.fields.slice(0, 5).join("; ") }) : null,
+      h("ul", { class: "evidence" }, o.evidence.projects.slice(0, 4).map((p) => h("li", {},
+        p.url ? h("a", { href: p.url, rel: "noopener", target: "_blank", text: p.acronym || p.title }) : (p.acronym || p.title),
+        `: ${p.title}${p.role ? " (" + p.role + ")" : ""}`)))));
+}
+
+function callRow(c) {
+  const when = [c.opening ? "opens " + c.opening : null, c.deadlines && c.deadlines.length ? "deadline " + c.deadlines.join(", ") : null].filter(Boolean).join(" · ");
+  return h("li", { class: "row-card" },
+    h("div", { class: "row-main" },
+      h("h3", {}, h("a", { href: c.url, rel: "noopener", target: "_blank", text: `${c.identifier}: ${c.title}` })),
+      h("p", { class: "meta", text: [c.call_title || c.call, c.status, when].filter(Boolean).join(" · ") }),
+      (c.clusters || []).length || (c.actions || []).length ? h("p", { class: "muted", text: [...(c.clusters || []), ...(c.actions || [])].join(" · ") }) : null),
+    h("span", { class: "badges" }, h("span", { class: "badge eu", text: c.status })));
+}
+
+async function renderJourney(kind, params) {
+  const j = JOURNEYS[kind];
+  const q = params.get("q") || "";
+  const forId = kind === "calls" ? params.get("for") : null;
+  document.title = `${j.title} · Research Assistant`;
+  const input = h("input", { id: "q", class: "q", type: "search", name: "q", value: q, required: true, maxlength: "2000",
+    placeholder: j.placeholder, autocomplete: "off" });
+  const form = h("form", { class: "search", role: "search", onsubmit: (e) => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (text) location.hash = `#/${kind}?q=` + encodeURIComponent(text);
+  } }, h("label", { for: "q", class: "sr", text: j.title }), input, h("button", { type: "submit", class: "btn primary", text: "Search" }));
+  const results = h("section", { id: "results", class: "results", "aria-live": "polite" });
+  app.replaceChildren(
+    h("section", { class: "hero" }, h("div", { class: "wrap" }, h("h1", { text: j.title }), form, h("p", { class: "muted", text: j.note }))),
+    h("main", { id: "main", class: "wrap layout" }, results));
+  if (!q && !forId) {
+    results.append(h("div", { class: "state", text: `Source: ${j.source}.` }));
+    return;
+  }
+  results.append(h("div", { class: "state", role: "status", text: "Searching…" }));
+  try {
+    const data = forId ? await api(`/api/calls/for/${encodeURIComponent(forId)}`) : await api(`${j.path}?q=${encodeURIComponent(q)}`);
+    const rows = data[j.key];
+    const heading = forId && data.researcher ? `Calls for ${data.researcher.name}` : `Results · ${j.source}`;
+    results.replaceChildren(
+      h("div", { class: "head-row" }, h("h2", { text: heading }), h("span", { class: "muted", text: "Best matches first" })),
+      rows.length ? h("ol", { class: "list" }, rows.map(kind === "experts" ? expertRow : kind === "partners" ? partnerRow : callRow))
+        : h("div", { class: "state", text: "Nothing matches. Try other words, or check that the graph is indexed." }));
+  } catch (error) {
+    results.replaceChildren(h("div", { class: "state", role: "alert", text: "Search failed: " + error.message }));
+  }
+}
+
+function setNav(kind) {
+  for (const key of ["experts", "partners", "calls", "collections"]) {
+    const link = document.getElementById("nav-" + key);
+    if (link) link.toggleAttribute("aria-current", key === kind) && link.setAttribute("aria-current", "page");
+    if (link && key !== kind) link.removeAttribute("aria-current");
+  }
+}
+
 // ---------- routing ----------
 
 function route() {
   const hash = location.hash || "#/";
+  const journey = hash.match(/^#\/(experts|partners|calls)(\?.*)?$/);
+  if (journey) {
+    setNav(journey[1]);
+    return renderJourney(journey[1], new URLSearchParams((journey[2] || "").slice(1)));
+  }
+  setNav("collections");
   if (hash.startsWith("#/item/")) {
     const [rest, flag] = hash.slice(7).split("?");
     return renderItem(decodeURIComponent(rest), flag === "similar");

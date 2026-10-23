@@ -309,6 +309,19 @@ flowchart TD
 Planned: a reranker (Qwen3-Reranker-4B in the `embed` service, card R3,
 bake-off B2) after fusion, and a model-id property on every vector index (R3).
 
+The research journeys (R4, `research_assistant/matching.py`) sit on this
+retriever and add graph arithmetic, no model:
+
+| Journey | Retrieval | Then | Evidence returned |
+|---|---|---|---|
+| Experts (4) | top k `Researcher` | one Cypher read for topics, SDGs and the three most cited publications | topics, publications with DOI or URL |
+| EU partners (1) | top 30 `Project` | their `PARTICIPATED_IN` organisations; score = sum of project scores, coordinators x1.25; countries limited to Horizon Europe members and associated, the asking side's country left out | the matching projects per organisation, with role and URL |
+| Horizon calls (2) | top 50 `CallTopic` | keep open and forthcoming (or all), attach their programme parts | identifier, call, deadlines, portal URL |
+
+`evals/research_assistant/backtest.py` (R6) measures the partner journey:
+hide one partner of a past project with a Canadian participant, ask with the
+project's text, and see whether it comes back in the top 10.
+
 ### 5.3 Collections search (R9)
 
 The browser talks only to `web`; nginx forwards `/api/` and `/media/` to

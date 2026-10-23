@@ -35,7 +35,8 @@ Details and scope: [AGENTS.md](AGENTS.md#prime-directives-standing-orders-they-o
 
 Built: offline multimodal embedder with EmbeddingGemma 2 (P7), Neo4j graph
 core with hybrid retrieval (P5), Europeana loader (R8), collections search API
-and web UI (R9), all for the Research Assistant. Course Access Agent: the
+and web UI (R9), the OpenAlex and CORDIS loaders (R1, R2) and the first cut of expert,
+partner and call search with evidence (R4), all for the Research Assistant. Course Access Agent: the
 document parser (A1), the WCAG audit and report (A2) and the alt-text worker
 (A3, local vision model), the structure, table and text workers (A4) and the
 rebuild and verify step (A5) are built, so a course document goes in and an
