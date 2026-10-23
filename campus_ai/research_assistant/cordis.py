@@ -101,16 +101,12 @@ def conditions_text(html: str | None) -> str:
 
 
 def topic_detail_props(detail: dict) -> dict:
-    """Props from a topicDetails record: description sections, action type, budget and conditions when known."""
+    """Props from a topicDetails record: description sections, action type, budget and conditions.
+
+    Every key is always present (empty or 0 when unknown): the graph store merges props into an existing
+    node, so a key left out would keep a stale value from an earlier index run."""
     sections = description_sections(detail.get("description"))
-    props: dict = {}
-    if sections.get("Expected outcome"):
-        props["expected_outcome"] = sections["Expected outcome"][:MAX_DESCRIPTION]
-    if sections.get("Scope"):
-        props["scope"] = sections["Scope"][:MAX_DESCRIPTION]
-    types = [t.get("typeOfAction") for a in detail.get("actions") or [] for t in a.get("types") or [] if t.get("typeOfAction")]
-    if types:
-        props["action_type"] = types[0]
+    types = [" ".join(t["typeOfAction"].split()) for a in detail.get("actions") or [] for t in a.get("types") or [] if t.get("typeOfAction")]
     budget, grants = 0.0, 0
     for actions in ((detail.get("budgetOverviewJSONItem") or {}).get("budgetTopicActionMap") or {}).values():
         for action in actions:
@@ -118,14 +114,9 @@ def topic_detail_props(detail: dict) -> dict:
                 continue
             budget += sum(number(str(v)) for v in (action.get("budgetYearMap") or {}).values())
             grants += int(action.get("expectedGrants") or 0)
-    if budget:
-        props["budget"] = budget
-    if grants:
-        props["expected_grants"] = grants
-    conditions = conditions_text(detail.get("conditions"))
-    if conditions:
-        props["conditions"] = conditions
-    return props
+    return {"expected_outcome": sections.get("Expected outcome", "")[:MAX_DESCRIPTION], "scope": sections.get("Scope", "")[:MAX_DESCRIPTION],
+            "action_type": types[0] if types else "", "budget": budget, "expected_grants": grants,
+            "conditions": conditions_text(detail.get("conditions"))}
 
 
 def description(props: dict) -> str:

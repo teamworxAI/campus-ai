@@ -147,6 +147,10 @@ class TopicDetailTests(unittest.TestCase):
         self.assertEqual((props["budget"], props["expected_grants"]), (9000000.0, 3))  # the other topic's line is not counted
         self.assertEqual(props["action_type"], "HORIZON-RIA HORIZON Research and Innovation Actions")
         self.assertEqual(props["conditions"], "Clinical partners from at least two countries must take part.")
+        # Keys are always written, so re-indexing clears values a topic page no longer has.
+        self.assertEqual(topic_detail_props({"identifier": "X", "actions": [{"types": [{"typeOfAction": "HORIZON-RIA HORIZON  Research"}]}]}),
+                         {"expected_outcome": "", "scope": "", "action_type": "HORIZON-RIA HORIZON Research", "budget": 0.0,
+                          "expected_grants": 0, "conditions": ""})
 
     def test_call_topic_with_and_without_details(self):
         plain = call_topic(GRANTS[1])
