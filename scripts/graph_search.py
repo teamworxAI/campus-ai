@@ -33,7 +33,9 @@ from campus_ai.research_assistant.rights import Screened, screen
 
 def load(path: Path) -> tuple[list[Node], list[Link], list[dict]]:
     nodes, links, queries = [], [], []
-    for line in path.read_text(encoding="utf-8").splitlines():
+    # One JSON record per line: split on newlines only (str.splitlines also cuts on U+2028 and NEL,
+    # which appear inside CORDIS objectives).
+    for line in path.read_text(encoding="utf-8").split("\n"):
         if not line.strip():
             continue
         record = json.loads(line)
