@@ -120,7 +120,7 @@ Licences marked (verify) come from secondary sources.
 | Judge (evals, verify loop) | A different model family from the generator (e.g. `qwen3:8b` if Gemma generates) | Apache-2.0 | Ollama | B5 calibrates |
 | Embeddings | EmbeddingGemma 2, `google/embeddinggemma-2` (contingency Qwen3-Embedding-4B; never EmbeddingGemma v1, Gemma Terms of Use); text baseline `intfloat/multilingual-e5-small` | Apache-2.0; e5 MIT | `embed` service | D7, B2 decides |
 | Alternatives in the router's allow-list (for bake-offs) | `gemma4:e2b`, `qwen3:4b`, `qwen3-vl:4b`, `granite3.3:8b`, `mistral-small3.2:24b`, `olmo2:7b` | Apache-2.0 (each model's Ollama registry licence layer, checked Oct 21) | Ollama | Allowed, not default |
-| Reranker | Qwen3-Reranker-4B | Apache-2.0 (verify) | `embed` service | B2 |
+| Reranker | `Qwen/Qwen3-Reranker-0.6B` (default: fits the 4 GB demo laptop, 1.2 GB of weights); `Qwen/Qwen3-Reranker-4B` for the team's inference box (does not fit 4 GB) | Apache-2.0 (both model cards' `license: apache-2.0`, not gated; checked Oct 23) | `embed` service (`campus_ai/core/embed/reranker.py`) | B2 STATUS |
 | Document parsing | Current A1 parser; candidate Docling + Granite-Docling-258M, hard pages to PaddleOCR-VL | MIT / Apache-2.0 (verify) | Docker service | B4 |
 | Speech to text | Granite Speech 4.1 2B | Apache-2.0 (verify) | Docker service | Stretch, B6 |
 | Diarization | Open: pyannote Community-1 is CC-BY-4.0, not an OSI software licence, so it fails D8 | - | - | Decide before use |

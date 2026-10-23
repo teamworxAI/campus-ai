@@ -5,7 +5,10 @@
 2. Rerank every candidate by cosine similarity on `vec_full`.
 3. Fuse the full-size vector ranking with the fulltext ranking by reciprocal
    rank fusion, so exact names and words count as well as meaning.
-4. Attach each hit's direct neighbours (graph expansion) as evidence.
+4. Optional (B2): a cross-encoder `reranker` scores the top `candidates` of
+   the fused list against the query (text queries only) and orders them by
+   that score, fusion score breaking ties.
+5. Attach each hit's direct neighbours (graph expansion) as evidence.
 """
 
 from __future__ import annotations
@@ -32,6 +35,12 @@ class Hit:
     neighbors: list[dict] = field(default_factory=list)
     found_by: list[str] = field(default_factory=list)  # "meaning" (vector index), "words" (fulltext)
     similarity: float = 0.0  # cosine similarity to the query at full size, -1..1
+    rerank: float | None = None  # cross-encoder score 0..1, None without a reranker
+
+    @property
+    def weight(self) -> float:
+        """The score that ordered this hit: the reranker's when there is one, else the fusion score."""
+        return self.score if self.rerank is None else self.rerank
 
 
 def fulltext_query(text: str) -> str:
@@ -54,11 +63,13 @@ def fuse(rankings: Sequence[Sequence[str]], k: int = RRF_K) -> dict[str, float]:
 
 
 class HybridRetriever:
-    def __init__(self, driver: Any, embedder: Embedder, database: str | None = None, candidates: int = 50):
+    def __init__(self, driver: Any, embedder: Embedder, database: str | None = None, candidates: int = 50,
+                 reranker: Any = None):
         self.driver = driver
         self.embedder = embedder
         self.database = database
         self.candidates = candidates
+        self.reranker = reranker  # e.g. campus_ai.core.embed.reranker.Reranker; None skips the step
 
     def run(self, query: str, **params: Any) -> list[dict]:
         records, _, _ = self.driver.execute_query(query, params, database_=self.database)
@@ -114,14 +125,21 @@ class HybridRetriever:
         by_vector = [ids[i] for i in np.argsort(-similarity, kind="stable")]
         by_text = [row["id"] for row in text_rows]
         scores = fuse([by_vector, by_text])
-        top = sorted(scores, key=lambda id_: -scores[id_])[:k]
+        fused = sorted(scores, key=lambda id_: -scores[id_])
+        rerank: dict[str, float] = {}
+        if self.reranker is not None and modality == "text":
+            pool = fused[:max(k, self.candidates)]
+            rerank = dict(zip(pool, self.reranker.score(query, [found[id_]["text"] or "" for id_ in pool],
+                                                        data_class=data_class)))
+            fused = sorted(pool, key=lambda id_: (-rerank[id_], -scores[id_]))
+        top = fused[:k]
 
         by_meaning = {row["id"] for row in rows}
         found_by = {id_: [name for name, ids in (("meaning", by_meaning), ("words", set(by_text))) if id_ in ids]
                     for id_ in top}
         cosine = dict(zip(ids, similarity.tolist()))
         hits = [Hit(id_, found[id_]["labels"], found[id_]["text"], scores[id_], found_by=found_by[id_],
-                    similarity=cosine[id_]) for id_ in top]
+                    similarity=cosine[id_], rerank=rerank.get(id_)) for id_ in top]
         if neighbors and hits:
             linked = self.run(
                 f"UNWIND $ids AS id MATCH (n:{LABEL} {{id: id}}) RETURN id, COLLECT {{ "

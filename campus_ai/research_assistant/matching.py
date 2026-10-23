@@ -20,6 +20,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any
 
+from campus_ai.core.embed.reranker import Reranker
 from campus_ai.core.graph import HybridRetriever
 
 CANDIDATES = 50
@@ -31,12 +32,22 @@ EU = {"AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE", "EL", "H
 ASSOCIATED = {"AL", "AM", "BA", "CA", "CH", "EG", "FO", "GE", "IS", "IL", "KR", "MD", "ME", "MK", "NO", "NZ", "RS", "TN",
               "TR", "UA", "UK", "XK"}
 COUNTRY_SETS = {"eu": EU, "associated": EU | ASSOCIATED, "all": None}
+# Task instruction for the cross-encoder (B2): the query is a topic, project idea or researcher's text.
+RERANK_INSTRUCTION = ("Given a research topic or project description, retrieve research projects, researcher profiles "
+                      "or funding call topics on the same research subject")
+
+
+def research_reranker() -> Reranker:
+    """The default reranker with the research instruction; loads its weights on first use."""
+    return Reranker(instruction=RERANK_INSTRUCTION)
 
 
 class ResearchSearch:
-    def __init__(self, driver: Any, embedder: Any, database: str | None = None):
+    """`reranker` (e.g. `research_reranker()`) adds the cross-encoder step to every search; None leaves it off."""
+
+    def __init__(self, driver: Any, embedder: Any, database: str | None = None, reranker: Any = None):
         self.driver = driver
-        self.retriever = HybridRetriever(driver, embedder, database, candidates=CANDIDATES)
+        self.retriever = HybridRetriever(driver, embedder, database, candidates=CANDIDATES, reranker=reranker)
         self.database = database
 
     def run(self, query: str, **params: Any) -> list[dict]:
@@ -64,7 +75,7 @@ class ResearchSearch:
                 continue
             out.append({
                 "id": hit.id, "name": row["name"], "institution": row.get("institution") or "", "orcid": row.get("orcid") or "",
-                "url": row.get("url") or "", "score": round(hit.score, 4), "found_by": hit.found_by,
+                "url": row.get("url") or "", "score": round(hit.weight, 4), "found_by": hit.found_by,
                 "evidence": {"topics": row.get("topics") or [], "sdgs": row.get("sdgs") or [],
                              "publications": [p for p in row.get("publications") or [] if p.get("title")],
                              "works": row.get("works") or 0},
@@ -87,7 +98,7 @@ class ResearchSearch:
             "o.url AS url, o.fields AS fields, o.projects AS projects, r.role AS role, "
             "p.id AS project, p.acronym AS acronym, p.title AS title, p.url AS project_url, p.start AS start",
             ids=[hit.id for hit in hits])
-        score_of = {hit.id: hit.score for hit in hits}
+        score_of = {hit.id: hit.weight for hit in hits}
         orgs: dict[str, dict] = {}
         total: defaultdict[str, float] = defaultdict(float)
         for row in rows:
@@ -131,7 +142,7 @@ class ResearchSearch:
         for hit in hits:
             row = detail.get(hit.id)
             if row:
-                out.append({**row, "score": round(hit.score, 4), "found_by": hit.found_by})
+                out.append({**row, "score": round(hit.weight, 4), "found_by": hit.found_by})
             if len(out) >= k:
                 break
         return out

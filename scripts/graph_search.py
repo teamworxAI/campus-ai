@@ -16,6 +16,7 @@ reaches Neo4j over an internal network only:
     docker compose run --rm embed python scripts/graph_search.py rights evals/rights/sample_records.jsonl
     docker compose run --rm embed python scripts/graph_search.py index evals/embed/sample_bakeoff.jsonl
     docker compose run --rm embed python scripts/graph_search.py search "salmon and ocean warming"
+    docker compose run --rm embed python scripts/graph_search.py search "salmon and ocean warming" --rerank
     docker compose run --rm embed python scripts/graph_search.py eval evals/embed/sample_bakeoff.jsonl
 """
 
@@ -27,6 +28,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from campus_ai.core.embed import BACKENDS, DEFAULT_BACKEND, get_embedder
+from campus_ai.core.embed.reranker import Reranker
 from campus_ai.core.graph import GraphStore, HybridRetriever, Link, Node, connect
 from campus_ai.research_assistant.rights import Screened, screen
 
@@ -74,13 +76,14 @@ def screened(path: Path) -> Screened:
 def show(hits) -> None:
     for rank, hit in enumerate(hits, start=1):
         label = next((label for label in hit.labels if label != "Entity"), "Entity")
-        print(f"{rank:2}. {hit.id} [{label}] {hit.score:.4f}  {line(hit.text, 100) or '(no caption)'}")
+        rerank = "" if hit.rerank is None else f" rerank {hit.rerank:.3f}"
+        print(f"{rank:2}. {hit.id} [{label}] {hit.score:.4f}{rerank}  {line(hit.text, 100) or '(no caption)'}")
         for neighbor in hit.neighbors:
             arrow = "->" if neighbor["outgoing"] else "<-"
             print(f"      {arrow} {neighbor['type']} {neighbor['id']}  {line(neighbor['text'], 80)}")
 
 
-def main() -> None:
+def parse(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--backend", default=DEFAULT_BACKEND, choices=list(BACKENDS))
     commands = parser.add_subparsers(dest="command", required=True)
@@ -94,7 +97,13 @@ def main() -> None:
     evaluate = commands.add_parser("eval", help="recall@k for the file's queries over the indexed graph")
     evaluate.add_argument("path", type=Path)
     evaluate.add_argument("-k", type=int, default=10)
-    args = parser.parse_args()
+    for command in (search, evaluate):
+        command.add_argument("--rerank", action="store_true", help="add the cross-encoder reranker step (B2)")
+    return parser.parse_args(argv)
+
+
+def main(argv=None) -> None:
+    args = parse(argv)
     if args.command == "rights":
         screened(args.path)
         return
@@ -109,10 +118,11 @@ def main() -> None:
             store.link(result.links)
             print(f"indexed {len(result.nodes)} nodes and {len(result.links)} links with {embedder.name}")
         elif args.command == "search":
-            show(HybridRetriever(driver, embedder).search(args.query, args.k, args.modality, args.labels))
+            retriever = HybridRetriever(driver, embedder, reranker=Reranker() if args.rerank else None)
+            show(retriever.search(args.query, args.k, args.modality, args.labels))
         else:
             _, _, queries = load(args.path)
-            retriever = HybridRetriever(driver, embedder)
+            retriever = HybridRetriever(driver, embedder, reranker=Reranker() if args.rerank else None)
             scores = defaultdict(list)
             for query in queries:
                 found = {hit.id for hit in retriever.search(query["query"], args.k, neighbors=0)}

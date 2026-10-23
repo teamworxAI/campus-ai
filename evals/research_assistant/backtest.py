@@ -8,7 +8,7 @@ participant) back among the top 10 organisations. Reports recall@10 and the
 mean reciprocal rank, with the misses listed. Runs in the `embed` service
 over whatever is indexed (plan 4.5).
 
-    docker compose run --rm embed python evals/research_assistant/backtest.py [--limit 100]
+    docker compose run --rm embed python evals/research_assistant/backtest.py [--limit 100] [--rerank]
 """
 
 from __future__ import annotations
@@ -21,20 +21,27 @@ from pathlib import Path
 
 from campus_ai.core.embed import get_embedder
 from campus_ai.core.graph import connect
-from campus_ai.research_assistant.matching import ASSOCIATED, EU, ResearchSearch
+from campus_ai.research_assistant.matching import ASSOCIATED, EU, ResearchSearch, research_reranker
 
 HERE = Path(__file__).parent
 K = 10
 
 
-def main(argv=None) -> int:
+def parse(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--limit", type=int, default=100, help="projects to test (most recent first)")
     parser.add_argument("--home", default="CA", help="the home country whose projects are tested")
-    args = parser.parse_args(argv)
+    parser.add_argument("--rerank", action="store_true", help="add the cross-encoder reranker step (B2)")
+    return parser.parse_args(argv)
+
+
+def main(argv=None) -> int:
+    args = parse(argv)
     embedder = get_embedder()
+    reranker = research_reranker() if args.rerank else None
+    model = embedder.name + (f" + {reranker.name}" if reranker else "")
     with connect() as driver:
-        search = ResearchSearch(driver, embedder)
+        search = ResearchSearch(driver, embedder, reranker=reranker)
         projects = search.run(
             "MATCH (home:Entity)-[:PARTICIPATED_IN]->(p:Entity) WHERE home.country = $home AND p.kind = 'Project' "
             "MATCH (o:Entity)-[r:PARTICIPATED_IN]->(p) WHERE o.country IN $eligible AND o.country <> $home "
@@ -57,7 +64,7 @@ def main(argv=None) -> int:
     recall = len(found) / len(results)
     mrr = sum(1 / r[3] for r in found) / len(results)
     when = datetime.now(timezone.utc)
-    lines = [f"# Partner back-test (R6): {embedder.name}", "",
+    lines = [f"# Partner back-test (R6): {model}", "",
              f"{when:%Y-%m-%d %H:%M} UTC. {len(results)} projects with a {args.home} participant; the hidden partner is the "
              f"coordinator or the first eligible participant; the project itself is excluded from the candidates. "
              f"{seconds / len(results):.1f} s per project.", "",
@@ -66,7 +73,7 @@ def main(argv=None) -> int:
     lines += [f"| {a} | {n} | {c} | {r if r else 'miss'} |" for a, n, c, r in results]
     report = "\n".join(lines) + "\n"
     print(report)
-    out = HERE / f"backtest_{when:%Y%m%d}.md"
+    out = HERE / f"backtest_{'rerank_' if reranker else ''}{when:%Y%m%d}.md"
     out.write_text(report, encoding="utf-8")
     print(f"Report: {out.relative_to(HERE.parents[1])}")
     return 0

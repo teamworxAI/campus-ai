@@ -7,11 +7,12 @@ check that the R2 graph answers the kind of question the demo asks. Needs
 the graph indexed (`graph_search.py index data/cordis/horizon/records.jsonl`)
 and runs in the `embed` service.
 
-    docker compose run --rm embed python evals/research_assistant/partner_search.py
+    docker compose run --rm embed python evals/research_assistant/partner_search.py [--rerank]
 """
 
 from __future__ import annotations
 
+import argparse
 import sys
 import time
 from datetime import datetime, timezone
@@ -19,6 +20,7 @@ from pathlib import Path
 
 from campus_ai.core.embed import get_embedder
 from campus_ai.core.graph import HybridRetriever, connect
+from campus_ai.research_assistant.matching import research_reranker
 
 HERE = Path(__file__).parent
 QUERIES = [
@@ -32,13 +34,22 @@ QUERIES = [
 K = 5
 
 
-def main() -> int:
+def parse(argv=None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--rerank", action="store_true", help="add the cross-encoder reranker step (B2)")
+    return parser.parse_args(argv)
+
+
+def main(argv=None) -> int:
+    args = parse(argv)
     embedder = get_embedder()
-    lines = [f"# Partner search probes over the CORDIS graph ({embedder.name})", "",
+    reranker = research_reranker() if args.rerank else None
+    model = embedder.name + (f" + {reranker.name}" if reranker else "")
+    lines = [f"# Partner search probes over the CORDIS graph ({model})", "",
              f"{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC. Top {K} organisations and projects per question, hybrid "
              "retrieval by label. Read the names: an organisation whose fields and projects fit the question is the bar.", ""]
     with connect() as driver:
-        retriever = HybridRetriever(driver, embedder)
+        retriever = HybridRetriever(driver, embedder, reranker=reranker)
         for query in QUERIES:
             lines += [f"## {query}", ""]
             for label in ("Organization", "Project"):
@@ -59,7 +70,7 @@ def main() -> int:
                 lines.append("")
     report = "\n".join(lines)
     print(report)
-    out = HERE / f"partner_search_{datetime.now(timezone.utc):%Y%m%d}.md"
+    out = HERE / f"partner_search_{'rerank_' if reranker else ''}{datetime.now(timezone.utc):%Y%m%d}.md"
     out.write_text(report, encoding="utf-8")
     print(f"Report: {out.relative_to(HERE.parents[1])}")
     return 0
