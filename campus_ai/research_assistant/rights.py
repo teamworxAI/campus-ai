@@ -88,20 +88,30 @@ def screen(nodes: list[Node], links: list[Link]) -> Screened:
         if link.type == "PART_OF" and link.dst in reasons and link.src not in reasons:
             reasons[link.src] = "part of a restricted item"
 
-    # Metadata nodes stay only when linked, directly or through other metadata, to a kept unit.
+    # Metadata nodes (collections, institutions, creators, topics...) go only when everything they
+    # hang off, directly or through other metadata, is restricted. Metadata reached from a kept
+    # record stays, and so does metadata that no unit links to at all (the research graph of
+    # researchers, projects and calls has no units).
     by_id = {node.id: node for node in nodes}
     metadata = {node.id for node in nodes if node.label not in UNITS and node.props.get("source")}
-    kept = {node.id for node in nodes if node.id not in reasons and node.id not in metadata}
-    grew = True
-    while grew:
-        grew = False
-        for link in links:
-            for a, b in ((link.src, link.dst), (link.dst, link.src)):
-                if a in kept and b in metadata and b not in kept and b not in reasons:
-                    kept.add(b)
-                    grew = True
-    for id_ in metadata - kept:
-        reasons.setdefault(id_, "only linked to restricted items")
+
+    def reach(seed: set[str]) -> set[str]:
+        found, grew = set(seed), True
+        while grew:
+            grew = False
+            for link in links:
+                for a, b in ((link.src, link.dst), (link.dst, link.src)):
+                    if a in found and b in metadata and b not in found:
+                        found.add(b)
+                        grew = True
+        return found
+
+    from_kept = reach({node.id for node in nodes if node.id not in reasons and node.id not in metadata})
+    from_restricted = reach(set(reasons))
+    for id_ in metadata:
+        if id_ in from_restricted and id_ not in from_kept:
+            reasons.setdefault(id_, "only linked to restricted items")
+    kept = {node.id for node in nodes if node.id not in reasons}
 
     return Screened(
         nodes=[node for node in nodes if node.id in kept],
