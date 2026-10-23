@@ -5,7 +5,8 @@ to Researcher nodes and prints the top researchers with the topics and
 titles that put them there. Not the R6 back-test: a readable check that the
 R1 graph answers the kind of question the demo asks. Needs the graph
 indexed (`graph_search.py index data/openalex/<name>/records.jsonl`) and
-runs in the `embed` service (model + Neo4j).
+runs in the `embed` service (model + Neo4j). The scored version of these
+questions is `gold_eval.py` over `gold_experts.jsonl`.
 
     docker compose run --rm embed python evals/research_assistant/expert_search.py
 """
@@ -18,6 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from campus_ai.core.embed import get_embedder
+from campus_ai.core.eval import report
 from campus_ai.core.graph import HybridRetriever, connect
 
 HERE = Path(__file__).parent
@@ -32,36 +34,41 @@ QUERIES = [
 K = 5
 
 
+def build_report(probes: list[tuple], embedder: str, when: datetime, sha: str | None = None) -> str:
+    """probes: (query, seconds, hits) with each hit a dict of id, name, works, score, found_by, topics."""
+    sections = []
+    for query, seconds, hits in probes:
+        lines = [f"{seconds:.1f} s", ""]
+        if not hits:
+            lines.append("- (no researchers found)")
+        for hit in hits:
+            topics = "; ".join((hit.get("topics") or [])[:4]) or "(no topics)"
+            lines.append(f"- **{hit.get('name') or hit['id']}** ({hit.get('works') or '?'} works, score {hit['score']:.3f}, "
+                         f"found by {'+'.join(hit['found_by']) or '?'}): {topics}")
+        sections.append((query, lines))
+    return report.render(
+        f"Expert search probes over the OpenAlex graph ({embedder})",
+        f"Top {K} researchers per question, hybrid retrieval restricted to Researcher nodes, with the topics and "
+        "titles that put them there. Read the names and topics: a plausible expert for every question is the bar.",
+        when=when, sha=sha, sections=sections)
+
+
 def main() -> int:
     embedder = get_embedder()
-    lines = [f"# Expert search probes over the OpenAlex graph ({embedder.name})", "",
-             f"{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC. Top {K} researchers per question, hybrid retrieval "
-             "restricted to Researcher nodes, with the topics and titles that put them there. Read the names and "
-             "topics: a plausible expert for every question is the bar.", ""]
+    probes = []
     with connect() as driver:
         retriever = HybridRetriever(driver, embedder)
         for query in QUERIES:
             start = time.perf_counter()
             hits = retriever.search(query, K, labels=["Researcher"], neighbors=0)
             seconds = time.perf_counter() - start
-            lines += [f"## {query}", "", f"{seconds:.1f} s", ""]
-            if not hits:
-                lines += ["- (no researchers found)", ""]
-                continue
             rows = retriever.run("MATCH (n:Entity) WHERE n.id IN $ids RETURN n.id AS id, n.name AS name, n.topics AS topics, "
-                                 "n.works AS works", ids=[hit.id for hit in hits])
+                                 "n.works AS works", ids=[hit.id for hit in hits]) if hits else []
             props = {row["id"]: row for row in rows}
-            for hit in hits:
-                row = props.get(hit.id, {})
-                topics = "; ".join((row.get("topics") or [])[:4]) or "(no topics)"
-                lines.append(f"- **{row.get('name') or hit.id}** ({row.get('works') or '?'} works, score {hit.score:.3f}, "
-                             f"found by {'+'.join(hit.found_by) or '?'}): {topics}")
-            lines.append("")
-    report = "\n".join(lines)
-    print(report)
-    out = HERE / f"expert_search_{datetime.now(timezone.utc):%Y%m%d}.md"
-    out.write_text(report, encoding="utf-8")
-    print(f"Report: {out.relative_to(HERE.parents[1])}")
+            probes.append((query, seconds, [{**props.get(hit.id, {}), "id": hit.id, "score": hit.score,
+                                             "found_by": hit.found_by} for hit in hits]))
+    when = datetime.now(timezone.utc)
+    report.save(build_report(probes, embedder.name, when, report.git_sha(HERE)), "expert_search", HERE, when)
     return 0
 
 

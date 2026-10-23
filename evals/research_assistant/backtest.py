@@ -20,11 +20,30 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from campus_ai.core.embed import get_embedder
+from campus_ai.core.eval import metrics, report
 from campus_ai.core.graph import connect
 from campus_ai.research_assistant.matching import ASSOCIATED, EU, ResearchSearch
 
 HERE = Path(__file__).parent
 K = 10
+
+
+def build_report(results: list[tuple], embedder: str, home: str, seconds: float, when: datetime,
+                 sha: str | None = None) -> str:
+    """results: (acronym, hidden partner name, its country, its id, ranked organisation ids) per project."""
+    ranks = [metrics.first_rank(ranked[:K], [hidden]) for _, _, _, hidden, ranked in results]
+    found = sum(r is not None for r in ranks)
+    recall = metrics.mean(metrics.recall_at_k(ranked, [hidden], K) for _, _, _, hidden, ranked in results)
+    mrr = metrics.mean(metrics.reciprocal_rank(ranked[:K], [hidden]) for _, _, _, hidden, ranked in results)
+    rows = [(a, n, c, r or "miss") for (a, n, c, _, _), r in zip(results, ranks)]
+    return report.render(
+        f"Partner back-test (R6): {embedder}",
+        f"{len(results)} projects with a {home} participant; the hidden partner is the coordinator or the first "
+        f"eligible participant; the project itself is excluded from the candidates. "
+        f"{seconds / len(results):.1f} s per project.",
+        when=when, sha=sha,
+        bullets=[f"**recall@{K}: {recall:.2f}** ({found} of {len(results)})", f"MRR: {mrr:.2f}"],
+        sections=[(None, report.table(["Project", "Hidden partner", "Country", "Rank"], rows))])
 
 
 def main(argv=None) -> int:
@@ -47,28 +66,13 @@ def main(argv=None) -> int:
         for project in projects:
             hidden = next((x for x in project["partners"] if x["role"] == "coordinator"), project["partners"][0])
             ranked = search.partners(project["text"], k=K, exclude_project=project["id"])
-            rank = next((i + 1 for i, org in enumerate(ranked) if org["id"] == hidden["id"]), None)
-            results.append((project["acronym"], hidden["name"], hidden["country"], rank))
+            results.append((project["acronym"], hidden["name"], hidden["country"], hidden["id"], [org["id"] for org in ranked]))
         seconds = time.perf_counter() - start
     if not results:
         print(f"No indexed projects with a {args.home} participant: index data/cordis/horizon/records.jsonl first")
         return 1
-    found = [r for r in results if r[3]]
-    recall = len(found) / len(results)
-    mrr = sum(1 / r[3] for r in found) / len(results)
     when = datetime.now(timezone.utc)
-    lines = [f"# Partner back-test (R6): {embedder.name}", "",
-             f"{when:%Y-%m-%d %H:%M} UTC. {len(results)} projects with a {args.home} participant; the hidden partner is the "
-             f"coordinator or the first eligible participant; the project itself is excluded from the candidates. "
-             f"{seconds / len(results):.1f} s per project.", "",
-             f"- **recall@{K}: {recall:.2f}** ({len(found)} of {len(results)})", f"- MRR: {mrr:.2f}",
-             "", "| Project | Hidden partner | Country | Rank |", "|---|---|---|---|"]
-    lines += [f"| {a} | {n} | {c} | {r if r else 'miss'} |" for a, n, c, r in results]
-    report = "\n".join(lines) + "\n"
-    print(report)
-    out = HERE / f"backtest_{when:%Y%m%d}.md"
-    out.write_text(report, encoding="utf-8")
-    print(f"Report: {out.relative_to(HERE.parents[1])}")
+    report.save(build_report(results, embedder.name, args.home, seconds, when, report.git_sha(HERE)), "backtest", HERE, when)
     return 0
 
 

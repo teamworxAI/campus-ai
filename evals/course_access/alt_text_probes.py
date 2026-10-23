@@ -19,6 +19,7 @@ from pathlib import Path
 
 from PIL import Image as PILImage, ImageDraw, ImageFont
 
+from campus_ai.core.eval import report
 from campus_ai.course_access.alt_text import ALWAYS_REVIEW, describe, report_markdown
 from campus_ai.course_access.parser import Document, Image, Paragraph
 
@@ -83,6 +84,19 @@ PROBES = [  # name, drawing, expected kinds (any of), surrounding text
 ]
 
 
+def build_report(rows: list[tuple], proposals: list, when: datetime, sha: str | None = None) -> str:
+    """rows: (probe, expected kinds, got, kind ok, routing ok, seconds); proposals: the AltText answers."""
+    kind_ok, route_ok = sum(r[3] for r in rows), sum(r[4] for r in rows)
+    table = [(n, ", ".join(e), g, "yes" if k else "NO", "yes" if r else "NO", s) for n, e, g, k, r, s in rows]
+    return report.render(
+        f"Alt-text probe run: {proposals[0].model if proposals else '?'}",
+        f"Kind right for {kind_ok}/{len(rows)}; review routing right for {route_ok}/{len(rows)} "
+        "(images that must go to review did). Times include model loading on the first call.",
+        when=when, sha=sha, sections=[
+            (None, report.table(["Probe", "Expected kind", "Got", "Kind ok", "Routing ok", "Seconds"], table)),
+            (None, [report_markdown(proposals, "probe deck")])])
+
+
 def main() -> int:
     data_class = "P"
     rows, proposals = [], []
@@ -97,21 +111,8 @@ def main() -> int:
         rows.append((name, sorted(expected), proposal.kind, proposal.kind in expected,
                      proposal.needs_review == must_review or not must_review, round(seconds, 1)))
     when = datetime.now(timezone.utc)
-    kind_ok = sum(r[3] for r in rows)
-    route_ok = sum(r[4] for r in rows)
-    lines = [f"# Alt-text probe run: {proposals[0].model}", "",
-             f"{when:%Y-%m-%d %H:%M} UTC. Kind right for {kind_ok}/{len(rows)}; review routing right for "
-             f"{route_ok}/{len(rows)} (images that must go to review did). Times include model loading on the first call.",
-             "", "| Probe | Expected kind | Got | Kind ok | Routing ok | Seconds |", "|---|---|---|---|---|---|"]
-    lines += [f"| {n} | {', '.join(e)} | {g} | {'yes' if k else 'NO'} | {'yes' if r else 'NO'} | {s} |"
-              for n, e, g, k, r, s in rows]
-    lines += ["", report_markdown(proposals, "probe deck")]
-    report = "\n".join(lines)
-    print(report)
-    out = HERE / f"alt_text_probes_{when:%Y%m%d}.md"
-    out.write_text(report, encoding="utf-8")
-    print(f"\nReport: {out.relative_to(HERE.parents[1])}")
-    return 0 if kind_ok == len(rows) else 1
+    report.save(build_report(rows, proposals, when, report.git_sha(HERE)), "alt_text_probes", HERE, when)
+    return 0 if all(r[3] for r in rows) else 1
 
 
 if __name__ == "__main__":

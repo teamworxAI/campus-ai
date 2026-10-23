@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from campus_ai.core.embed import get_embedder
+from campus_ai.core.eval import report
 from campus_ai.core.graph import HybridRetriever, connect
 
 HERE = Path(__file__).parent
@@ -29,19 +30,39 @@ QUERIES = [
     "quantum materials and superconducting devices",
     "affordable housing and urban policy",
 ]
+LABELS = ("Organization", "Project")
 K = 5
+
+
+def build_report(probes: list[tuple], embedder: str, when: datetime, sha: str | None = None) -> str:
+    """probes: (query, [(label, seconds, node property dicts in rank order)]) per question."""
+    sections = []
+    for query, by_label in probes:
+        lines = []
+        for label, seconds, nodes in by_label:
+            lines += [f"**{label}s** ({seconds:.1f} s)", ""]
+            for p in nodes:
+                if label == "Organization":
+                    lines.append(f"- {p.get('name')} ({p.get('country')}, {p.get('activity')}): {'; '.join((p.get('fields') or [])[:4])}")
+                else:
+                    lines.append(f"- {p.get('acronym')}: {p.get('title')} ({p.get('start') or '?'}; {', '.join(p.get('countries') or [])})")
+            lines.append("")
+        sections.append((query, lines[:-1]))
+    return report.render(
+        f"Partner search probes over the CORDIS graph ({embedder})",
+        f"Top {K} organisations and projects per question, hybrid retrieval by label. Read the names: an "
+        "organisation whose fields and projects fit the question is the bar.",
+        when=when, sha=sha, sections=sections)
 
 
 def main() -> int:
     embedder = get_embedder()
-    lines = [f"# Partner search probes over the CORDIS graph ({embedder.name})", "",
-             f"{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC. Top {K} organisations and projects per question, hybrid "
-             "retrieval by label. Read the names: an organisation whose fields and projects fit the question is the bar.", ""]
+    probes = []
     with connect() as driver:
         retriever = HybridRetriever(driver, embedder)
         for query in QUERIES:
-            lines += [f"## {query}", ""]
-            for label in ("Organization", "Project"):
+            by_label = []
+            for label in LABELS:
                 start = time.perf_counter()
                 hits = retriever.search(query, K, labels=[label], neighbors=0)
                 seconds = time.perf_counter() - start
@@ -49,19 +70,10 @@ def main() -> int:
                                      "n.activity AS activity, n.fields AS fields, n.acronym AS acronym, n.title AS title, "
                                      "n.countries AS countries, n.start AS start", ids=[h.id for h in hits])
                 props = {r["id"]: r for r in rows}
-                lines += [f"**{label}s** ({seconds:.1f} s)", ""]
-                for hit in hits:
-                    p = props.get(hit.id, {})
-                    if label == "Organization":
-                        lines.append(f"- {p.get('name')} ({p.get('country')}, {p.get('activity')}): {'; '.join((p.get('fields') or [])[:4])}")
-                    else:
-                        lines.append(f"- {p.get('acronym')}: {p.get('title')} ({p.get('start') or '?'}; {', '.join(p.get('countries') or [])})")
-                lines.append("")
-    report = "\n".join(lines)
-    print(report)
-    out = HERE / f"partner_search_{datetime.now(timezone.utc):%Y%m%d}.md"
-    out.write_text(report, encoding="utf-8")
-    print(f"Report: {out.relative_to(HERE.parents[1])}")
+                by_label.append((label, seconds, [props.get(hit.id, {}) for hit in hits]))
+            probes.append((query, by_label))
+    when = datetime.now(timezone.utc)
+    report.save(build_report(probes, embedder.name, when, report.git_sha(HERE)), "partner_search", HERE, when)
     return 0
 
 
