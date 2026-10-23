@@ -37,15 +37,16 @@ Built: offline multimodal embedder with EmbeddingGemma 2 (P7), Neo4j graph
 core with hybrid retrieval (P5), Europeana loader (R8), collections search API
 and web UI (R9), all for the Research Assistant. Course Access Agent: the
 document parser (A1), the WCAG audit and report (A2) and the alt-text worker
-(A3, local vision model) and the structure, table and text workers (A4) are
-built, every proposal carrying a confidence and a review flag; rebuild and
-review are next (see [architecture](docs/architecture.md#11-course-access-agent)).
+(A3, local vision model), the structure, table and text workers (A4) and the
+rebuild and verify step (A5) are built, so a course document goes in and an
+accessible DOCX and HTML, a report and a statement come out, every proposal
+carrying a confidence and a review flag; the review queue (P3) is next (see
+[architecture](docs/architecture.md#11-course-access-agent)).
 Also built: LLM router over local open-weight models on Ollama (P1), the
 data-class gate and tracing (P1b, P2), Ollama as an offline compose service
 (P9), the local-stack smoke test (B1, passed on the demo laptop) and the
 licence guard (P8). Next: the other model bake-offs (B2-B5), the eval harness
-(P6) and the rebuild and verify loop (A5); OCR for scanned PDFs (A7) is next
-phase.
+(P6) and the review queue (P3); OCR for scanned PDFs (A7) is next phase.
 
 ## Quick start
 

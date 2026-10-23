@@ -294,7 +294,25 @@ docker compose run --rm -v "$PWD/samples:/samples:ro" test python scripts/propos
 Most proposals come from rules and need no model; the language of the
 document and link text that the surrounding text does not give are asked of
 the local model, so the `ollama` service must be running for those. Nothing
-is written back until the rebuild step (A5).
+is written back by this step.
+
+**The accessible version.** `remediate.py` runs the whole pipeline: parse,
+audit, propose, apply the approved proposals, rebuild, audit again:
+
+```bash
+docker compose run --rm -v "$PWD/samples:/samples" test python scripts/remediate.py /samples/week4.pptx --out /samples/out
+docker compose run --rm -v "$PWD/samples:/samples" test python scripts/remediate.py /samples/week4.pptx --out /samples/out --alt-text --approve-all
+```
+
+In the output folder: `week4.docx` and `week4.html` (the accessible
+versions), `week4-report.md` (the audit of the original), `week4-review.md`
+(the proposals still waiting for a person) and `week4-statement.md` (what was
+found, applied, left and not checked, from re-auditing the rebuilt DOCX).
+By default only proposals that need no review are applied; `--approve-all`
+applies every proposal with a value and is for demos and evaluation, not for
+publishing. `--alt-text` adds the alt-text worker. The rebuilt DOCX is
+audited with the same checks as the original, so the statement's numbers
+are comparable.
 
 **A corpus of real course documents.** `fetch-course-docs` downloads openly
 licensed lecture slides, lecture notes, course outlines and readings (CC BY

@@ -92,14 +92,20 @@ def _fix(issue, action, value, conf, evidence, worker=None, reason="", model="")
 
 # --- Structure worker -------------------------------------------------------
 
+def list_item_from(text: str) -> dict | None:
+    """The list item a typed list line stands for ({text, ordered, level}), or None if it is not one."""
+    match = FAKE_LIST.match(text)
+    if not match:
+        return None
+    marker = match.group(1)
+    return {"text": text[match.end(1):].strip(), "ordered": any(ch.isalnum() for ch in marker), "level": 1}
+
+
 def fake_list(document, issue, data_class):
     text = document.blocks[issue.block].text
-    match = FAKE_LIST.match(text)
-    marker = match.group(1)
-    ordered = any(ch.isalnum() for ch in marker)
-    item = text[match.end(1):].strip()
-    return [_fix(issue, "convert-to-list", {"text": item, "ordered": ordered, "level": 1}, 0.9,
-                 f"the paragraph starts with the list marker {marker!r}")]
+    item = list_item_from(text)
+    return [_fix(issue, "convert-to-list", item, 0.9,
+                 f"the paragraph starts with the list marker {FAKE_LIST.match(text).group(1)!r}")]
 
 
 def heading_level_skipped(document, issue, data_class):

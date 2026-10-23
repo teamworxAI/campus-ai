@@ -56,6 +56,7 @@ class Paragraph(_Block):
 class ListItem(_Block):
     text: str
     level: int = 1  # nesting depth, 1 = top level
+    ordered: bool = False  # numbered rather than bulleted, where the file says so
 
 
 @dataclass

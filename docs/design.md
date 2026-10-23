@@ -489,7 +489,50 @@ model use per action, with samples to read. Reading order, captions and
 colour contrast are not handled yet (the plan's W2-W4 also name them): the
 parser does not yet give the workers what they need for those.
 
-### 9.5 Limits that the next cards must handle
+### 9.5 Rebuild and verify (A5): `campus_ai/course_access/rebuild.py`
+
+```python
+from campus_ai.course_access import rebuild
+
+fixed = rebuild.apply(doc, approved_fixes, approved_alt_texts)   # a new Document; the input is untouched
+notes = rebuild.to_docx(fixed, "lecture-03.docx")
+html = rebuild.to_html(fixed)
+rebuilt, remaining = rebuild.verify("lecture-03.docx")           # parse + audit the output again
+print(rebuild.statement("lecture-03.pptx", issues, remaining, applied=len(approved_fixes), waiting=3, notes=notes))
+```
+
+`apply` changes only what a proposal names: a paragraph becomes a list item
+or a heading, a heading changes level or text, a table gets its header row
+or becomes the paragraphs of its cells, a link gets its text, an image its
+alt text or decorative flag, the document its title and language; an
+untitled slide gets its first line as title. Proposals without a value are
+ignored. Nothing here decides what is approved: the caller passes what a
+person, or the confidence threshold for rule-based proposals, approved.
+
+| Output | What it carries |
+|---|---|
+| HTML (`to_html`) | `lang` and `<title>`; `h1`-`h6`; nested `ul`/`ol` from list levels; `<th scope="col">` header rows; images as data URIs with `alt`, or `alt="" role="presentation"` when decorative, or no `alt` at all when still undescribed (left for checkers to see, never faked); links inline in their paragraph where the text contains them, else on their own line; one `<section aria-label="Slide n">` per slide for PPTX |
+| DOCX (`to_docx`) | Title and language in the core properties and the default run language; `Heading N` styles; `List Bullet`/`List Number` with the numbering level on the paragraph; `Table Grid` tables with `tblHeader` on the header row; pictures with `descr` alt text or Office's decorative flag; real hyperlinks (`w:hyperlink`) inline or on their own line. EMF/WMF pictures can't be embedded: their description is written as text and reported in the notes |
+
+`verify` parses and audits the DOCX with the same A1 and A2 code as the
+original, so before and after are measured alike; `compare` gives fixed,
+remaining and introduced issues by rule. `statement` is the short
+accessibility statement: found, applied, waiting for review, remaining,
+introduced, the rebuild notes and the audit's "not checked" list, so the
+output is never read as full conformance. The verify loop of the agent
+design (re-route remaining issues, at most twice) is the review cycle: the
+remaining issues are exactly those whose proposals wait for a person.
+
+`scripts/remediate.py <file> --out <dir>` runs A1 to A5 end to end and writes
+the DOCX, the HTML, the audit report, the review sheet of waiting proposals
+and the statement; by default only proposals that need no review are
+applied, `--approve-all` applies everything with a value (demos, evals).
+`evals/course_access/remediate_corpus.py` does that for the A6 corpus and
+reports issues before and after and issues introduced (plan 3.4 metrics).
+PDF output (PDF/UA tagging) is post-Lisbon (plan 3.1); the accessible
+version of a PDF is the DOCX and HTML.
+
+### 9.6 Limits that the next cards must handle
 
 | Limit | Handled by |
 |---|---|
