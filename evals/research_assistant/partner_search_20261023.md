@@ -1,111 +1,111 @@
 # Partner search probes over the CORDIS graph (embeddinggemma-2)
 
-2026-10-23 02:49 UTC. Top 5 organisations and projects per question, hybrid retrieval by label. Read the names: an organisation whose fields and projects fit the question is the bar.
+2026-10-23 04:31 UTC. Top 5 organisations and projects per question, hybrid retrieval by label. Read the names: an organisation whose fields and projects fit the question is the bar.
 
 ## wildfire smoke exposure and public health in cities
 
-**Organizations** (19.0 s)
+**Organizations** (21.8 s)
 
-- VILLE DE MARSEILLE (FR, public body): air pollution engineering
-- GOTEBORGS KOMMUN (SE, public body): air pollution engineering
-- BUNDESAMT FUER STRAHLENSCHUTZ (DE, public body): noble gases; pollution; oncology; epidemiology
-- GRAND PORT MARITIME DE MARSEILLE (FR, public body): air pollution engineering
-- MESTNA OBCINA VELENJE (SI, public body): ecological restoration; ecosystems; drainage basins; pollution
+- FUNDACAO PARA A CIENCIA E A TECNOLOGIA (PT, public body): sustainable economy; governance; public health; civil society
+- NEMZETI KUTATASI FEJLESZTESI ES INNOVACIOS HIVATAL (HU, public body): sustainable economy; public health; nutrition; civil society
+- INNOVATIONSFONDEN (DK, public body): sustainable economy; governance; public health; civil society
+- FONDS DE LA RECHERCHE SCIENTIFIQUE- FNRS (BE, research organisation): sustainable economy; governance; public health; civil society
+- SIHTASUTUS EESTI TEADUSAGENTUUR (EE, other): sustainable economy; governance; public health; civil society
 
-**Projects** (0.3 s)
+**Projects** (0.2 s)
 
-- SIRENE: Services for envIRonmental Exposure and health assessmeNt in Europe (2026-10-01; AT, BE, CA, CH, CY, CZ, DE, EL, ES, FI, FR, IT, LU, NL, NO, PT, SE, SI, UK, US)
-- Health-Wealth: TRANSFORMING GLOBAL PUBLIC HEALTH ISSUES INTO FINANCIAL ASSETS (2027-09-01; SE)
-- DataGenChrono: Data Science and Genomics Training for Chronobiology in Mental Health (2027-01-01; AT, CA, FR, IE, IT, NO, SE, UK)
-- REPAIR: Reconstructing Emerging Pollution in Air and Assessing Inhalation Risk (2026-09-01; AT, ES)
-- SEEDS: Socio-Environmental Determinants of Health in Small States (2027-01-04; DE, MT)
+- RESILFIRE: Dynamic Infrastructures and Resilient Communities: a Systemic Approach to Wildfire Risk Mitigation and Adaptation (2026-02-01; IT, US)
+- healthRiskADAPT: User-driven Health risk Assessment Services and Innovative ADAPTation options against Threats from Heatwaves, Air Pollution, Wildfire Emission and Pollen (2024-11-01; AU, BE, CH, EL, FI, FR, IT, NL, NO, SE, UK, US)
+- Sonar-Cities: Social Sciences Participatory Research-Action for Preparedness in Risk Management for Disasters and Health Emergencies in Europe’s Cities (2024-12-01; AT, BE, FR, HR, IT, NL, SE, SI)
+- ATMOPOLIS: AIR AND NOISE POLLUTION MITIGATION THROUGH INTEGRATED, SOCIETY-CENTRED ACTIONS (2026-01-01; AT, BA, ES, FI, IE, ME, NO, PL, UK)
+- FIRE-ADAPT: The Role of Integrated Fire Management on Climate Change Adaptation for Ecosystem Services in Tropical and Subtropical Regions (2023-01-01; AR, BO, BR, CO, ES, FR, IT, MX, PT, UK)
 
 ## salmon and freshwater ecosystems under climate change
 
 **Organizations** (0.3 s)
 
+- CENTRO IBERICO DE RESTAURACION FLUVIAL (ES, other): climate change adaptation; freshwater ecosystems; climatic changes
+- DEUTSCHE UMWELTHILFE EV (DE, other): climate change adaptation; freshwater ecosystems; climatic changes
 - WAVES OF CHANGE (FR, other): governance; freshwater ecosystems; climatic changes; pollution
-- UNIVERSITY OF WAIKATO (NZ, higher education): climate change adaptation; coastal ecosystems; ecosystems; marine biology
-- WATER EUROPE (BE, other): climate change adaptation; ecosystems; sustainability sciences
-- BPIFRANCE (FR, company): governance; climate change adaptation; freshwater ecosystems; climatic changes
-- GLOBAL BIODIVERSITY INFORMATION FACILITY (DK, public body): civil society; governance; sensors; remote sensing
+- SOCIEDADE PORTUGUESA PARA O ESTUDO DAS AVES (PT, other): climate change adaptation; freshwater ecosystems; climatic changes
+- HAVSTOVAN (FO, public body): sustainable economy; governance; fisheries; sensors
 
 **Projects** (0.2 s)
 
 - SALTY-N: Salinity's secret climate impact: Does freshwater salinization enhance N2O greenhouse gas emissions? (2027-06-01; FR)
-- RiverPulse: Reconfiguring human-nature interaction as assemblage at the Arctic frontline of climate change (2026-10-01; NO)
+- BrackAdapt: Using genomics to understand how freshwater fishes turned a lethal environment into an ideal habitat (2023-09-01; SE)
 - CLIMETAL: Impact of metal pollution on freshwater ecosystems submitted to extreme climate events (2026-09-01; ES)
-- RESEALIENT: Preventing marine biodiversity collapse: safeguarding the resilience of fish communities in worldwide shallow reefs in the face of climate change and fishing pressures (2026-09-01; AU, ES, FR)
+- RiverPulse: Reconfiguring human-nature interaction as assemblage at the Arctic frontline of climate change (2026-10-01; NO)
 - Salmon Time: Salmon Time: A More-than-Human History of the Decline of Atlantic Salmon in Modern Ireland, 1853-1970 (2026-09-01; IE)
 
 ## AI for medical imaging and diagnosis
 
 **Organizations** (0.2 s)
 
-- COLLECTIVE MINDS RADIOLOGY AB (SE, company): data science; artificial intelligence; breast cancer; radiology
-- NARODOWE CENTRUM BADAN JADROWYCH (PL, research organisation): diagnostic imaging
-- UNIVERSITATSKLINIKUM BONN (DE, higher education): histology; neurobiology; knowledge engineering; radiology
-- INVENIO IMAGING INC (US, company): entrepreneurship; neurobiology; artificial intelligence; oncology
-- IDIOTIKA DIAGNOSTIKA ERGASTIRIA VIOLOGIKON YLIKON A.E. (EL, company): analytical chemistry; biochemistry; artificial intelligence; pancreatic cancer
+- PIE MEDICAL IMAGING BV (NL, company): magnetic resonance imaging; data processing; arteriosclerosis
+- G.TEC MEDICAL ENGINEERING GMBH (AT, company): clinical neurology; wearable medical technology ; diagnostic imaging; neurobiology
+- GENERAL EQUIPMENT FOR MEDICAL IMAGING SA (ES, company): oncology; surgery; critical care medicine; epilepsy
+- VIDAVO S.A. (EL, company): wearable medical technology ; diagnostic imaging; artificial intelligence; clinical neurology
+- QUEST MEDICAL IMAGING BV (NL, company): viticulture; ophthalmology
 
 **Projects** (0.2 s)
 
-- MED-XAI: Design and development of explainable DL/ML model for medical image analysis with high accuracy and reliability (2027-01-01; PT)
-- PREFERENCE: Exploring Extended Field-of-view PET for precision medicine (2026-10-01; AT, CH, DE, DK, FI, FR, NL, SE, UK)
-- DeepVibes: Deep super-resolved vibrational imaging via tomography-informed scattering compensation (2027-01-01; AT)
-- CAPTURE: Improved Diagnosis, Monitoring and Treatment through European Doctoral Collaboration in Capsule Endoscopy (2027-01-01; DE, DK, EL, ES, IT, NO, PT, UK)
-- MagicLayer: Fast Scintillation Timing Layer Based on Accelerated Collective Emission (2026-09-01; IL)
+- MIA-NORMAL: Medical Image Analysis with Normative Machine Learning (2023-09-01; DE)
+- EchoLux: Intelligent Optoacoustic Radiomics via Synergistic Integration of System Models and Medical Knowledge (2022-07-01; DE)
+- QUSTom: Quantitative Ultrasound Stochastic Tomography - Revolutionizing breast cancer diagnosis and screening with supercomputing-based radiation-free imaging. (2022-04-01; DE, ES, SI, UK)
+- AutoPiX: IMAGING FOR PATIENT BENEFIT IN ARTHRITIS (2024-11-01; AT, BE, CH, DE, DK, ES, FR, SE, UK, US)
+- KOLOR viewer: K-edge imaging for cOLOR Spectral Photon-Counting (2026-03-01; FR)
 
 ## Indigenous knowledge and cultural heritage digitisation
 
 **Organizations** (0.2 s)
 
-- DIGITALISERINGSDIREKTORATET (NO, public body): 
-- ETHNIKO KENTRO AKSIOLOGISIS TIS PIOTITAS KAI TECHNOLOGIAS STIN YGIA AE (EL, company): multidrug resistance; public health
-- SDRUZHENIE DIGITALNA NATSIONALNA KOALITSIYA (BG, other): governance; social inequalities; climatic changes
-- SUPERINTENDENCE OF CULTURAL HERITAGE-SOVRINTENDENZA TAL PATRIMONJU KULTURALI SCH (MT, research organisation): history; nongovernmental organizations; human rights; didactics
-- GLOBAL BIODIVERSITY INFORMATION FACILITY (DK, public body): civil society; governance; sensors; remote sensing
+- STICHTING JEWISH HERITAGE NETWORK (NL, other): archaeology
+- KANSALLISARKISTO (FI, public body): archaeology
+- Curating for Culture (IN, company): digital humanities; history; science and technology studies
+- ISTITUTO CULTURALE LADINO (IT, public body): archaeology
+- SYNDESMOS TOURISTIKON EPICHEIRISEON KYPROU (CY, other): knowledge organization; digital humanities; innovation management; virtual reality
 
 **Projects** (0.2 s)
 
+- DIGICHer: Digitisation of cultural heritage of minority communities for equity and renewed engagement (2024-02-01; AT, BE, DE, FI, IT, LT, NL)
+- SERAAQ: Conserving Forests through Indigenous Heritage: The UNESCO World Heritage Cultural Landscape, Alternative Sovereignty and Semai Life Projects in Peninsular Malaysia’s Last Surviving Rainforests (2026-01-01; FI)
+- REEVALUATE: fRamework for safE, opEn, collaboratiVe And incLUsive digitisAtion and managemenT of cultural heritagE (2024-01-01; AT, BE, DE, EL, ES, IT, NL)
 - WORTH: WOrlding thRough Technologies and Heritage (2026-10-01; DK)
-- TRAILS: Rethink Indigenous heritage and the rights of Nature in conflicting cultural landscapes (2027-01-01; AR, CH, ES, IT)
-- AQUA VIVA: Water as Living Heritage: From Traditional Knowledge to Community Action for Climate Resilience and Wellbeing (2027-01-01; ES, FR, HU, IT, JM, LT, MX, NL, TR, UK)
-- WALKING MEMORY: WALKING MEMORY (2026-10-01; CY, EL, FR, IE, IT)
-- PLURIVISION: Indigenous Knowledge and Pluriversal Foresight for Global Sustainability Governance (2027-01-01; ES, PT)
+- IMPULSE: IMmersive digitisation: uPcycling cULtural heritage towards new reviving StratEgies (2024-02-01; BE, DE, EL, IT, MT, PL)
 
 ## quantum materials and superconducting devices
 
 **Organizations** (0.2 s)
 
-- HUMBOLDT-UNIVERSITAET ZU BERLIN (DE, higher education): law; photons; semiconductivity; religions
-- Quantum-Si France (FR, company): epidemics prevention; infectious diseases
-- ASG SUPERCONDUCTORS SPA (IT, company): photons; laser physics
-- COLLEGE DE FRANCE (FR, higher education): two-dimensional nanostructures; numerical analysis; quasiparticles; fermions
-- TECHNISCHE UNIVERSITEIT EINDHOVEN (NL, higher education): knowledge engineering; semiconductivity; sustainable economy; quantum computers
+- GESELLSCHAFT FUR GERATEBAU MIT BESCHRANKTER HAFTUNG (DE, company): quantum computers; graphene; semiconductivity; superconductivity
+- QUANTWARE B.V. (NL, company): superconductivity; innovation management; sensors; quantum computers
+- QUANTUM OPTICS JENA GMBH (DE, company): innovation management; sensors; cryptography; superconductivity
+- SUPRACON AG (DE, company): quantum computers; compressed sensing; ecosystems; quantum physics
+- CENTER ODLICNOSTI NANOZNANOSTI IN NANOTEHNOLOGIJE - NANOCENTER (SI, research organisation): quantum computers; liquid crystals; geometry; quantum physics
 
 **Projects** (0.2 s)
 
+- GeSuperQuant: Deep-level modeling of novel germanium-based superconductive quantum devices (2025-04-01; DK)
+- cQEDscope: Circuit Quantum Electrodynamic Spectroscope: a new superconducting microwave quantum sensor (2023-01-01; DE)
 - HAQD: Hybrid Andreev Quantum Devices (2027-09-01; DK)
-- SPINSWAP: Spin-based hybrid semiconductor-superconductor devices for entanglement/swapping and quantum simulation (2027-01-01; AT)
-- Q-MEMS: Quantum Control of Ultra-coherent  Micro-Electro-Mechanical Systems (2027-01-01; DK)
-- SUPERHall: Superconductivity Meets the quantum Hall effect (2026-10-01; FR)
-- QOMBE: Quantum Optics in Many-Body photonic Environments (2026-09-01; DE)
+- SuperPHOTON: 2D Topological Superconducting Single Photon Detector Devices (2023-02-01; TR)
+- ConceptQ: New superconducting quantum-electric device concept utilizing increased anharmonicity, simple structure, and insensitivity to charge and flux noise (2022-11-01; FI)
 
 ## affordable housing and urban policy
 
 **Organizations** (0.2 s)
 
-- FUNDACION PARA EL DESARROLLO DE POLITICAS SUSTENTABLES (AR, other): employment; human migrations; social inequalities
-- Tuath Housing Association (IE, other): sustainable economy
-- POLICY LAB OU (EE, company): employment; sustainable economy; governance
-- COMMUNE DE RUEIL MALMAISON (FR, public body): governance; climate change adaptation; nutrition
-- Vivienda y Suelo de Euskadi, S.A. (ES, public body): governance
+- INSTITUTE FOR HOUSING AND URBAN DEVELOPMENT STUDIES BV (NL, higher education): entrepreneurship; sustainable economy; unemployment; sustainable agriculture
+- Housing and Sustainable Communities Agency (IE, public body): urban studies; transport; smart cities; sustainable building
+- SUBURBIA ESTUDIOS URBANOS (ES, other): public policies; civil society; sociology
+- BORDEAUX METROPOLE (FR, public body): employment; human migrations; racial inequality
+- AARHUS KOMMUNE (DK, public body): renewable energy; architectural design; urban studies; democracy
 
-**Projects** (0.2 s)
+**Projects** (0.3 s)
 
+- SUSTAIN: Sustainable Urban Strategies Through Adaptive reuse for Integrated Neighbourhoods (2026-04-01; ES)
+- NEBwork: NEBwork - Network Empowers Blueprint of sustainable and affordable housing policies and strategies optimized for neighbourhoods transformation (2026-09-01; BE, CA, EL, ES, FR, HR, IT)
+- DASH: Deliver sAfe and Social Housing (2023-01-01; DE, DK, PT, RS)
+- HouseInc: INCLUSIVE, AFFORDABLE AND SUSTAINABLE HOUSING FOR MARGINALIZED COMMUNITIES (2024-02-01; BE, CZ, DE, IT, NL, RO, UK)
 - HARMONIA: Housing Affordability through Renewal, MOdernization, and New Integrated Approaches (2026-09-01; BE, EL, ES, FR, IE, IT, LV)
-- Ruralise: Ruralise - Revitalising Rural Communities (2026-09-01; BE, BG, EL, FI, IE, IT, NL, NO, UK)
-- UROP: Uncovering the New Rise of PropTech in London’s Social Housing – Surveillance, Justice and Green Futures (2027-01-01; UK)
-- CO-OPOLIS: CO-OPOLIS: ANOTHER ARCHITECTURAL HISTORY OF THE EUROPEAN CITY (1890–1990) (2026-10-01; CH)
-- SQUAT: Adverse Acquisition and European Basic Rights Frameworks: Legal-Philosophical-Computational Inquiry (2027-09-01; IT)
