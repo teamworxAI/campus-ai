@@ -295,14 +295,14 @@ them and lists the reports; commit the reports with the PR that changed the
 product.
 
 ```bash
-docker compose run --rm -v ./evals:/app/evals test python evals/run.py            # no stack: audit of the A6 corpus
-docker compose run --rm -v ./evals:/app/evals test python evals/run.py --ollama   # + alt-text probes, worker proposals, remediation
-docker compose run --rm -v ./evals:/app/evals embed python evals/run.py --no-offline --graph --limit 100   # probes, R6 back-test, gold sets
-docker compose run --rm -v ./evals:/app/evals embed python evals/research_assistant/gold_eval.py           # gold sets only
+docker compose run --rm test python evals/run.py            # no stack: audit of the A6 corpus
+docker compose run --rm test python evals/run.py --ollama   # + alt-text probes, worker proposals, remediation
+docker compose run --rm embed python evals/run.py --no-offline --graph --limit 100   # probes, R6 back-test, gold sets
+docker compose run --rm embed python evals/research_assistant/gold_eval.py           # gold sets only
 ```
 
-The images hold a copy of the repo, so `-v ./evals:/app/evals` is what
-brings the reports back to your checkout. `gold_eval.py` scores the gold
+The `test` and `embed` services mount `./evals`, so the reports land in
+your checkout. `gold_eval.py` scores the gold
 sets in `evals/research_assistant/` (recall@10, MRR, nDCG@10); the format is
 the docstring of `campus_ai/core/eval/gold.py`. The containers have no git,
 so a report records the commit only when you pass it:
