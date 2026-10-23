@@ -16,15 +16,14 @@ copied from it.
 | Demo moment | Drop a messy lecture PDF, get an accessible version and a report in under 2 minutes | Pick a live Horizon call, get a ranked, evidence-backed EU partner shortlist and a consortium brief |
 | Shared core used | LLM router, review UI, evaluation harness | LLM router, graph core (Neo4j writer, indexing, hybrid retriever), evaluation harness |
 
-Status (Oct 22, 2026): build in progress. Shared platform (P0, P1, P5, P7,
-P8, P9), the Course Access parser and audit (A1, A2) and the Europeana
-collections search (R8, R9 first cut) and its rights filter (R10) are
-merged in `main`; the data-class gate and tracing (P1b, P2) are built;
-the alt-text (A3) and structure, table and text (A4) workers and the rebuild and verify step (A5) are built, so the Course Access pipeline runs end to end; 157 unit tests pass. The B1 smoke test
-passed on the demo laptop (Oct 22, RTX 2050, 9/9 checks, report in
-`evals/smoke/`). Next: the week-1 bake-offs
-that were deferred (B2-B5), the eval harness (P6) and the structure, table
-and text workers (A4). Open
+Status (Oct 23, 2026): build in progress; 186 unit tests pass on `main`. Merged:
+the shared platform (P0, P1, P1b, P2, P3, P5, P7, P8, P9; B1 smoke test passed on
+the demo laptop), the Course Access pipeline end to end (A1-A5, with the first A6
+corpus of 20 open documents) and the Research Assistant's collections search (R8,
+R9, R10), loaders (R1 OpenAlex, R2 CORDIS and calls), expert, partner and call
+search (R4 first cut), consortium rule and citation-checked brief (R5) and the R6
+back-test; all of it runs on the demo laptop. Next: the eval harness (P6), the
+bake-offs (B2-B5), the Lisbon dry run. Open
 decisions are in section 8; section 5 has the remaining schedule.
 
 > ## Prime directives (standing orders; they override everything else)
@@ -363,9 +362,9 @@ deferred and now come first.
 
 | Week | Shared platform | Course Access Agent | Research Assistant |
 |---|---|---|---|
-| Oct 22-25 | P9 Ollama in compose (done); B1 local-stack smoke test on the demo laptop (D5, passed Oct 22); P1b data-class gate; P6 eval harness | Collect gold documents; A6 gold set; A3 alt-text worker + B3 (D9) | B2 embedder + reranker bake-off on the salmon pilot; R10 rights filter for Europeana |
-| Oct 26-Nov 1 | P2 tracing; P3 review queue; B5 judge calibration | A4 workers, A4b OMML->MathML, A5 rebuild + verify loop | R1/R2 OpenAlex + CORDIS loaders, R3 schema; R7 only if R0b is signed |
-| Nov 2-Lisbon | Demo laptop dry run (again), freeze | Demo script, sample pack, one-pager | Demo script (collections search + expert search), one-pager |
+| Oct 22-23 (done) | P9 Ollama in compose; B1 smoke test passed on the demo laptop (D5); P1b data-class gate; P2 tracing; P3 review queue | A6 corpus of 20 open documents; A3 alt text; A4 workers; A5 rebuild and verify: the pipeline runs end to end (862 audit issues to 360 on the corpus with rule-based fixes alone) | R10 rights filter; R1 OpenAlex and R2 CORDIS loaders; R4 expert, partner and call search; R5 consortium rule and citation-checked brief; R6 back-test (recall@10 0.32 on the full Horizon Europe graph) |
+| Oct 26-Nov 1 | P6 eval harness over the scripts in `evals/`; B2 embedder + reranker bake-off (R3), measured by the back-test; B5 judge calibration | B3 alt-text bake-off once a specialist labels the corpus (D6); A4b OMML->MathML; A7 OCR if time | Call analyst over full topic descriptions; R5 network worker (needs EU-side researchers); REE loader if R0 lands; R7 only if R0b is signed |
+| Nov 2-Lisbon | Demo laptop dry run with everything indexed, freeze a week before | Demo script, sample pack, one-pager | Demo script (expert search, partner shortlist and brief, collections search), one-pager |
 
 Exit criteria per week are the eval targets above, measured on the gold
 sets. A week is not done until its eval report is committed.
