@@ -110,6 +110,23 @@ class ScreenTests(unittest.TestCase):
         nodes, links, _ = load_script().load(ROOT / "evals" / "embed" / "sample_bakeoff.jsonl")
         self.assertEqual(len(screen(nodes, links).nodes), 6)
 
+    def test_research_graph_without_collection_items_is_kept(self):
+        """Researchers, projects and calls carry a source but hang off no Item: nothing restricts them."""
+        nodes = [
+            Node("openalex:A1", "Researcher", "Ryan Allen", props={"source": "openalex", "rights": "CC0-1.0"}),
+            Node("openalex:W1", "Publication", "Smoke", props={"source": "openalex", "rights": "CC0-1.0"}),
+            Node("cordis:101", "Project", "SIRENE", props={"source": "cordis", "rights": "CC-BY-4.0"}),
+            Node("cordis:org:1", "Organization", "ISGlobal", props={"source": "cordis"}),
+            Node("topic:X", "CallTopic", "A call", props={"source": "funding-tenders"}),
+            Node("closed", "Item", "b", props={"source": "europeana", "rights": "InC"}),
+            Node("only-closed", "Creator", "p", props={"source": "europeana"}),
+        ]
+        links = [Link("openalex:A1", "AUTHORED", "openalex:W1"), Link("cordis:org:1", "PARTICIPATED_IN", "cordis:101"),
+                 Link("closed", "CREATED_BY", "only-closed")]
+        result = screen(nodes, links)
+        self.assertEqual([n.id for n in result.nodes], ["openalex:A1", "openalex:W1", "cordis:101", "cordis:org:1", "topic:X"])
+        self.assertEqual({n.id: r for n, r in result.excluded}, {"closed": "rights not open", "only-closed": "only linked to restricted items"})
+
 
 class IndexTests(unittest.TestCase):
     def test_index_never_embeds_class_r(self):
