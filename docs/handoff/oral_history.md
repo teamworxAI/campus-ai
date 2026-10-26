@@ -238,6 +238,50 @@ could not find locally, that everything cited in a PR be committed in the
 repo: eval reports are, data under `DATA_DIR` and `.env` are not, by the
 rules in `AGENTS.md`.
 
+## 2d. The parallel-agent session (Oct 23-26)
+
+Written by the coordinator session that ran on the laptop from "start from
+AGENTS.md, the plan and the handoff; iterate as usual, multiagents, different
+model per task complexity, end to end testing of each feature before
+declaring done". It wrote no product code itself: five task cards went to
+five agents, each in its own git worktree and branch, a stronger model for
+the cross-cutting cards (P6, R4, B2) and a cheaper one for the
+well-specified ones (A4b, A7). Each agent ran the unit suite and an
+end-to-end check on the live stack before reporting; the coordinator read
+the diff, re-ran the suite, pushed and opened the PR. All five are
+independent PRs against `main`, open at hand-off:
+
+- **#35 A4b** OMML to MathML: `course_access/mathml.py`, `Equation` blocks,
+  `<math>` in the HTML and the OMML written back into the DOCX.
+- **#36 P6** eval harness: `core/eval/` (gold format, metrics, local judge
+  instead of RAGAS, decision D11, one report writer), `evals/run.py`, two
+  provisional gold sets, `test` and `embed` now mount `./evals`.
+- **#37 A7** OCR: Tesseract in the image (one apt layer, +150 MB), scanned
+  pages become flagged paragraphs with a confidence, `scanned-page` rule and
+  `ocr` proposal. Rebuild the images after merging.
+- **#38 R4** call analyst: `fetch-cordis --topics` fetches the 365 open and
+  forthcoming topic pages, CallTopic text gains outcome and scope, `analyse()`
+  returns facts plus span-checked topics, outcomes and partner profile,
+  `/api/calls/{id}/analysis` and an analysis page. Three to seven minutes
+  per call on the laptop; analyse the demo's calls before the slot.
+- **#39 B2** reranker: Qwen3-Reranker-0.6B step in the retriever, off by
+  default because it lowered recall@10 on the back-test (0.30 to 0.26 on 50
+  projects) at 10 s per query; expert results read better with it, partner
+  search sums probabilities that cluster at 0 or 1. Next try: rank weights.
+
+Overlaps to expect when merging: #36 and #39 both touch the three research
+eval scripts; #35 and #37 both touch `parser.py` (different functions).
+Merge `main` into whichever lands second.
+
+How the agents were run (the recipe is in section 4 and the lessons in
+section 7): their worktrees were bind-mounted over the shared images
+(`docker run -v <worktree>:/app ... campus-ai:test`), never `docker compose`
+from a worktree, so no second stack and no clobbered image tag; the one
+Dockerfile change (A7) built its own tag. The B2 and R4 agents were killed
+by the harness after ten minutes without output while they waited on long
+docker jobs, and the laptop then slept from Oct 23 to Oct 26 with their
+containers still running; they were resumed with the facts and finished.
+
 ## 3. Standing orders
 
 These carry over to any session working for this user on campus-ai.
@@ -328,6 +372,16 @@ reviews; it rarely writes product code itself.
 - **Sessions on the user's laptop** (Windows 11, PowerShell, Docker Desktop):
   see the laptop gotchas in section 7. Docker there is shared with other
   projects.
+- **Parallel card agents on the laptop** (Oct 23-26, section 2d): one
+  `Agent` per card with worktree isolation and its own branch; a stronger
+  model for cross-cutting cards, a cheaper one for well-specified ones. The
+  brief carries the ground rules: read `AGENTS.md`, the plan and the handoff;
+  no new dependencies; run the unit suite and an end-to-end check on the live
+  stack by bind-mounting the worktree over the shared image (never `docker
+  compose` from a worktree); long jobs in the background with bounded checks;
+  update only the card's plan row; commit with the trailer, never push or
+  open the PR; report files, test counts, E2E output and eval report paths.
+  Three to five at once worked; two GPU jobs at once did not (section 7).
 
 ## 5. Where things are
 
@@ -411,16 +465,43 @@ discover -s tests` for quick checks inside its cloud container. On Oct 22,
 - Answer: remove the early plan copy on `sfu-aria/student-assistant` branch
   `ccr-b486116f-phsbvu`?
 
-**Next cards** (section 5 of the plan, after the Oct 22-23 session; all of
-that session's PRs are merged): P6 eval harness (the eval scripts under
-`evals/` are the raw material); B2 embedder + reranker
-bake-off (R3; the back-test script measures it); B3 alt-text bake-off once a
-specialist labels the A6 corpus; R5's network worker once EU-side
-researchers are in the graph; the call analyst over full topic descriptions
-(the grants file has titles and keywords only); A4b OMML to MathML; A7 OCR.
-Demo prep: the dry run on the laptop with everything indexed.
+**Next cards** (section 5 of the plan, after the Oct 23-26 session): first
+merge #35-#39 and on the laptop run `docker compose build` (A7 changed the
+Dockerfile), `docker compose up -d web` (recreates `api` and `course-access`
+on the new images) and `docker compose exec web nginx -s reload` (R4 added a
+location); the CallTopic nodes are already updated in the graph. Then: the
+R4 complementarity scorer (what each partner adds) and the router between
+journeys; a second reranker attempt weighting organisations by reranked
+rank rather than summed probabilities (B2's report lists it); R5's network
+worker once EU-side researchers are in the graph; B3 and B5 once a
+specialist and the research officers label the gold sets (the P6 format is
+ready); the full-graph embedder comparison (needs a second index); the
+Lisbon dry run.
 
 ## 7. Lessons and gotchas
+
+**From the Oct 23-26 parallel-agent session**
+- Agents in worktrees must not use `docker compose`: a worktree gets its
+  own compose project, so `compose run embed` starts a second Neo4j and
+  Ollama with an empty graph. Bind-mount the worktree over the shared image
+  instead (`MSYS_NO_PATHCONV=1 docker run --rm -v "<worktree>:/app" -w /app
+  campus-ai:test ...`; the package is installed editable from `/app`). A
+  Dockerfile change builds its own tag.
+- The harness stops an agent after ten minutes without output. Long docker
+  jobs go in the background with bounded checks, never a sleep loop. On a
+  stall, read `docker logs` and `docker stats` before killing anything: both
+  stalled containers here were alive, one of them finished.
+- The laptop sleeps; a job started in the evening may still be running
+  three days later. The api and ollama containers hold no GPU memory while
+  idle, so one eval job gets the whole 4 GB; two at once thrash (a reranked
+  query took 20 minutes under contention and 2 seconds alone).
+- Same-day eval reruns overwrite the day's report (`<name>_<date>.md`); name
+  a partial rerun differently (`backtest_20261023_limit20.md`).
+- Three PRs that each regenerate the same dated report conflict on it; keep
+  one copy and say in the others that the numbers matched.
+- The graph store merges props into existing nodes, so a key missing from a
+  new record keeps its old value: loaders must write every prop, empty when
+  unknown (found by R4 on the live graph).
 
 **From the Oct 22-23 laptop session**
 - The `embed` image is only rebuilt when you ask. Core changes merged on

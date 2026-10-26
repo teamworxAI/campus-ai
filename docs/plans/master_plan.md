@@ -22,8 +22,12 @@ the demo laptop), the Course Access pipeline end to end (A1-A5, with the first A
 corpus of 20 open documents) and the Research Assistant's collections search (R8,
 R9, R10), loaders (R1 OpenAlex, R2 CORDIS and calls), expert, partner and call
 search (R4 first cut), consortium rule and citation-checked brief (R5) and the R6
-back-test; all of it runs on the demo laptop. Next: the eval harness (P6), the
-bake-offs (B2-B5), the Lisbon dry run. Open
+back-test; all of it runs on the demo laptop. Opened Oct 23-26 as independent
+PRs (#35-#39), waiting for review: the eval harness (P6), OMML to MathML (A4b),
+OCR for scanned PDFs (A7), the call analyst over full topic descriptions (R4)
+and the reranker step with its bake-off (B2: no lift, off by default). Next: the
+complementarity scorer and journey router (R4), the R5 network worker, B3 and B5
+once labels exist, the Lisbon dry run. Open
 decisions are in section 8; section 5 has the remaining schedule.
 
 > ## Prime directives (standing orders; they override everything else)
@@ -363,7 +367,8 @@ deferred and now come first.
 | Week | Shared platform | Course Access Agent | Research Assistant |
 |---|---|---|---|
 | Oct 22-23 (done) | P9 Ollama in compose; B1 smoke test passed on the demo laptop (D5); P1b data-class gate; P2 tracing; P3 review queue | A6 corpus of 20 open documents; A3 alt text; A4 workers; A5 rebuild and verify: the pipeline runs end to end (862 audit issues to 360 on the corpus with rule-based fixes alone) | R10 rights filter; R1 OpenAlex and R2 CORDIS loaders; R4 expert, partner and call search; R5 consortium rule and citation-checked brief; R6 back-test (recall@10 0.32 on the full Horizon Europe graph) |
-| Oct 26-Nov 1 | P6 eval harness over the scripts in `evals/`; B2 embedder + reranker bake-off (R3), measured by the back-test; B5 judge calibration | B3 alt-text bake-off once a specialist labels the corpus (D6); A4b OMML->MathML; A7 OCR if time | Call analyst over full topic descriptions; R5 network worker (needs EU-side researchers); REE loader if R0 lands; R7 only if R0b is signed |
+| Oct 23-26 (in PRs #35-#39) | P6 eval harness: gold format, metrics, local judge (D11), one report writer, provisional gold sets; B2 reranker bake-off (R3): Qwen3-Reranker-0.6B step built, recall@10 0.30 to 0.26 on 50 back-test projects at 6x the time, so off by default | A4b OMML to MathML (native equations kept in HTML and DOCX); A7 OCR with Tesseract for scanned PDFs (`scanned-page` rule, `ocr` proposal with confidence) | R4 call analyst: topic pages fetched (365 open and forthcoming), span-checked topics, outcomes and partner profile, `partner_query` for the shortlist |
+| Oct 27-Nov 1 | Merge and rebuild on the demo laptop; B5 judge calibration once labels exist | B3 alt-text bake-off once a specialist labels the corpus (D6) | R4 complementarity scorer and journey router; R5 network worker (needs EU-side researchers); REE loader if R0 lands; R7 only if R0b is signed |
 | Nov 2-Lisbon | Demo laptop dry run with everything indexed, freeze a week before | Demo script, sample pack, one-pager | Demo script (expert search, partner shortlist and brief, collections search), one-pager |
 
 Exit criteria per week are the eval targets above, measured on the gold
