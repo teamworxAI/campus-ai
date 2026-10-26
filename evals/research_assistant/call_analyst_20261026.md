@@ -1,11 +1,45 @@
 # Call analyst (R4, second cut): three real Horizon Europe topics
 
-2026-10-23, demo laptop (RTX 2050, 4 GB). Local model `gemma4:e2b` on the
-stack's Ollama (router task "reasoning"); embedder embeddinggemma-2; the full
-Horizon Europe graph (23,954 projects, 35,625 organisations, 3,808 call
-topics). The analyses ran through the app (`create_app()` with FastAPI's test
+Run 2026-10-23, one call re-run 2026-10-26 (below). Demo laptop (RTX 2050,
+4 GB). Local model `gemma4:e2b` on the stack's Ollama (router task
+"reasoning"); embedder embeddinggemma-2; the full Horizon Europe graph
+(23,954 projects, 35,625 organisations, 3,808 call topics). The three
+analyses of Oct 23 ran through the app (`create_app()` with FastAPI's test
 client) on the live Neo4j and Ollama, with the code on branch
 `r4-call-analyst`.
+
+## Re-run, 2026-10-26, over HTTP
+
+After the last graph update (records rebuilt from the cached pages,
+`index --label CallTopic`: 3,808 nodes, 27,949 links; graph total still
+71,942 nodes), a temporary API container from the branch (port 8091 on the
+laptop, joined to `campus-ai_graph`) served
+`GET /api/calls/topic:HORIZON-MISS-2027-03-OCEAN-01/analysis`: **HTTP 200 in
+337 s** (model 349 s by its own clock, which includes the request); the
+second request came from the cache in 0.008 s. `/api/calls?q=climate
+adaptation of coastal communities` through nginx on :8080 (the stack's api)
+returned the same topic first. Result: action HORIZON-IA, the three-entity
+rule, Canada associated (Pillar II), EUR 35.7 million for about 4 grants,
+deadline 2027-09-21, no topic-specific conditions; 5 topics, 5 expected
+outcomes and 2 partner-profile items ("Relevant public bodies managing those
+areas and their communities", "Stakeholders and local competent authorities
+managing riparian and coastal areas"), **0 dropped**. With the same model
+and prompt the wording differs a little from Oct 23 (section 3): the model
+is not deterministic, but every kept item is quoted from the text.
+
+Partner shortlist through nginx (`/api/partners`, k=8) on `partner_query`:
+Universidade de Aveiro (PT; RESTORE4Cs, COAST-SCAPES), CSIC (ES), CMCC (IT;
+BEACONSplus, RIVIERADE), Universitatea din Bucuresti (RO; RESTORE4Cs, ROWER),
+UPC (ES), CNRS (FR; OCEAN CITIZEN, RIVIERADE), EPISKY (EL; DaWetRest), Tartu
+Ülikool (EE). On the title alone it is the Oct 23 "before" list (NTNU, CNR,
+ICLEI, Obshtina Burgas, ZMT in place of the restoration and riparian
+projects).
+
+Topic-specific conditions as stored, for comparison: TOOL-08 carries the
+strategic-autonomy participation restriction; CL6-2027-01-CIRCBIO-10
+"participation of at least one research institution or relevant public
+authority from Ukraine in the consortium is mandatory"; SOIL-04 and OCEAN-01
+have none beyond the General Annexes (empty).
 
 ## Data
 
