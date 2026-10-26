@@ -46,7 +46,7 @@ class Reranker:
     through the model at once.
     """
 
-    def __init__(self, name: str = DEFAULT_RERANKER, instruction: str = INSTRUCTION, batch_size: int = 8,
+    def __init__(self, name: str = DEFAULT_RERANKER, instruction: str = INSTRUCTION, batch_size: int = 4,
                  max_length: int = 1024, model: Any = None, tokenizer: Any = None):
         if name not in RERANKERS:
             raise ValueError(f"unknown reranker {name!r}; choose from {sorted(RERANKERS)}")

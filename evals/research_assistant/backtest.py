@@ -50,13 +50,17 @@ def main(argv=None) -> int:
             "ORDER BY p.start DESC LIMIT $limit",
             home=args.home, eligible=sorted(EU | ASSOCIATED), limit=args.limit)
         results = []
-        start = time.perf_counter()
-        for project in projects:
+        times = []
+        for n, project in enumerate(projects, start=1):
+            start = time.perf_counter()
             hidden = next((x for x in project["partners"] if x["role"] == "coordinator"), project["partners"][0])
             ranked = search.partners(project["text"], k=K, exclude_project=project["id"])
             rank = next((i + 1 for i, org in enumerate(ranked) if org["id"] == hidden["id"]), None)
             results.append((project["acronym"], hidden["name"], hidden["country"], rank))
-        seconds = time.perf_counter() - start
+            times.append(time.perf_counter() - start)
+            print(f"{n}/{len(projects)} {project['acronym']}: rank {rank or 'miss'}, {times[-1]:.1f} s", flush=True)
+        # The first query loads the models; the warm mean is the cost per query in use.
+        warm = times[1:] or times
     if not results:
         print(f"No indexed projects with a {args.home} participant: index data/cordis/horizon/records.jsonl first")
         return 1
@@ -67,7 +71,7 @@ def main(argv=None) -> int:
     lines = [f"# Partner back-test (R6): {model}", "",
              f"{when:%Y-%m-%d %H:%M} UTC. {len(results)} projects with a {args.home} participant; the hidden partner is the "
              f"coordinator or the first eligible participant; the project itself is excluded from the candidates. "
-             f"{seconds / len(results):.1f} s per project.", "",
+             f"{sum(warm) / len(warm):.1f} s per project with the models loaded (first, with loading: {times[0]:.1f} s).", "",
              f"- **recall@{K}: {recall:.2f}** ({len(found)} of {len(results)})", f"- MRR: {mrr:.2f}",
              "", "| Project | Hidden partner | Country | Rank |", "|---|---|---|---|"]
     lines += [f"| {a} | {n} | {c} | {r if r else 'miss'} |" for a, n, c, r in results]
