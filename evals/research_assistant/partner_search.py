@@ -7,11 +7,12 @@ check that the R2 graph answers the kind of question the demo asks. Needs
 the graph indexed (`graph_search.py index data/cordis/horizon/records.jsonl`)
 and runs in the `embed` service.
 
-    docker compose run --rm embed python evals/research_assistant/partner_search.py
+    docker compose run --rm embed python evals/research_assistant/partner_search.py [--rerank]
 """
 
 from __future__ import annotations
 
+import argparse
 import sys
 import time
 from datetime import datetime, timezone
@@ -20,6 +21,7 @@ from pathlib import Path
 from campus_ai.core.embed import get_embedder
 from campus_ai.core.eval import report
 from campus_ai.core.graph import HybridRetriever, connect
+from campus_ai.research_assistant.matching import research_reranker
 
 HERE = Path(__file__).parent
 QUERIES = [
@@ -34,7 +36,7 @@ LABELS = ("Organization", "Project")
 K = 5
 
 
-def build_report(probes: list[tuple], embedder: str, when: datetime, sha: str | None = None) -> str:
+def build_report(probes: list[tuple], model: str, when: datetime, sha: str | None = None) -> str:
     """probes: (query, [(label, seconds, node property dicts in rank order)]) per question."""
     sections = []
     for query, by_label in probes:
@@ -49,17 +51,26 @@ def build_report(probes: list[tuple], embedder: str, when: datetime, sha: str | 
             lines.append("")
         sections.append((query, lines[:-1]))
     return report.render(
-        f"Partner search probes over the CORDIS graph ({embedder})",
+        f"Partner search probes over the CORDIS graph ({model})",
         f"Top {K} organisations and projects per question, hybrid retrieval by label. Read the names: an "
         "organisation whose fields and projects fit the question is the bar.",
         when=when, sha=sha, sections=sections)
 
 
-def main() -> int:
+def parse(argv=None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--rerank", action="store_true", help="add the cross-encoder reranker step (B2)")
+    return parser.parse_args(argv)
+
+
+def main(argv=None) -> int:
+    args = parse(argv)
     embedder = get_embedder()
+    reranker = research_reranker() if args.rerank else None
+    model = embedder.name + (f" + {reranker.name}" if reranker else "")
     probes = []
     with connect() as driver:
-        retriever = HybridRetriever(driver, embedder)
+        retriever = HybridRetriever(driver, embedder, reranker=reranker)
         for query in QUERIES:
             by_label = []
             for label in LABELS:
@@ -73,7 +84,8 @@ def main() -> int:
                 by_label.append((label, seconds, [props.get(hit.id, {}) for hit in hits]))
             probes.append((query, by_label))
     when = datetime.now(timezone.utc)
-    report.save(build_report(probes, embedder.name, when, report.git_sha(HERE)), "partner_search", HERE, when)
+    name = "partner_search_rerank" if reranker else "partner_search"
+    report.save(build_report(probes, model, when, report.git_sha(HERE)), name, HERE, when)
     return 0
 
 

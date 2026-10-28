@@ -190,9 +190,10 @@ PyAV (embed image) or Neo4j, and run in step 7.
 docker compose run --rm fetch-models
 ```
 
-This downloads EmbeddingGemma 2 and the e5-small baseline (about 2 GB) into
-`MODELS_DIR`, using the layout `<org>/<model>`. It is the only step that
-downloads models.
+This downloads EmbeddingGemma 2, the e5-small baseline and the
+Qwen3-Reranker-0.6B reranker (about 3 GB) into `MODELS_DIR`, using the layout
+`<org>/<model>`. It is the only step that downloads models. (On the team's
+inference box, `--reranker qwen3-reranker-4b` fetches the larger reranker instead.)
 
 Then fetch the language and vision models that the LLM router uses, served by
 the `ollama` service:

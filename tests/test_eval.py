@@ -208,16 +208,28 @@ class EvalScriptReportTests(unittest.TestCase):
 
     def test_backtest(self):
         module = load_eval("research_assistant/backtest.py")
-        results = [("BRAVA", "UB", "ES", "o1", ["o1", "o2"]), ("KiTE", "CAU", "DE", "o3", ["o9", "o8", "o3"]),
-                   ("ELLE", "UNICA", "IT", "o5", ["o9"])]
-        text = module.build_report(results, "embeddinggemma-2", "CA", 1.8, WHEN)
+        results = [("BRAVA", "UB", "ES", {"fusion": 1}, None), ("KiTE", "CAU", "DE", {"fusion": 3}, None),
+                   ("ELLE", "UNICA", "IT", {"fusion": None}, None)]
+        text = module.build_report(results, "embeddinggemma-2", "CA", {"fusion": [4.0, 0.5, 0.7]}, WHEN)
         self.assertIn("# Partner back-test (R6): embeddinggemma-2", text)
         self.assertIn("3 projects with a CA participant", text)
-        self.assertIn("0.6 s per project", text)
+        self.assertIn("0.6 s per project with the models loaded (first, with loading: 4.0 s)", text)
         self.assertIn("- **recall@10: 0.67** (2 of 3)", text)
         self.assertIn("- MRR: 0.44", text)
         self.assertIn("| KiTE | CAU | DE | 3 |", text)
         self.assertIn("| ELLE | UNICA | IT | miss |", text)
+
+    def test_backtest_weighting_comparison(self):
+        module = load_eval("research_assistant/backtest.py")
+        results = [("BRAVA", "UB", "ES", {"fusion": 2, "rrf": 1}, 4), ("KiTE", "CAU", "DE", {"fusion": None, "rrf": None}, None)]
+        text = module.build_report(results, "embeddinggemma-2 + qwen3-reranker", "CA",
+                                   {"fusion": [3.0, 1.0], "rrf": [2.0, 2.0]}, WHEN, pool=50)
+        self.assertIn("Rerank pool 50.", text)
+        self.assertIn("| fusion | 0.50 (1/2) | 0.250 | 1.0 |", text)
+        self.assertIn("| rrf | 0.50 (1/2) | 0.500 | 2.0 |", text)
+        self.assertIn("in the fused top 50: 1 of 2 (50%); in the top 30 (the projects partner search uses): 1 of 2 (50%).", text)
+        self.assertIn("| BRAVA | UB | ES | 2 | 1 | 4 |", text)
+        self.assertIn("| KiTE | CAU | DE | miss | miss | no |", text)
 
     def test_expert_and_partner_probes(self):
         experts = load_eval("research_assistant/expert_search.py")
