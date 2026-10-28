@@ -440,6 +440,49 @@ The report (one row per document: pages, images, tables, issues by rule)
 is the raw material for the gold set (A6), which still needs a specialist's
 labels. The documents are evaluation input only and are never committed.
 
+## 7b. MCP servers (any MCP client)
+
+Both products are also MCP servers, so any MCP client (an IDE, a desktop
+assistant, the Teamworx HR platform) can call their tools. Each server speaks
+stdio: the client spawns the command below and talks to it over stdin/stdout.
+Everything stays local; the tools call the same functions as the web app and
+CLI, and every call is traced (tool, data class, latency, outcome; never
+inputs or outputs) under `traces/`.
+
+| Server | Command | Tools |
+|---|---|---|
+| Course Access | `docker compose run --rm -T -v "$PWD/samples:/samples" test python -m campus_ai.course_access.mcp_server` | `audit_document(path)`, `propose_fixes(path, with_alt_text)`, `remediate(path, out_dir, approve_all)` |
+| Research Assistant | `docker compose run --rm -T embed python -m campus_ai.research_assistant.mcp_server` | `find_experts`, `find_partners`, `find_calls`, `get_call`, `check_consortium`, `draft_brief`, `search_collections` |
+
+Paths are paths inside the container (so mount your documents, as above).
+Every tool takes a `data_class` (default `I` for course documents, `P` for
+the Research Assistant); `R` is refused. The Research Assistant loads its
+model and connects to Neo4j on the first tool call, so listing the tools is
+instant. Course Access proposals need `ollama` up (`docker compose up -d ollama`).
+
+A client entry (`mcpServers` in the client's JSON config):
+
+```json
+{
+  "mcpServers": {
+    "campus-ai-course-access": {
+      "command": "docker",
+      "args": ["compose", "-f", "C:/path/to/campus-ai/compose.yaml", "run", "--rm", "-T",
+               "-v", "C:/path/to/samples:/samples", "test",
+               "python", "-m", "campus_ai.course_access.mcp_server"]
+    },
+    "campus-ai-research-assistant": {
+      "command": "docker",
+      "args": ["compose", "-f", "C:/path/to/campus-ai/compose.yaml", "run", "--rm", "-T", "embed",
+               "python", "-m", "campus_ai.research_assistant.mcp_server"]
+    }
+  }
+}
+```
+
+Each server also takes `--http PORT` to serve streamable HTTP instead (for a
+client on the compose network); no compose service is defined for it yet.
+
 ## 8. Troubleshooting
 
 | Symptom | Cause and fix |
