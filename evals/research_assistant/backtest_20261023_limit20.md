@@ -1,0 +1,29 @@
+# Partner back-test (R6): embeddinggemma-2
+
+2026-10-23 21:21 UTC (commit f470af4). 20 projects with a CA participant; the hidden partner is the coordinator or the first eligible participant; the project itself is excluded from the candidates. 2.8 s per project.
+
+- **recall@10: 0.25** (5 of 20)
+- MRR: 0.15
+
+| Project | Hidden partner | Country | Rank |
+|---|---|---|---|
+| SEC-EUR | UNIVERSITA DEGLI STUDI DI PADOVA | IT | miss |
+| GrowDeep2 | ECOLE NORMALE SUPERIEURE DE LYON | FR | miss |
+| BRAVA | UNIVERSITAT DE BARCELONA | ES | 1 |
+| REPROCIT | EUROPEAN UNIVERSITY INSTITUTE | IT | miss |
+| PHENOS | UNIVERSITA DEGLI STUDI DI ROMA TOR VERGATA | IT | miss |
+| SUSTAIN | SYDDANSK UNIVERSITET | DK | miss |
+| ML4Plankton | CENTRE NATIONAL DE LA RECHERCHE SCIENTIFIQUE CNRS | FR | 1 |
+| ELLE | UNIVERSITA DEGLI STUDI DI CAGLIARI | IT | miss |
+| EstroPatch | KATHOLIEKE UNIVERSITEIT LEUVEN | BE | miss |
+| PHARM-N-ICP | UNIVERSITEIT GENT | BE | miss |
+| IDPexec | UNIVERSITA DEGLI STUDI DI PADOVA | IT | 8 |
+| SPACER | UNIVERSITA DEGLI STUDI DI TORINO | IT | miss |
+| TagTIC | PARIS-LODRON-UNIVERSITAT SALZBURG | AT | miss |
+| MaGyQ | UNIVERSITA DEGLI STUDI DEL PIEMONTE ORIENTALE AMEDEO AVOGADRO | IT | miss |
+| KiTE 2.0 | CHRISTIAN-ALBRECHTS-UNIVERSITAET  ZU KIEL | DE | 3 |
+| HyNOISE | POLITECNICO DI BARI | IT | miss |
+| TRANSFLOW | UNIVERSIDAD DE CANTABRIA | ES | miss |
+| Brain-MuSE | UNIVERSITE D'AIX MARSEILLE | FR | 2 |
+| BIOreCURE | RIGAS TEHNISKA UNIVERSITATE | LV | miss |
+| RAISE-CONNECT | ARISTOTELIO PANEPISTIMIO THESSALONIKIS | EL | miss |
