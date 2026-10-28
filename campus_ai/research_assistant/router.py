@@ -6,7 +6,8 @@
 `route(text)` tries rules first, in a fixed order; the first that fires
 decides, and `why` names it. Only when no rule fires does the local model
 (router task "classification") choose, with a strict one-digit answer; on
-any failure (model down, an answer that is not one digit from 1 to 5) the
+any failure (model down, slower than `MODEL_SECONDS`, an answer that is not
+one digit from 1 to 5) the
 default journey, expert search, is kept and `why` says so. `answer(text,
 research, collections)` routes and runs the matching search, returning the
 same shapes as the existing endpoints.
@@ -16,6 +17,8 @@ from __future__ import annotations
 
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
 from typing import Any
 
 from campus_ai.core.llm import generate
@@ -23,6 +26,7 @@ from campus_ai.core.llm import generate
 JOURNEYS = {1: "partners for a call", 2: "calls for a researcher or lab", 3: "draft a consortium",
             4: "an expert or supervisor", 5: "sources in the collections"}
 DEFAULT = 4  # plain-language expert search is the general case (plan 4.1)
+MODEL_SECONDS = 90  # how long the model may take to pick a journey before the default is used
 TOPIC_ID = re.compile(r"\bHORIZON-[A-Z0-9][A-Z0-9-]*[A-Z0-9]\b", re.IGNORECASE)
 
 # (journey, rule name, pattern), tried in order: a consortium request names a call and partners too, so it goes first.
@@ -51,10 +55,18 @@ LEAD = re.compile(r"^\s*(please\s+)?((can|could) you\s+)?(find|show( me)?|search
 
 
 def classify(text: str, data_class: str = "I") -> tuple[int | None, str]:
-    """The local model's journey for `text`, or None with the reason it could not be used."""
+    """The local model's journey for `text`, or None with the reason it could not be used.
+
+    The model gets `MODEL_SECONDS`; a busy laptop GPU can take ten minutes, and a router that slow is no router.
+    """
+    pool = ThreadPoolExecutor(max_workers=1)
+    future = pool.submit(generate, [{"role": "user", "content": f"Request: {text}\nJourney:"}], task="classification",
+                         data_class=data_class, system=SYSTEM)
+    pool.shutdown(wait=False)  # a late answer is dropped, not waited for
     try:
-        response = generate([{"role": "user", "content": f"Request: {text}\nJourney:"}], task="classification",
-                            data_class=data_class, system=SYSTEM)
+        response = future.result(timeout=MODEL_SECONDS)
+    except FutureTimeout:
+        return None, f"model took over {MODEL_SECONDS} s"
     except Exception as error:  # the model being down is a fallback, not a failure
         return None, f"model unavailable ({type(error).__name__})"
     answer = response.text.strip().strip(".*`\"' ")

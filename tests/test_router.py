@@ -1,4 +1,5 @@
 import re
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -73,6 +74,16 @@ class ModelTests(unittest.TestCase):
             routed = route("salmon habitat restoration")
         self.assertEqual(routed["journey"], 4)
         self.assertIn("model unavailable (ConnectionError)", routed["why"])
+
+    def test_slow_model_falls_back(self):
+        def slow(*args, **kwargs):
+            time.sleep(0.5)
+            return reply("2")
+        with mock.patch.object(router, "generate", side_effect=slow), mock.patch.object(router, "MODEL_SECONDS", 0.05):
+            routed = route("salmon habitat restoration")
+        self.assertEqual(routed["journey"], 4)
+        self.assertEqual(routed["why"], "no rule fired; model took over 0.05 s; default journey 4")
+        self.assertLess(routed["seconds"], 0.4)
 
 
 class FakeResearch:
