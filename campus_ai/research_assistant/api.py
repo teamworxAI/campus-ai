@@ -12,6 +12,8 @@
     GET  /api/calls?q=...&status=open          open and forthcoming Horizon Europe topics (journey 2)
     GET  /api/calls/for/{researcher_id}        the same for one researcher's own profile text
     GET  /api/calls/{call_id}/analysis         the call analyst: topics, outcomes, partner profile, quoted (R4)
+    GET  /api/partners/complement?call=...&n=3 what each partner adds to the call, and a complementary set (R4)
+    GET  /api/ask?q=...                        route a plain question to journey 1-5 and run its search (R4)
 """
 
 from __future__ import annotations
@@ -27,8 +29,10 @@ from fastapi.responses import FileResponse
 from campus_ai.research_assistant import collections
 from campus_ai.research_assistant.collections import CollectionsSearch, picture_match
 from campus_ai.research_assistant.call_analyst import analyse, partner_query
+from campus_ai.research_assistant.complementarity import assess, complement, details
 from campus_ai.research_assistant.consortium import brief, eligibility
 from campus_ai.research_assistant.matching import COUNTRY_SETS, ResearchSearch
+from campus_ai.research_assistant.router import answer, route
 
 MAX_UPLOAD = 10 * 1024 * 1024
 CALL_STATUS = ("open", "forthcoming", "all")
@@ -121,9 +125,7 @@ def create_app(service: CollectionsSearch | None = None, research: ResearchSearc
             draft = {"brief": "", "error": f"{type(error).__name__}: {str(error)[:200]}", "needs_review": True}
         return {"query": text, "call": call, "home": home, "partners": chosen, "eligibility": check, "brief": draft}
 
-    @app.get("/api/calls/{call_id}/analysis")
-    def call_analysis(call_id: str) -> dict:
-        """The call analyst (R4): facts from the records plus span-checked topics, outcomes and partner profile."""
+    def analysis_of(call_id: str) -> dict:
         if call_id in analyses:
             return {**analyses[call_id], "cached": True}
         with lock:
@@ -135,6 +137,37 @@ def create_app(service: CollectionsSearch | None = None, research: ResearchSearc
         if not result.get("model_error"):  # a failed run is retried next time
             analyses[call_id] = result
         return {**result, "cached": False}
+
+    @app.get("/api/calls/{call_id}/analysis")
+    def call_analysis(call_id: str) -> dict:
+        """The call analyst (R4): facts from the records plus span-checked topics, outcomes and partner profile."""
+        return analysis_of(call_id)
+
+    @app.get("/api/partners/complement")
+    def partners_complement(call: str = Query(min_length=1, max_length=200), q: str = Query("", max_length=2000),
+                            k: int = Query(10, ge=1, le=30), n: int = Query(3, ge=1, le=10),
+                            countries: str = Query("associated")) -> dict:
+        """What each partner on the call's shortlist adds, the set view and a complementary pick of n (R4, no model call
+        unless the call has not been analysed in this process yet)."""
+        if countries not in COUNTRY_SETS:
+            raise HTTPException(422, f"countries must be one of {', '.join(COUNTRY_SETS)}")
+        analysis = analysis_of(call)
+        query = q.strip() or analysis.get("partner_query") or analysis.get("title") or ""
+        with lock:
+            shortlist = graph().partners(query, k, countries)
+            info = details(graph(), shortlist)
+        assessed = assess(shortlist, analysis, info)
+        return {"call": {key: analysis.get(key) for key in ("id", "identifier", "title", "url", "action")}, "query": query,
+                "countries": countries, "analysis_cached": analysis["cached"], "model_error": analysis.get("model_error"),
+                "needs": assessed["needs"], "roles_needed": assessed["roles_needed"], "partners": assessed["partners"],
+                "set": assessed["set"], "complementary": complement(shortlist, analysis, n, info)}
+
+    @app.get("/api/ask")
+    def ask(q: str = Query(min_length=1, max_length=2000), k: int = Query(10, ge=1, le=30)) -> dict:
+        """One box for every journey: rules first, the local model only when no rule fires."""
+        routed = route(q)  # outside the lock: the model may be asked
+        with lock:
+            return answer(q, graph(), search(), k, routed)
 
     @app.get("/api/calls/for/{researcher_id:path}")
     def calls_for(researcher_id: str, k: int = Query(10, ge=1, le=30), status: str = Query("open")) -> dict:
