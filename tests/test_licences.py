@@ -39,6 +39,12 @@ IMAGES = {
     "nginx": "BSD-2-Clause",
     "ollama": "MIT",  # bundles NVIDIA's CUDA runtime: the GPU named exception; runs on CPU too
 }
+# System (apt) packages installed in the Dockerfile: SPDX licence of the software.
+SYSTEM = {
+    "tesseract-ocr": "Apache-2.0",  # OCR engine for scanned PDFs (A7)
+    "tesseract-ocr-eng": "Apache-2.0",  # trained data
+    "tesseract-ocr-fra": "Apache-2.0",
+}
 # Model weights, by Hugging Face id: licence from the model card.
 MODELS = {
     "google/embeddinggemma-2": "Apache-2.0",
@@ -104,6 +110,17 @@ class LicenceGuardTests(unittest.TestCase):
                 self.assertTrue(is_open(IMAGES[repo]), ref)
             self.assertNotIn("enterprise", ref, f"{ref}: use open-source editions only")
         self.assertEqual(missing, [], "add these images and their licences to IMAGES")
+
+    def test_dockerfile_apt_packages_are_listed_and_open(self):
+        text = (ROOT / "Dockerfile").read_text(encoding="utf-8").replace("\\\r\n", " ").replace("\\\n", " ")
+        packages = []
+        for command in re.findall(r"apt-get install\b([^&;\n]*)", text):
+            packages += [word for word in command.split() if not word.startswith("-")]
+        self.assertTrue(packages, "expected at least one apt package (tesseract-ocr)")
+        self.assertEqual([p for p in packages if p not in SYSTEM], [],
+                         "add these apt packages and their licences to SYSTEM")
+        for package in packages:
+            self.assertTrue(is_open(SYSTEM[package]), package)
 
     def test_models_are_listed_and_open(self):
         loadable = [make().model_id for make in BACKENDS.values()] + list(RERANKERS.values())

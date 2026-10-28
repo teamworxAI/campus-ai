@@ -34,12 +34,72 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from campus_ai.core.embed import get_embedder
+from campus_ai.core.eval import report
 from campus_ai.core.graph import connect
 from campus_ai.research_assistant.matching import (ASSOCIATED, CANDIDATES, EU, ORGANISATION_WEIGHT, SIGNALS, WEIGHTINGS,
                                                    ResearchSearch, research_reranker)
 
 HERE = Path(__file__).parent
 K = 10
+
+
+def build_report(results: list[tuple], model: str, home: str, times: dict[str, list[float]], when: datetime,
+                 sha: str | None = None, pool: int | None = None, signals: str | None = None,
+                 no_acronym: bool = False) -> str:
+    """results: (acronym, hidden partner name, its country, {ranking: rank or None}, fused pool rank or None,
+    direct Organization rank or None) per project; the last item may be left out when no direct signal ran.
+
+    `times` holds the seconds per project for each ranking; the first query loads the models, so the warm mean
+    (from the second query on) is the cost per query in use. More than one ranking means a comparison (of
+    weightings, or of `signals`).
+    """
+    results = [r if len(r) == 6 else (*r, None) for r in results]
+    names = list(results[0][3])
+    variants = len(names) > 1
+    direct = any(r[5] for r in results) or bool(signals and signals != "projects")
+    warm = {name: (t[1:] or t) for name, t in times.items()}
+    mean = {name: sum(t) / len(t) for name, t in warm.items()}
+    summary = (f"{len(results)} projects with a {home} participant; the hidden partner is the coordinator or the first "
+               f"eligible participant; the project itself is excluded from the candidates.")
+    if pool:
+        summary += f" Rerank pool {pool}."
+    if no_acronym:
+        summary += " The question is the project's text without its acronym."
+    if signals:
+        summary += f" Signals: {signals}."
+    bullets, sections = [], []
+    if not variants:
+        [name] = names
+        recall, mrr = score([r[3][name] for r in results])
+        summary += (f" {mean[name]:.1f} s per project with the models loaded"
+                    f" (first, with loading: {times[name][0]:.1f} s).")
+        bullets = [f"**recall@{K}: {recall:.2f}** ({round(recall * len(results))} of {len(results)})", f"MRR: {mrr:.2f}"]
+    else:
+        rows = []
+        for name in names:
+            recall, mrr = score([r[3][name] for r in results])
+            rows.append((name, f"{recall:.2f} ({round(recall * len(results))}/{len(results)})", f"{mrr:.3f}", f"{mean[name]:.1f}"))
+        sections.append((None, report.table(["Ranking", f"recall@{K}", "MRR", "s per query (warm, cached scores after the first variant)"], rows)))
+        pooled = [r[4] for r in results if r[4]]
+        top30 = [p for p in pooled if p <= 30]
+        sections.append((None, [f"Hidden partner took part in a project in the fused top {CANDIDATES}: {len(pooled)} of {len(results)} "
+                                f"({len(pooled) / len(results):.0%}); in the top 30 (the projects partner search uses): "
+                                f"{len(top30)} of {len(results)} ({len(top30) / len(results):.0%})."]))
+    if direct:
+        hits = [r[5] for r in results if r[5]]
+        top30 = [d for d in hits if d <= 30]
+        either = [r for r in results if (r[4] and r[4] <= 30) or (r[5] and r[5] <= 30)]
+        sections.append((None, [f"Hidden partner's own node among the top {CANDIDATES} Organization hits: {len(hits)} of "
+                                f"{len(results)} ({len(hits) / len(results):.0%}); in the top 30: {len(top30)} of {len(results)} "
+                                f"({len(top30) / len(results):.0%}). Reachable by either signal within 30: {len(either)} of "
+                                f"{len(results)} ({len(either) / len(results):.0%})."]))
+    headers = ["Project", "Hidden partner", "Country", *names]
+    headers += ["In pool (fused rank)"] if variants else []
+    headers += ["Direct (org rank)"] if direct else []
+    rows = [(a, nm, c, *(ranks[x] or "miss" for x in names), *([in_pool or "no"] if variants else []),
+             *([found or "no"] if direct else [])) for a, nm, c, ranks, in_pool, found in results]
+    sections.append((None, report.table(headers, rows)))
+    return report.render(f"Partner back-test (R6): {model}", summary, when=when, sha=sha, bullets=bullets, sections=sections)
 
 
 def parse(argv=None) -> argparse.Namespace:
@@ -176,52 +236,11 @@ def main(argv=None) -> int:
     if not results:
         print(f"No indexed projects with a {args.home} participant: index data/cordis/horizon/records.jsonl first")
         return 1
-    names = list(results[0][3])
     when = datetime.now(timezone.utc)
-    # The first query loads the models; the warm mean is the cost per query in use.
-    warm = {name: (t[1:] or t) for name, t in times.items()}
-    lines = [f"# Partner back-test (R6): {model}", "",
-             f"{when:%Y-%m-%d %H:%M} UTC. {len(results)} projects with a {args.home} participant; the hidden partner is the "
-             f"coordinator or the first eligible participant; the project itself is excluded from the candidates."
-             + (f" Rerank pool {args.pool or CANDIDATES}." if reranker else "")
-             + (" The question is the project's text without its acronym." if args.no_acronym else "")
-             + (f" Signals: {args.signals}." if direct else ""), ""]
-    if len(names) == 1:
-        recall, mrr = score([r[3][names[0]] for r in results])
-        lines += [f"{sum(warm[names[0]]) / len(warm[names[0]]):.1f} s per project with the models loaded "
-                  f"(first, with loading: {times[names[0]][0]:.1f} s).", "",
-                  f"- **recall@{K}: {recall:.2f}** ({round(recall * len(results))} of {len(results)})", f"- MRR: {mrr:.2f}"]
-    else:
-        lines += [f"| Ranking | recall@{K} | MRR | s per query (warm, cached scores after the first variant) |", "|---|---|---|---|"]
-        for name in names:
-            recall, mrr = score([r[3][name] for r in results])
-            lines.append(f"| {name} | {recall:.2f} ({round(recall * len(results))}/{len(results)}) | {mrr:.3f} | "
-                         f"{sum(warm[name]) / len(warm[name]):.1f} |")
-    pooled = [r[4] for r in results if r[4]]
-    if compare:
-        top30 = [p for p in pooled if p <= 30]
-        lines += ["", f"Hidden partner took part in a project in the fused top {CANDIDATES}: {len(pooled)} of {len(results)} "
-                      f"({len(pooled) / len(results):.0%}); in the top 30 (the projects partner search uses): {len(top30)} of {len(results)} "
-                      f"({len(top30) / len(results):.0%})."]
-    if direct:
-        hits = [r[5] for r in results if r[5]]
-        top30, either = [d for d in hits if d <= 30], [r for r in results if (r[4] and r[4] <= 30) or (r[5] and r[5] <= 30)]
-        lines += ["", f"Hidden partner's own node among the top {CANDIDATES} Organization hits: {len(hits)} of {len(results)} "
-                      f"({len(hits) / len(results):.0%}); in the top 30: {len(top30)} of {len(results)} ({len(top30) / len(results):.0%}). "
-                      f"Reachable by either signal within 30: {len(either)} of {len(results)} ({len(either) / len(results):.0%})."]
-    extra = ([" In pool (fused rank) |"] if compare else []) + ([" Direct (org rank) |"] if direct else [])
-    head = "| Project | Hidden partner | Country | " + " | ".join(names) + " |" + "".join(extra)
-    lines += ["", head, "|" + "---|" * (3 + len(names) + len(extra))]
-    for a, nm, c, ranks, in_pool, found_direct in results:
-        cells = " | ".join(str(ranks[x] or "miss") for x in names)
-        lines.append(f"| {a} | {nm} | {c} | {cells} |" + (f" {in_pool or 'no'} |" if compare else "")
-                     + (f" {found_direct or 'no'} |" if direct else ""))
-    report = "\n".join(lines) + "\n"
-    print(report)
-    stem = args.report or f"backtest_{'rerank_' if reranker else ''}{'signals_' if direct else ''}{when:%Y%m%d}"
-    out = HERE / f"{stem}.md"
-    out.write_text(report, encoding="utf-8")
-    print(f"Report: {out.relative_to(HERE.parents[1])}")
+    text = build_report(results, model, args.home, times, when, report.git_sha(HERE),
+                        pool=(args.pool or CANDIDATES) if reranker else None,
+                        signals=args.signals if direct else None, no_acronym=args.no_acronym)
+    report.save(text, args.report or f"backtest{'_rerank' if reranker else ''}{'_signals' if direct else ''}", HERE, when)
     return 0
 
 

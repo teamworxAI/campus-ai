@@ -12,6 +12,7 @@
                                                nodes (journey 1); `signal=projects|organisations|fused` picks the ranking
     GET  /api/calls?q=...&status=open          open and forthcoming Horizon Europe topics (journey 2)
     GET  /api/calls/for/{researcher_id}        the same for one researcher's own profile text
+    GET  /api/calls/{call_id}/analysis         the call analyst: topics, outcomes, partner profile, quoted (R4)
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from fastapi.responses import FileResponse
 
 from campus_ai.research_assistant import collections
 from campus_ai.research_assistant.collections import CollectionsSearch, picture_match
+from campus_ai.research_assistant.call_analyst import analyse, partner_query
 from campus_ai.research_assistant.consortium import brief, eligibility
 from campus_ai.research_assistant.matching import COUNTRY_SETS, DEFAULT_SIGNAL, SIGNALS, ResearchSearch
 
@@ -39,6 +41,7 @@ def create_app(service: CollectionsSearch | None = None, research: ResearchSearc
     """The app; builds the real services (model + Neo4j) at startup unless they are given."""
     state: dict = {"service": service, "research": research}
     lock = threading.Lock()  # one embedding at a time: the model is the bottleneck anyway
+    analyses: dict[str, dict] = {}  # call analyses by call id, for the life of the process (the model takes minutes)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -120,6 +123,21 @@ def create_app(service: CollectionsSearch | None = None, research: ResearchSearc
         except Exception as error:  # the model being down is reported, not fatal: the shortlist and check stand
             draft = {"brief": "", "error": f"{type(error).__name__}: {str(error)[:200]}", "needs_review": True}
         return {"query": text, "call": call, "home": home, "partners": chosen, "eligibility": check, "brief": draft}
+
+    @app.get("/api/calls/{call_id}/analysis")
+    def call_analysis(call_id: str) -> dict:
+        """The call analyst (R4): facts from the records plus span-checked topics, outcomes and partner profile."""
+        if call_id in analyses:
+            return {**analyses[call_id], "cached": True}
+        with lock:
+            call = graph().call(call_id)
+        if not call:
+            raise HTTPException(404, "no such call topic")
+        result = analyse(call)
+        result["partner_query"] = partner_query(result)
+        if not result.get("model_error"):  # a failed run is retried next time
+            analyses[call_id] = result
+        return {**result, "cached": False}
 
     @app.get("/api/calls/for/{researcher_id:path}")
     def calls_for(researcher_id: str, k: int = Query(10, ge=1, le=30), status: str = Query("open")) -> dict:

@@ -23,12 +23,44 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
+from campus_ai.core.eval import metrics, report
 from campus_ai.course_access.rebuild import compare
 
 HERE = Path(__file__).parent
-spec = importlib.util.spec_from_file_location("remediate", HERE.parents[1] / "scripts" / "remediate.py")
-remediate = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(remediate)
+
+
+def _load_remediate():
+    spec = importlib.util.spec_from_file_location("remediate", HERE.parents[1] / "scripts" / "remediate.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def build_report(results: list[tuple], failures: list[tuple], when: datetime, alt_text: bool = False,
+                 approve_all: bool = False, sha: str | None = None) -> str:
+    """results: (path, `remediate.remediate` result, seconds) per document; failures: (path, error)."""
+    rows, new_rules, totals = [], Counter(), Counter()
+    for path, result, seconds in results:
+        c = compare(result["before"], result["after"])
+        new = metrics.introduced(c)
+        new_rules.update(c["new"])
+        totals.update(before=c["before"], after=c["after"], applied=result["applied"], waiting=result["waiting"], new=new)
+        rows.append((path, c["before"], result["applied"], result["waiting"], c["after"], new, len(result["notes"]),
+                     f"{seconds:.1f}"))
+    fixed = metrics.fixed_share(totals["before"], totals["after"])
+    mode = "all proposals with a value" if approve_all else "proposals needing no review"
+    sections = [(None, report.table(["Document", "Before", "Applied", "Waiting", "After", "Introduced", "Notes", "Seconds"], rows))]
+    if failures:
+        sections.append(("Failed", [f"- `{p}`: {err}" for p, err in failures]))
+    return report.render(
+        "Remediation of the A6 corpus",
+        f"{len(rows)} documents rebuilt as DOCX and re-audited, {len(failures)} failed. "
+        f"Applied: {mode}{', with alt text' if alt_text else ', without alt text'}.",
+        when=when, sha=sha, sections=sections, bullets=[
+            f"Issues before: {totals['before']}; after: {totals['after']} ({fixed:.0%} fewer)",
+            f"Proposals applied: {totals['applied']}; waiting for review: {totals['waiting']}",
+            f"Issues introduced by the rebuild (target 0): {totals['new']}"
+            + (" (" + ", ".join(f"{r} +{n}" for r, n in new_rules.items()) + ")" if new_rules else "")])
 
 
 def main(argv=None) -> int:
@@ -41,9 +73,9 @@ def main(argv=None) -> int:
     if not manifest.exists():
         print(f"No corpus at {root}: run `docker compose run --rm fetch-course-docs` first")
         return 1
-    paths = sorted({json.loads(line)["path"] for line in manifest.read_text(encoding="utf-8").splitlines()})
-    rows, failures, new_rules = [], [], Counter()
-    totals = Counter()
+    remediate = _load_remediate()
+    paths = sorted({json.loads(line)["path"] for line in manifest.read_text(encoding="utf-8").split("\n") if line.strip()})
+    results, failures = [], []
     with tempfile.TemporaryDirectory() as tmp:
         for path in paths:
             start = time.perf_counter()
@@ -53,31 +85,10 @@ def main(argv=None) -> int:
             except Exception as exc:  # a failure is a finding too
                 failures.append((path, f"{type(exc).__name__}: {exc}"))
                 continue
-            seconds = time.perf_counter() - start
-            c = compare(result["before"], result["after"])
-            new = sum(c["new"].values())
-            new_rules.update(c["new"])
-            totals.update(before=c["before"], after=c["after"], applied=result["applied"], waiting=result["waiting"], new=new)
-            rows.append((path, c["before"], result["applied"], result["waiting"], c["after"], new, len(result["notes"]), seconds))
+            results.append((path, result, time.perf_counter() - start))
     when = datetime.now(timezone.utc)
-    fixed_share = (totals["before"] - totals["after"]) / totals["before"] if totals["before"] else 0
-    mode = "all proposals with a value" if args.approve_all else "proposals needing no review"
-    lines = [f"# Remediation of the A6 corpus", "",
-             f"{when:%Y-%m-%d %H:%M} UTC. {len(rows)} documents rebuilt as DOCX and re-audited, {len(failures)} failed. "
-             f"Applied: {mode}{', with alt text' if args.alt_text else ', without alt text'}.", "",
-             f"- Issues before: {totals['before']}; after: {totals['after']} ({fixed_share:.0%} fewer)",
-             f"- Proposals applied: {totals['applied']}; waiting for review: {totals['waiting']}",
-             f"- Issues introduced by the rebuild (target 0): {totals['new']}"
-             + (" (" + ", ".join(f"{r} +{n}" for r, n in new_rules.items()) + ")" if new_rules else ""),
-             "", "| Document | Before | Applied | Waiting | After | Introduced | Notes | Seconds |", "|---|---|---|---|---|---|---|---|"]
-    lines += [f"| {p} | {b} | {ap} | {w} | {a} | {n} | {notes} | {s:.1f} |" for p, b, ap, w, a, n, notes, s in rows]
-    if failures:
-        lines += ["", "## Failed", ""] + [f"- `{p}`: {err}" for p, err in failures]
-    report = "\n".join(lines) + "\n"
-    print(report)
-    out = HERE / f"remediate_corpus_{when:%Y%m%d}.md"
-    out.write_text(report, encoding="utf-8")
-    print(f"Report: {out.relative_to(HERE.parents[1])}")
+    text = build_report(results, failures, when, args.alt_text, args.approve_all, report.git_sha(HERE))
+    report.save(text, "remediate_corpus", HERE, when)
     return 0 if not failures else 1
 
 

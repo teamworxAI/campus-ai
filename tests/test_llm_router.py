@@ -95,6 +95,38 @@ class OllamaRoutingTests(unittest.TestCase):
             with self.assertRaisesRegex(ConnectionError, r"No Ollama at http://ollama:11434 .*docker compose up -d ollama"):
                 generate(MESSAGES, task="reasoning", data_class="P")
 
+    def test_classification_does_not_think(self):
+        with mock.patch.dict("os.environ", {}, clear=True):
+            generate(MESSAGES, task="classification", data_class="P")
+        self.assertIs(self.sent_body()["think"], False)
+
+    def test_reasoning_may_think(self):
+        with mock.patch.dict("os.environ", {}, clear=True):
+            generate(MESSAGES, task="reasoning", data_class="P")
+        self.assertNotIn("think", self.sent_body())
+
+    def test_vision_may_think(self):
+        with mock.patch.dict("os.environ", {}, clear=True):
+            generate(MESSAGES, task="vision", data_class="P")
+        self.assertNotIn("think", self.sent_body())
+
+    def test_model_without_thinking_mode_gets_the_call_again_without_the_option(self):
+        rejected = backends.urllib.error.HTTPError(
+            "http://ollama:11434/api/chat", 400, "Bad Request", {},
+            io.BytesIO(b'{"error":"\\"olmo2:7b\\" does not support thinking"}'))
+        answered = io.BytesIO(json.dumps({"model": "olmo2:7b", "message": {"role": "assistant", "content": "4"},
+                                          "done_reason": "stop"}).encode())
+        ok = mock.MagicMock()
+        ok.__enter__.return_value = answered
+        self.urlopen.side_effect = [rejected, ok]
+        with mock.patch.dict("os.environ", {"CAMPUS_AI_MODEL_CLASSIFICATION": "olmo2:7b"}, clear=True):
+            result = generate(MESSAGES, task="classification", data_class="P")
+        self.assertEqual(result.text, "4")
+        self.assertEqual(self.urlopen.call_count, 2)
+        first, second = (json.loads(c.args[0].data) for c in self.urlopen.call_args_list)
+        self.assertIs(first["think"], False)
+        self.assertNotIn("think", second)
+
     def test_missing_model_names_the_fix(self):
         self.urlopen.side_effect = backends.urllib.error.HTTPError(
             "http://ollama:11434/api/chat", 404, "Not Found", {}, io.BytesIO(b'{"error":"model not found"}'))
