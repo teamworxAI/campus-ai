@@ -41,6 +41,14 @@ class RerankFlagTests(unittest.TestCase):
             self.assertTrue(parse(["--rerank"]).rerank, name)
             self.assertFalse(parse([]).rerank, name)
 
+    def test_backend_flag(self):
+        for name in ("backtest", "expert_search", "partner_search"):
+            parse = load(name).parse
+            self.assertEqual(parse([]).backend, "embeddinggemma-2", name)
+            self.assertEqual(parse(["--backend", "e5-small"]).backend, "e5-small", name)
+            with self.assertRaises(SystemExit):
+                parse(["--backend", "nope"])
+
 
 if __name__ == "__main__":
     unittest.main()

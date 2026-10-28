@@ -7,7 +7,7 @@ check that the R2 graph answers the kind of question the demo asks. Needs
 the graph indexed (`graph_search.py index data/cordis/horizon/records.jsonl`)
 and runs in the `embed` service.
 
-    docker compose run --rm embed python evals/research_assistant/partner_search.py [--rerank]
+    docker compose run --rm embed python evals/research_assistant/partner_search.py [--rerank] [--backend e5-small]
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from campus_ai.core.embed import get_embedder
+from campus_ai.core.embed import BACKENDS, DEFAULT_BACKEND, get_embedder
 from campus_ai.core.eval import report
 from campus_ai.core.graph import HybridRetriever, connect
 from campus_ai.research_assistant.matching import research_reranker
@@ -60,12 +60,14 @@ def build_report(probes: list[tuple], model: str, when: datetime, sha: str | Non
 def parse(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--rerank", action="store_true", help="add the cross-encoder reranker step (B2)")
+    parser.add_argument("--backend", default=DEFAULT_BACKEND, choices=list(BACKENDS),
+                        help="embedder to query with (the graph must be indexed with the same one; B2)")
     return parser.parse_args(argv)
 
 
 def main(argv=None) -> int:
     args = parse(argv)
-    embedder = get_embedder()
+    embedder = get_embedder(args.backend)
     reranker = research_reranker() if args.rerank else None
     model = embedder.name + (f" + {reranker.name}" if reranker else "")
     probes = []
@@ -84,7 +86,7 @@ def main(argv=None) -> int:
                 by_label.append((label, seconds, [props.get(hit.id, {}) for hit in hits]))
             probes.append((query, by_label))
     when = datetime.now(timezone.utc)
-    name = "partner_search_rerank" if reranker else "partner_search"
+    name = ("partner_search_rerank" if reranker else "partner_search") + ("" if args.backend == DEFAULT_BACKEND else f"_{args.backend}")
     report.save(build_report(probes, model, when, report.git_sha(HERE)), name, HERE, when)
     return 0
 
