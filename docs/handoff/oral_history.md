@@ -305,6 +305,28 @@ by the harness after ten minutes without output while they waited on long
 docker jobs, and the laptop then slept from Oct 23 to Oct 26 with their
 containers still running; they were resumed with the facts and finished.
 
+**Oct 28, third round.** The user merged #39 and #46 (reranker) and said
+proceed; that made #36, #38 and #44 conflict, so `main` was merged into
+each (the P6 back-test now builds its report with `report.render/table/save`
+while keeping the weighting comparison) and all ten PRs were mergeable again.
+The laptop images were rebuilt from `main` and `api`, `course-access` and
+`web` recreated. Three card agents then ran in parallel: R3's last item,
+the vector index recording its embedder (#47: `(:IndexMeta)` node, checked
+on first search, backfilled on the live graph); a direct per-organisation
+signal in partner search (#48: `signal=projects|organisations|fused`,
+measured on 100 projects without the project acronym in the question, since
+40 hidden partners list it in their own node text; the partner's own node is
+in the top 50 Organization hits only 5 times in 100, so no fusion lifts
+recall and the default stays `projects`); and the full-graph embedder
+comparison (#49: e5-small indexed into a throwaway Neo4j container, removed
+afterwards; recall@10 0.29 against EmbeddingGemma 2's 0.32, so D7 stands).
+Partner search's ceiling is therefore the graph itself: a hidden partner is
+reachable through either signal within 30 for 62 of 100 projects, and the
+objective text rarely names the organisation. The remaining levers are
+richer organisation text (their own project portfolios and EuroSciVoc terms
+are already in it) or an entirely different question, such as asking with
+the call topic rather than the project's own text.
+
 ## 3. Standing orders
 
 These carry over to any session working for this user on campus-ai.
@@ -495,19 +517,19 @@ discover -s tests` for quick checks inside its cloud container. On Oct 22,
   `ccr-b486116f-phsbvu`?
 
 **Next cards** (section 5 of the plan, after the Oct 23-28 sessions): first
-merge #35-#45 (#44 after #38) and on the laptop run `docker compose build`
-(A7 changed the Dockerfile, P4 the lock), `docker compose up -d web`
-(recreates `api` and `course-access` on the new images) and `docker compose
-exec web nginx -s reload`; the CallTopic nodes are already updated in the
-graph. Then: the reranker retry's verdict once its report lands; R5's
-network worker once EU-side researchers are in the graph; a search to fill
-the roles the complementary set leaves open; B3 and B5 once a specialist
-and the research officers label the gold sets (the P6 format is ready); the
-full-graph embedder comparison (needs a second index); a per-organisation
-signal in partner search (the reranker retry showed retrieval, not
-reranking, is the ceiling: the hidden partner is in the top 30 projects
-only 62% of the time); the Lisbon dry run with `docs/demo/demo_script.md`
-on `gemma4:e4b`.
+merge #35-#38, #40-#45, #47-#49 (#44 after #38; #36, #48 and #49 all touch
+the research eval scripts, so merge `main` into whichever lands later) and on
+the laptop run `docker compose build` (A7 changed the Dockerfile, P4 the
+lock), `docker compose up -d web` (recreates `api` and `course-access` on
+the new images) and `docker compose exec web nginx -s reload`; the CallTopic
+nodes are already updated in the graph. The reranker (#39, #46) is merged
+and the laptop images carry it. Then: R5's network worker once EU-side
+researchers are in the graph; a search to fill the roles the complementary
+set leaves open (#44); B3 and B5 once a specialist and the research officers
+label the gold sets (the P6 format is ready); the Lisbon dry run with
+`docs/demo/demo_script.md` on `gemma4:e4b` once #38, #43 and #44 are in;
+partner search's retrieval ceiling (see the Oct 28 round in 2d) if a better
+question than the project's own text can be found.
 
 ## 7. Lessons and gotchas
 
@@ -590,6 +612,13 @@ on `gemma4:e4b`.
   the result.
 - PowerShell treats `;` as a command separator, so
   `echo COMPOSE_FILE=a;b >> .env` writes nothing useful; quote it.
+- Three light GPU jobs (two fusion-only back-tests and an e5 index) ran at
+  once on the 4 GB card without an out-of-memory error, filling it to
+  3.96 GB; a reranked or LLM job alongside them would not have fitted.
+- A second Neo4j for an experiment goes in its own container and volume on
+  the `campus-ai_graph` network (community edition has one database per
+  server); remove both afterwards. The graph records its embedder (#47), so
+  a different embedder against the live graph raises by design.
 - Docker Desktop runs other projects' containers (`sfu-site`): never prune all
   images or volumes, restart Docker, or reuse their ports without asking.
 
