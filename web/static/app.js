@@ -398,7 +398,7 @@ async function renderAnalysis(params) {
         a.dropped ? `${a.dropped} item(s) dropped: their quote is not in the topic text` : null,
         "Evidence: " + a.evidence.id].filter(Boolean).join(". ") + "." }),
       h("div", { class: "row" },
-        h("a", { class: "btn primary", href: "#/partners?q=" + encodeURIComponent(a.partner_query), text: "Find partners for this call" }),
+        h("a", { class: "btn primary", href: "#/partners?q=" + encodeURIComponent(a.partner_query) + "&call=" + encodeURIComponent(a.id), text: "Find partners for this call" }),
         h("a", { class: "btn", href: `#/brief?call=${encodeURIComponent(a.id)}`, text: "Draft a consortium" })));
   } catch (error) {
     results.replaceChildren(h("div", { class: "state", role: "alert", text: "Failed: " + error.message }));
@@ -458,7 +458,8 @@ async function renderJourney(kind, params) {
   } }, h("label", { for: "q", class: "sr", text: j.title }), input, h("button", { type: "submit", class: "btn primary", text: "Search" }));
   const results = h("section", { id: "results", class: "results", "aria-live": "polite" });
   app.replaceChildren(
-    h("section", { class: "hero" }, h("div", { class: "wrap" }, h("h1", { text: j.title }), form, h("p", { class: "muted", text: j.note }))),
+    h("section", { class: "hero" }, h("div", { class: "wrap" }, h("h1", { text: j.title }), form, h("p", { class: "muted", text: j.note }),
+      kind === "experts" ? h("p", {}, h("a", { href: "#/ask", text: "Not sure which page fits? Ask in plain words" })) : null)),
     h("main", { id: "main", class: "wrap layout" }, results));
   if (!q && !forId) {
     results.append(h("div", { class: "state", text: `Source: ${j.source}.` }));
@@ -473,13 +474,81 @@ async function renderJourney(kind, params) {
       h("div", { class: "head-row" }, h("h2", { text: heading }), h("span", { class: "muted", text: "Best matches first" })),
       rows.length ? h("ol", { class: "list" }, rows.map(kind === "experts" ? expertRow : kind === "partners" ? partnerRow : callRow))
         : h("div", { class: "state", text: "Nothing matches. Try other words, or check that the graph is indexed." }));
+    if (kind === "partners" && params.get("call") && rows.length) {
+      const wait = h("div", { class: "state", role: "status", text: "Working out what each partner adds…" });
+      results.prepend(wait);
+      wait.replaceWith(await whatEachAdds(params.get("call"), q));
+    }
   } catch (error) {
     results.replaceChildren(h("div", { class: "state", role: "alert", text: "Search failed: " + error.message }));
   }
 }
 
+// What each partner adds to a call (R4 complementarity scorer): facts only, every line citing the ids it rests on.
+async function whatEachAdds(callId, q) {
+  const box = h("section", { class: "panel" }, h("h2", { text: "What each adds" }));
+  try {
+    const c = await api(`/api/partners/complement?call=${encodeURIComponent(callId)}&q=${encodeURIComponent(q)}&n=3`);
+    const s = c.set, el = c.complementary.eligibility;
+    box.append(
+      h("h3", { text: "Complementary set of 3" }),
+      h("ol", { class: "evidence" }, c.complementary.picked.map((p) => h("li", { text: p.adds }))),
+      h("p", { text: `${el.ok ? "Consortium rule met" : "Consortium rule not met yet"} with the home institution: ${el.rule}.` }),
+      c.complementary.set.uncovered.length ? h("p", { class: "muted", text: "Not covered by the set: " + c.complementary.set.uncovered.join("; ") }) : null,
+      c.complementary.set.roles_unfilled.length ? h("p", { class: "muted", text: "Roles still open: " + c.complementary.set.roles_unfilled.join("; ") }) : null,
+      h("h3", { text: "Every partner on the shortlist" }),
+      h("ul", { class: "evidence" }, c.partners.map((p) => h("li", { text: p.adds }))),
+      h("p", { class: "muted", text: [
+        "Countries: " + Object.keys(s.countries).join(", "),
+        s.uncovered.length ? "covered by nobody: " + s.uncovered.join("; ") : "every need is covered by someone",
+        s.roles_unfilled.length ? "roles unfilled: " + s.roles_unfilled.join("; ") : null].filter(Boolean).join(" · ") + "." }),
+      c.model_error ? h("p", { class: "muted", text: "The call analysis is missing its model reading: " + c.model_error }) : null);
+  } catch (error) {
+    box.append(h("p", { class: "muted", text: "Could not score the shortlist: " + error.message }));
+  }
+  return box;
+}
+
+// One Ask box for every journey: the router picks it (rules first, the local model when no rule fires).
+const ASK_ROWS = { partners: partnerRow, calls: callRow, experts: expertRow };
+
+async function renderAsk(params) {
+  const q = params.get("q") || "";
+  document.title = "Ask · Research Assistant";
+  const input = h("input", { id: "ask", class: "q", type: "search", name: "q", value: q, required: true, maxlength: "2000",
+    placeholder: "e.g. who works on wildfire smoke? partners for HORIZON-MISS-2027-03-OCEAN-01?", autocomplete: "off" });
+  const form = h("form", { class: "search", role: "search", onsubmit: (e) => {
+    e.preventDefault();
+    if (input.value.trim()) location.hash = "#/ask?q=" + encodeURIComponent(input.value.trim());
+  } }, h("label", { for: "ask", class: "sr", text: "Ask" }), input, h("button", { type: "submit", class: "btn primary", text: "Ask" }));
+  const results = h("section", { id: "results", class: "results", "aria-live": "polite" });
+  app.replaceChildren(
+    h("section", { class: "hero" }, h("div", { class: "wrap" }, h("h1", { text: "Ask the Research Assistant" }), form,
+      h("p", { class: "muted", text: "Partners for a call, calls for your work, a consortium, an SFU expert or sources in the collections: the question picks the page." }))),
+    h("main", { id: "main", class: "wrap layout" }, results));
+  if (!q) return;
+  results.append(h("div", { class: "state", role: "status", text: "Working out what you need…" }));
+  try {
+    const d = await api("/api/ask?q=" + encodeURIComponent(q));
+    const key = ["partners", "calls", "experts"].find((k) => d[k]);
+    const rows = key ? d[key] : [];
+    const next = d.journey === 3 ? h("a", { class: "btn", href: d.call ? `#/brief?call=${encodeURIComponent(d.call.id)}` : "#/brief?q=" + encodeURIComponent(d.search), text: "Draft a consortium" })
+      : d.journey === 1 && d.call ? h("a", { class: "btn", href: "#/analysis?call=" + encodeURIComponent(d.call.id), text: "Analyse this call, then see what each partner adds" })
+      : d.journey === 5 ? h("a", { class: "btn primary", href: "#/search?q=" + encodeURIComponent(d.search), text: "Open in Collections" }) : null;
+    results.replaceChildren(
+      h("p", { class: "muted", text: `Routed to: journey ${d.journey}, ${d.name} (${d.why}). Searched for: ${d.search}` }),
+      d.call ? h("div", { class: "head-row" }, h("h2", {}, h("a", { href: d.call.url, rel: "noopener", target: "_blank", text: `${d.call.identifier}: ${d.call.title}` }))) : null,
+      next ? h("div", { class: "row" }, next) : null,
+      d.journey === 5 ? h("p", { text: `${(d.pictures || []).length} pictures and ${(d.texts || []).length} texts found.` })
+        : rows.length ? h("ol", { class: "list" }, rows.map(ASK_ROWS[key]))
+          : h("div", { class: "state", text: "Nothing matches. Try other words." }));
+  } catch (error) {
+    results.replaceChildren(h("div", { class: "state", role: "alert", text: "Failed: " + error.message }));
+  }
+}
+
 function setNav(kind) {
-  for (const key of ["experts", "partners", "calls", "collections"]) {
+  for (const key of ["ask", "experts", "partners", "calls", "collections"]) {
     const link = document.getElementById("nav-" + key);
     if (link) link.toggleAttribute("aria-current", key === kind) && link.setAttribute("aria-current", "page");
     if (link && key !== kind) link.removeAttribute("aria-current");
@@ -490,11 +559,12 @@ function setNav(kind) {
 
 function route() {
   const hash = location.hash || "#/";
-  const journey = hash.match(/^#\/(experts|partners|calls|brief|analysis)(\?.*)?$/);
+  const journey = hash.match(/^#\/(experts|partners|calls|brief|analysis|ask)(\?.*)?$/);
   if (journey) {
     setNav(journey[1] === "brief" || journey[1] === "analysis" ? "calls" : journey[1]);
     const params = new URLSearchParams((journey[2] || "").slice(1));
     if (journey[1] === "analysis") return renderAnalysis(params);
+    if (journey[1] === "ask") return renderAsk(params);
     return journey[1] === "brief" ? renderBrief(params) : renderJourney(journey[1], params);
   }
   setNav("collections");
