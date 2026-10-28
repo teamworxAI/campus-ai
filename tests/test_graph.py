@@ -12,7 +12,7 @@ from campus_ai.core.data_classes import RestrictedDataError
 from campus_ai.core.embed import get_embedder
 from campus_ai.core.graph import GraphStore, HybridRetriever, Link, Node
 from campus_ai.core.graph.retriever import fulltext_query, fuse
-from campus_ai.core.graph.store import name
+from campus_ai.core.graph.store import check_embedder, name
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -136,6 +136,51 @@ class StoreTests(unittest.TestCase):
         self.assertLess(queries.index(f"DROP INDEX entity_vec"), next(i for i, q in enumerate(queries) if "CREATE VECTOR" in q))
 
 
+class IndexMetaTests(unittest.TestCase):
+    @staticmethod
+    def driver(stored):
+        """A fake graph whose :IndexMeta node holds `stored` (None: no node)."""
+        return FakeDriver(lambda query, params: ([{"embedder": stored}] if stored else []) if "RETURN m.embedder" in query else [])
+
+    @staticmethod
+    def writes(driver):
+        return [params for query, params in driver.calls if "SET m.embedder" in query]
+
+    def test_first_use_writes_embedder_and_dimensions(self):
+        driver = self.driver(None)
+        GraphStore(driver, gemma()).ensure_schema()
+        self.assertEqual(self.writes(driver), [{"name": "entity_vec", "embedder": "embeddinggemma-2", "size": 128}])
+
+    def test_matching_embedder_passes_without_writing(self):
+        driver = self.driver("embeddinggemma-2")
+        GraphStore(driver, gemma()).ensure_schema()
+        self.assertEqual(self.writes(driver), [])
+
+    def test_other_embedder_raises_naming_both(self):
+        driver = self.driver("e5-small")
+        with self.assertRaisesRegex(RuntimeError, "e5-small.*embeddinggemma-2.*rebuild the graph"):
+            GraphStore(driver, gemma()).ensure_schema()
+        self.assertEqual(self.writes(driver), [])
+        self.assertFalse(any("CREATE" in query for query, _ in driver.calls))
+
+    def test_older_graph_is_backfilled_with_a_message(self):
+        driver = self.driver(None)
+        with mock.patch("builtins.print") as printed:
+            check_embedder(GraphStore(driver, gemma()).run, gemma())
+        self.assertEqual(len(self.writes(driver)), 1)
+        self.assertIn("assuming embeddinggemma-2", printed.call_args.args[0])
+
+    def test_search_checks_once_and_refuses_other_embedder(self):
+        driver = self.driver("e5-small")
+        with self.assertRaisesRegex(RuntimeError, "rebuild the graph"):
+            HybridRetriever(driver, gemma()).search("q")
+        driver = self.driver("embeddinggemma-2")
+        retriever = HybridRetriever(driver, gemma())
+        retriever.search("q", neighbors=0)
+        retriever.search("q", neighbors=0)
+        self.assertEqual(sum("RETURN m.embedder" in query for query, _ in driver.calls), 1)
+
+
 class RetrieverTests(unittest.TestCase):
     def test_reranks_on_full_vectors_fuses_fulltext_and_expands(self):
         embedder = gemma()
@@ -161,8 +206,9 @@ class RetrieverTests(unittest.TestCase):
         self.assertEqual([hit.found_by for hit in hits], [["words"], ["meaning"]])
         self.assertAlmostEqual(hits[1].similarity, 1.0, places=5)  # "close" is the query vector itself
         self.assertEqual(hits[1].neighbors[0]["id"], "c1")
-        self.assertEqual(driver.calls[0][1]["labels"], ["Item"])
-        self.assertEqual(len(driver.calls[0][1]["vector"]), 128)
+        vector_call = next(params for query, params in driver.calls if "VECTOR INDEX" in query)
+        self.assertEqual(vector_call["labels"], ["Item"])
+        self.assertEqual(len(vector_call["vector"]), 128)
 
     def test_reranker_orders_the_fused_pool_with_fusion_as_tie_break(self):
         embedder = gemma()

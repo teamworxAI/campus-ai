@@ -238,6 +238,95 @@ could not find locally, that everything cited in a PR be committed in the
 repo: eval reports are, data under `DATA_DIR` and `.env` are not, by the
 rules in `AGENTS.md`.
 
+## 2d. The parallel-agent session (Oct 23-26)
+
+Written by the coordinator session that ran on the laptop from "start from
+AGENTS.md, the plan and the handoff; iterate as usual, multiagents, different
+model per task complexity, end to end testing of each feature before
+declaring done". It wrote no product code itself: five task cards went to
+five agents, each in its own git worktree and branch, a stronger model for
+the cross-cutting cards (P6, R4, B2) and a cheaper one for the
+well-specified ones (A4b, A7). Each agent ran the unit suite and an
+end-to-end check on the live stack before reporting; the coordinator read
+the diff, re-ran the suite, pushed and opened the PR. All five are
+independent PRs against `main`, open at hand-off:
+
+- **#35 A4b** OMML to MathML: `course_access/mathml.py`, `Equation` blocks,
+  `<math>` in the HTML and the OMML written back into the DOCX.
+- **#36 P6** eval harness: `core/eval/` (gold format, metrics, local judge
+  instead of RAGAS, decision D11, one report writer), `evals/run.py`, two
+  provisional gold sets, `test` and `embed` now mount `./evals`.
+- **#37 A7** OCR: Tesseract in the image (one apt layer, +150 MB), scanned
+  pages become flagged paragraphs with a confidence, `scanned-page` rule and
+  `ocr` proposal. Rebuild the images after merging.
+- **#38 R4** call analyst: `fetch-cordis --topics` fetches the 365 open and
+  forthcoming topic pages, CallTopic text gains outcome and scope, `analyse()`
+  returns facts plus span-checked topics, outcomes and partner profile,
+  `/api/calls/{id}/analysis` and an analysis page. Three to seven minutes
+  per call on the laptop; analyse the demo's calls before the slot.
+- **#39 B2** reranker: Qwen3-Reranker-0.6B step in the retriever, off by
+  default because it lowered recall@10 on the back-test (0.30 to 0.26 on 50
+  projects) at 10 s per query; expert results read better with it, partner
+  search sums probabilities that cluster at 0 or 1. Next try: rank weights.
+
+The second round (Oct 27-28, same recipe, four agents plus the coordinator):
+
+- **#41 P4** MCP servers: `core/mcp.py` over the official `mcp` SDK (the one
+  new dependency, MIT; lock diff additive), one server per product, class R
+  refused, every call traced; verified over stdio against the live stack.
+- **#42** one-line nginx fix: `/review/` fell through to the collections page
+  (`try_files` had no directory index). Found by the demo-script agent.
+- **#43** demo docs: `docs/demo/` script, sample pack and two one-pagers,
+  every Research Assistant step verified live with queries and timings.
+- **#44 R4** complementarity scorer and journey router, a draft stacked on
+  #38: "adds" lines citing project ids, the complementary set of three with
+  the consortium rule, `/api/ask` routing by rules first and the model second.
+- **#45 P1** thinking off for the classification task: one-digit answers in
+  2 s instead of 35-156 s on gemma4 (the router's model fallback, the judge
+  and the A4 workers all go through it).
+- The reranker retry (rank and RRF weightings, pool size, multi-variant
+  back-test; branch `b2-reranker-weights`, stacked on #39) is coded and
+  tested but its CPU measurement runs for hours (500 s per project at pool
+  50); its PR waits for the report.
+
+Overlaps to expect when merging: #36 and #39 both touch the three research
+eval scripts; #35 and #37 both touch `parser.py` (different functions); #38
+and #42 both touch `web/nginx.conf` (different lines). Merge `main` into
+whichever lands second. The running `web` container had the config from
+before the Course Access proxy rule until the Oct 28 reload: `nginx -s reload`
+is now in the demo pre-flight.
+
+How the agents were run (the recipe is in section 4 and the lessons in
+section 7): their worktrees were bind-mounted over the shared images
+(`docker run -v <worktree>:/app ... campus-ai:test`), never `docker compose`
+from a worktree, so no second stack and no clobbered image tag; the one
+Dockerfile change (A7) built its own tag. The B2 and R4 agents were killed
+by the harness after ten minutes without output while they waited on long
+docker jobs, and the laptop then slept from Oct 23 to Oct 26 with their
+containers still running; they were resumed with the facts and finished.
+
+**Oct 28, third round.** The user merged #39 and #46 (reranker) and said
+proceed; that made #36, #38 and #44 conflict, so `main` was merged into
+each (the P6 back-test now builds its report with `report.render/table/save`
+while keeping the weighting comparison) and all ten PRs were mergeable again.
+The laptop images were rebuilt from `main` and `api`, `course-access` and
+`web` recreated. Three card agents then ran in parallel: R3's last item,
+the vector index recording its embedder (#47: `(:IndexMeta)` node, checked
+on first search, backfilled on the live graph); a direct per-organisation
+signal in partner search (#48: `signal=projects|organisations|fused`,
+measured on 100 projects without the project acronym in the question, since
+40 hidden partners list it in their own node text; the partner's own node is
+in the top 50 Organization hits only 5 times in 100, so no fusion lifts
+recall and the default stays `projects`); and the full-graph embedder
+comparison (#49: e5-small indexed into a throwaway Neo4j container, removed
+afterwards; recall@10 0.29 against EmbeddingGemma 2's 0.32, so D7 stands).
+Partner search's ceiling is therefore the graph itself: a hidden partner is
+reachable through either signal within 30 for 62 of 100 projects, and the
+objective text rarely names the organisation. The remaining levers are
+richer organisation text (their own project portfolios and EuroSciVoc terms
+are already in it) or an entirely different question, such as asking with
+the call topic rather than the project's own text.
+
 ## 3. Standing orders
 
 These carry over to any session working for this user on campus-ai.
@@ -328,6 +417,16 @@ reviews; it rarely writes product code itself.
 - **Sessions on the user's laptop** (Windows 11, PowerShell, Docker Desktop):
   see the laptop gotchas in section 7. Docker there is shared with other
   projects.
+- **Parallel card agents on the laptop** (Oct 23-26, section 2d): one
+  `Agent` per card with worktree isolation and its own branch; a stronger
+  model for cross-cutting cards, a cheaper one for well-specified ones. The
+  brief carries the ground rules: read `AGENTS.md`, the plan and the handoff;
+  no new dependencies; run the unit suite and an end-to-end check on the live
+  stack by bind-mounting the worktree over the shared image (never `docker
+  compose` from a worktree); long jobs in the background with bounded checks;
+  update only the card's plan row; commit with the trailer, never push or
+  open the PR; report files, test counts, E2E output and eval report paths.
+  Three to five at once worked; two GPU jobs at once did not (section 7).
 
 ## 5. Where things are
 
@@ -357,10 +456,11 @@ over 3000 SFU works (2226 researchers) and the full Horizon Europe bundle
 (24k projects, 36k organisations, 3808 call topics; 71k nodes in the Neo4j
 volume), and the Course Access review queue at `/review/`. Harvests live in
 `D:/campus-ai/data/{europeana,course_access,openalex,cordis}`; Ollama's
-weights in `D:/models/ollama` (`gemma4:e2b` only; `.env` points the three
-router tasks at it). `.env` there sets `MODELS_DIR=D:/models`,
-`DATA_DIR=D:/campus-ai/data`, `COMPOSE_FILE=compose.yaml;compose.gpu.yaml`,
-`CAMPUS_AI_MODEL_*=gemma4:e2b`, `OPENALEX_API_KEY` and `EUROPEANA_API_KEY`
+weights in `D:/models/ollama` (`gemma4:e2b` and, since Oct 28, `gemma4:e4b`;
+`.env` points the three router tasks at e4b). `.env` there sets
+`MODELS_DIR=D:/models`, `DATA_DIR=D:/campus-ai/data`,
+`COMPOSE_FILE=compose.yaml;compose.gpu.yaml`,
+`CAMPUS_AI_MODEL_*=gemma4:e4b`, `OPENALEX_API_KEY` and `EUROPEANA_API_KEY`
 (the leaked one, until rotated). After pulling `main`, run `docker compose
 build` and `docker compose up -d web ollama`, then `docker compose exec web
 nginx -s reload` if the `web` container was not recreated; the graph in the
@@ -389,9 +489,14 @@ discover -s tests` for quick checks inside its cloud container. On Oct 22,
   `r1-openalex`, `r2-cordis`, `r4-matching`, `r5-consortium`,
   `fix-jsonl-line-separators`, `fix-rights-screen-research-graph`,
   `docs-handoff-oct23` (all merged).
-- Models on the laptop: only `gemma4:e2b` is downloaded (via `fetch-ollama`,
-  Oct 22). `gemma4:e4b` (7 GB) would improve alt text and the brief; the
-  12B model belongs on the inference box (4 GB GPU here).
+- Models on the laptop: `gemma4:e2b` (Oct 22) and `gemma4:e4b` (Oct 28, the
+  user's yes; 6.6 GB via `fetch-ollama`). Measured on the quiet laptop with
+  the same brief prompt: e4b 104 s for 1101 tokens with 7 citations, e2b
+  98 s for 962 tokens with 5 citations, so e4b costs no time (both run at
+  about 10 tokens/s, split between the 4 GB GPU and the CPU) and reads
+  better; `.env` now points all three tasks at e4b. The first call after
+  five minutes idle pays 70-100 s of model loading: warm it before a demo.
+  The 12B model belongs on the inference box.
 - Decide on NC-licensed course material for the A6 corpus (KPU Discrete Math
   slides, MIT OCW, LOUIS biology slides were found and left out); CUNY's CC BY
   lectures sit behind a bot check and need downloading by hand.
@@ -411,16 +516,45 @@ discover -s tests` for quick checks inside its cloud container. On Oct 22,
 - Answer: remove the early plan copy on `sfu-aria/student-assistant` branch
   `ccr-b486116f-phsbvu`?
 
-**Next cards** (section 5 of the plan, after the Oct 22-23 session; all of
-that session's PRs are merged): P6 eval harness (the eval scripts under
-`evals/` are the raw material); B2 embedder + reranker
-bake-off (R3; the back-test script measures it); B3 alt-text bake-off once a
-specialist labels the A6 corpus; R5's network worker once EU-side
-researchers are in the graph; the call analyst over full topic descriptions
-(the grants file has titles and keywords only); A4b OMML to MathML; A7 OCR.
-Demo prep: the dry run on the laptop with everything indexed.
+**Next cards** (section 5 of the plan, after the Oct 23-28 sessions): first
+merge #35-#38, #40-#45, #47-#49 (#44 after #38; #36, #48 and #49 all touch
+the research eval scripts, so merge `main` into whichever lands later) and on
+the laptop run `docker compose build` (A7 changed the Dockerfile, P4 the
+lock), `docker compose up -d web` (recreates `api` and `course-access` on
+the new images) and `docker compose exec web nginx -s reload`; the CallTopic
+nodes are already updated in the graph. The reranker (#39, #46) is merged
+and the laptop images carry it. Then: R5's network worker once EU-side
+researchers are in the graph; a search to fill the roles the complementary
+set leaves open (#44); B3 and B5 once a specialist and the research officers
+label the gold sets (the P6 format is ready); the Lisbon dry run with
+`docs/demo/demo_script.md` on `gemma4:e4b` once #38, #43 and #44 are in;
+partner search's retrieval ceiling (see the Oct 28 round in 2d) if a better
+question than the project's own text can be found.
 
 ## 7. Lessons and gotchas
+
+**From the Oct 23-26 parallel-agent session**
+- Agents in worktrees must not use `docker compose`: a worktree gets its
+  own compose project, so `compose run embed` starts a second Neo4j and
+  Ollama with an empty graph. Bind-mount the worktree over the shared image
+  instead (`MSYS_NO_PATHCONV=1 docker run --rm -v "<worktree>:/app" -w /app
+  campus-ai:test ...`; the package is installed editable from `/app`). A
+  Dockerfile change builds its own tag.
+- The harness stops an agent after ten minutes without output. Long docker
+  jobs go in the background with bounded checks, never a sleep loop. On a
+  stall, read `docker logs` and `docker stats` before killing anything: both
+  stalled containers here were alive, one of them finished.
+- The laptop sleeps; a job started in the evening may still be running
+  three days later. The api and ollama containers hold no GPU memory while
+  idle, so one eval job gets the whole 4 GB; two at once thrash (a reranked
+  query took 20 minutes under contention and 2 seconds alone).
+- Same-day eval reruns overwrite the day's report (`<name>_<date>.md`); name
+  a partial rerun differently (`backtest_20261023_limit20.md`).
+- Three PRs that each regenerate the same dated report conflict on it; keep
+  one copy and say in the others that the numbers matched.
+- The graph store merges props into existing nodes, so a key missing from a
+  new record keeps its old value: loaders must write every prop, empty when
+  unknown (found by R4 on the live graph).
 
 **From the Oct 22-23 laptop session**
 - The `embed` image is only rebuilt when you ask. Core changes merged on
@@ -478,6 +612,13 @@ Demo prep: the dry run on the laptop with everything indexed.
   the result.
 - PowerShell treats `;` as a command separator, so
   `echo COMPOSE_FILE=a;b >> .env` writes nothing useful; quote it.
+- Three light GPU jobs (two fusion-only back-tests and an e5 index) ran at
+  once on the 4 GB card without an out-of-memory error, filling it to
+  3.96 GB; a reranked or LLM job alongside them would not have fitted.
+- A second Neo4j for an experiment goes in its own container and volume on
+  the `campus-ai_graph` network (community edition has one database per
+  server); remove both afterwards. The graph records its embedder (#47), so
+  a different embedder against the live graph raises by design.
 - Docker Desktop runs other projects' containers (`sfu-site`): never prune all
   images or volumes, restart Docker, or reuse their ports without asking.
 

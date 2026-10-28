@@ -14,6 +14,13 @@ ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
     TRANSFORMERS_OFFLINE=1 \
     PYTHONUNBUFFERED=1
 
+# OCR for scanned PDFs (A7): Tesseract 5 and its English and French trained data
+# (Debian packages, Apache-2.0), run as a program, fully offline. Grows the image
+# by about 150 MB (545 MB to 693 MB).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng tesseract-ocr-fra \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # The optional `ca` build secret supports networks with a TLS-inspecting proxy.

@@ -21,7 +21,7 @@ import numpy as np
 
 from campus_ai.core.embed import Embedder, truncate
 from campus_ai.core.graph.stopwords import STOPWORDS
-from campus_ai.core.graph.store import LABEL, TEXT_INDEX, VECTOR_INDEX, dims, name
+from campus_ai.core.graph.store import LABEL, TEXT_INDEX, VECTOR_INDEX, check_embedder, dims, name
 
 RRF_K = 60  # standard reciprocal rank fusion constant
 
@@ -70,6 +70,7 @@ class HybridRetriever:
         self.database = database
         self.candidates = candidates
         self.pool = pool or candidates  # how many fused candidates the reranker scores
+        self._checked = False  # the graph's recorded embedder is verified on the first search
         self.reranker = reranker  # e.g. campus_ai.core.embed.reranker.Reranker; None skips the step
 
     def run(self, query: str, **params: Any) -> list[dict]:
@@ -91,6 +92,9 @@ class HybridRetriever:
         the linked nodes attached to each hit (0 to skip expansion).
         `data_class` is the query's class (P/I/S; R is refused before embedding).
         """
+        if not self._checked:
+            check_embedder(self.run, self.embedder)
+            self._checked = True
         fast, _ = dims(self.embedder)
         full = self.embedder.embed([query], modality=modality, kind="query", data_class=data_class)[0]
         wanted = [name(label) for label in labels or []]
