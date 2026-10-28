@@ -15,7 +15,9 @@ from pypdf.generic import NameObject, TextStringObject
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
-from campus_ai.course_access.parser import parse
+from campus_ai.course_access.parser import Equation, parse
+from test_course_access_mathml import QUADRATIC, QUADRATIC_TEXT, SUM, SUM_TEXT, display, root_of
+from test_course_access_mathml import add_equation as _add_equation
 
 
 def _png() -> bytes:
@@ -234,6 +236,58 @@ class PdfParagraphTests(ParserTestCase):
                           "A new paragraph after a gap."])
         self.assertIsNone(document.language)  # no /Lang: reported as absent for the audit
         self.assertIsNone(document.title)
+
+
+class EquationParserTests(ParserTestCase):
+    def test_docx_equations_follow_their_paragraph_in_order(self):
+        d = docx.Document()
+        d.add_heading("Algebra", level=1)
+        first = d.add_paragraph("Solve it:")
+        _add_equation(first, display(QUADRATIC))
+        second = d.add_paragraph("The total is ")
+        _add_equation(second, SUM)  # inline, inside a sentence
+        d.add_paragraph("Done.")
+        path = self.dir / "maths.docx"
+        d.save(path)
+        document = parse(path)
+        self.assertEqual(_kinds(document), ["Heading", "Paragraph", "Equation", "Paragraph", "Equation", "Paragraph"])
+        self.assertEqual(document.blocks[1].text, "Solve it:")  # paragraph text intact
+        self.assertEqual(document.blocks[3].text, "The total is")
+        quadratic, total = document.blocks[2], document.blocks[4]
+        self.assertTrue(quadratic.display)
+        self.assertFalse(total.display)
+        self.assertEqual(quadratic.text, QUADRATIC_TEXT)
+        self.assertEqual(total.text, SUM_TEXT)
+        self.assertIn("<mfrac>", quadratic.mathml.replace(' xmlns="http://www.w3.org/1998/Math/MathML"', ""))
+        self.assertIn('alttext="x = (-b', quadratic.mathml)
+        self.assertIn("oMathPara", quadratic.omml)  # the original XML is kept
+
+    def test_docx_equation_only_paragraph_has_no_text_block(self):
+        d = docx.Document()
+        _add_equation(d.add_paragraph(), SUM)
+        path = self.dir / "only.docx"
+        d.save(path)
+        self.assertEqual(_kinds(parse(path)), ["Equation"])
+
+    def test_pptx_equation_in_a_text_frame(self):
+        deck = pptx.Presentation()
+        slide = deck.slides.add_slide(deck.slide_layouts[5])
+        slide.shapes.title.text = "Sums"
+        box = slide.shapes.add_textbox(Inches(1), Inches(2), Inches(5), Inches(1))
+        box.text_frame.text = "Total"
+        extra = box.text_frame.add_paragraph()
+        from lxml import etree
+        wrapper = etree.fromstring(
+            '<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">'
+            '<mc:Choice Requires="a14" xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main">'
+            f'<a14:m>{etree.tostring(root_of(SUM), encoding="unicode")}</a14:m></mc:Choice></mc:AlternateContent>')
+        extra._p.append(wrapper)
+        path = self.dir / "maths.pptx"
+        deck.save(path)
+        document = parse(path)
+        self.assertEqual(_kinds(document), ["Heading", "Paragraph", "Equation"])
+        equation = document.blocks[2]
+        self.assertEqual((equation.page, equation.text, equation.display), (1, SUM_TEXT, False))
 
 
 class ParseTests(unittest.TestCase):

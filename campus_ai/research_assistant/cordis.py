@@ -14,14 +14,18 @@ follow the plan's schema (4.2):
 
 An organisation's text is its name, country, type and the subject terms of
 its projects; a project's is its acronym, title and objective; a call
-topic's is its identifier, title, call and tags: all public facts from the
-funding records, nothing inferred.
+topic's is its identifier, title, call and tags, plus, when its details page
+was fetched (topicDetails JSON, R4), its description as "Expected outcome:"
+and "Scope:" sections: all public facts from the funding records, nothing
+inferred.
 """
 
 from __future__ import annotations
 
+import re
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
+from html.parser import HTMLParser
 
 SOURCE = "cordis"
 RIGHTS = "CC-BY-4.0"
@@ -30,6 +34,96 @@ TERMS_PER_ORG = 8
 PROJECTS_PER_ORG = 4
 ACTIVITY = {"HES": "higher education", "REC": "research organisation", "PRC": "company", "PUB": "public body", "OTH": "other"}
 PORTAL = "https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/"
+MAX_DESCRIPTION = 4000  # characters of a topic's description kept in its text
+MAX_CONDITIONS = 1000
+SECTION = re.compile(r'<p[^>]*class="topicdescriptionkind"[^>]*>(.*?)</p>', re.S | re.I)
+SECTION_NAMES = {"expected outcome": "Expected outcome", "expected outcomes": "Expected outcome", "scope": "Scope"}
+CONDITION_HEADING = re.compile(r"<h4[^>]*>(.*?)</h4>", re.S | re.I)
+ELIGIBILITY = re.compile(r"eligible countries|other eligib|specific conditions", re.I)
+# Lines in nearly every topic's conditions: pointers to the General Annexes and standard clauses.
+BOILERPLATE = re.compile(r"described in|^A number of non-EU/non-Associated|^Not applicable|^If projects use satellite-based", re.I)
+BLOCKS = {"p", "div", "li", "ul", "ol", "br", "h1", "h2", "h3", "h4", "h5", "h6", "tr", "table", "section"}
+
+
+class _Text(HTMLParser):
+    """Text of an HTML fragment: blocks become lines, list items get a dash."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in BLOCKS:
+            self.parts.append("\n- " if tag == "li" else "\n")
+
+    def handle_endtag(self, tag):
+        if tag in BLOCKS:
+            self.parts.append("\n")
+
+    def handle_data(self, data):
+        self.parts.append(data)
+
+
+def html_text(html: str | None) -> str:
+    """Plain text of portal HTML (standard library parser); blank lines and runs of spaces collapsed."""
+    parser = _Text()
+    parser.feed(html or "")
+    parser.close()
+    lines = (" ".join(line.replace("﻿", "").split()) for line in "".join(parser.parts).split("\n"))
+    return "\n".join(line for line in lines if line and line != "-")
+
+
+def description_sections(html: str | None) -> dict[str, str]:
+    """A topic description's sections by name ("Expected outcome", "Scope", ...); text before any heading is "Scope"."""
+    pieces = SECTION.split(html or "")
+    out: dict[str, str] = {}
+    lead = html_text(pieces[0])
+    if lead:
+        out["Scope"] = lead
+    for heading, body in zip(pieces[1::2], pieces[2::2]):
+        name = html_text(heading).rstrip(":").strip()
+        text = html_text(body)
+        if not text or name.lower() in ("", "null"):
+            continue
+        name = SECTION_NAMES.get(name.lower(), name)
+        out[name] = (out[name] + "\n" + text) if name in out else text
+    return out
+
+
+def conditions_text(html: str | None) -> str:
+    """The topic-specific eligibility conditions: the eligibility sections without the lines every topic repeats."""
+    pieces = CONDITION_HEADING.split(html or "")
+    keep = []
+    for heading, body in zip(pieces[1::2], pieces[2::2]):
+        if ELIGIBILITY.search(html_text(heading)):
+            keep += [line for line in html_text(body).split("\n") if not BOILERPLATE.search(line)]
+    return "\n".join(dict.fromkeys(keep))[:MAX_CONDITIONS]
+
+
+def topic_detail_props(detail: dict) -> dict:
+    """Props from a topicDetails record: description sections, action type, budget and conditions.
+
+    Every key is always present (empty or 0 when unknown): the graph store merges props into an existing
+    node, so a key left out would keep a stale value from an earlier index run."""
+    sections = description_sections(detail.get("description"))
+    types = [" ".join(t["typeOfAction"].split()) for a in detail.get("actions") or [] for t in a.get("types") or [] if t.get("typeOfAction")]
+    budget, grants = 0.0, 0
+    for actions in ((detail.get("budgetOverviewJSONItem") or {}).get("budgetTopicActionMap") or {}).values():
+        for action in actions:
+            if not str(action.get("action") or "").startswith(detail.get("identifier") or "\0"):
+                continue
+            budget += sum(number(str(v)) for v in (action.get("budgetYearMap") or {}).values())
+            grants += int(action.get("expectedGrants") or 0)
+    return {"expected_outcome": sections.get("Expected outcome", "")[:MAX_DESCRIPTION], "scope": sections.get("Scope", "")[:MAX_DESCRIPTION],
+            "action_type": types[0] if types else "", "budget": budget, "expected_grants": grants,
+            "conditions": conditions_text(detail.get("conditions"))}
+
+
+def description(props: dict) -> str:
+    """The description part of a call topic's text, capped at MAX_DESCRIPTION characters."""
+    text = "\n".join(f"{name}: {props[key]}" for name, key in (("Expected outcome", "expected_outcome"), ("Scope", "scope"))
+                     if props.get(key))
+    return text[:MAX_DESCRIPTION]
 
 
 def number(value: str | None) -> float:
@@ -47,13 +141,17 @@ def date(epoch_ms) -> str:
         return ""
 
 
-def call_topic(item: dict) -> dict | None:
-    """One CallTopic node from a Funding & Tenders grants record, or None if it is not a Horizon Europe topic."""
-    if (item.get("frameworkProgramme") or {}).get("abbreviation") != "HORIZON" or item.get("type") != 1:
+def horizon_topic(item: dict) -> bool:
+    """Whether a grants record is a Horizon Europe call topic (not a tender, not another programme)."""
+    return ((item.get("frameworkProgramme") or {}).get("abbreviation") == "HORIZON" and item.get("type") == 1
+            and bool(item.get("identifier")))
+
+
+def call_topic(item: dict, detail: dict | None = None) -> dict | None:
+    """One CallTopic node from a Funding & Tenders grants record and its details page if fetched; None if not Horizon Europe."""
+    if not horizon_topic(item):
         return None
-    identifier = item.get("identifier") or ""
-    if not identifier:
-        return None
+    identifier = item["identifier"]
     parts = [d.get("abbreviation") for d in item.get("programmeDivision") or [] if d.get("abbreviation")]
     status = (item.get("status") or {}).get("abbreviation") or ""
     deadlines = [date(d) for d in item.get("deadlineDatesLong") or []]
@@ -63,16 +161,21 @@ def call_topic(item: dict) -> dict | None:
     if keywords or tags:
         text += " Keywords: " + "; ".join(keywords + tags) + "."
     actions = [a.get("abbreviation") for a in item.get("topicActions") or [] if a.get("abbreviation")]
-    return {"id": f"topic:{identifier}", "label": "CallTopic", "modality": "text", "content": text, "props": {
-        "source": "funding-tenders", "rights": RIGHTS, "identifier": identifier, "title": item.get("title") or "",
-        "call": item.get("callIdentifier") or "", "call_title": item.get("callTitle") or "", "status": status,
-        "opening": date(item.get("plannedOpeningDateLong")), "deadlines": deadlines, "parts": parts, "actions": actions,
-        "url": PORTAL + identifier.lower()}}
+    props = {"source": "funding-tenders", "rights": RIGHTS, "identifier": identifier, "title": item.get("title") or "",
+             "call": item.get("callIdentifier") or "", "call_title": item.get("callTitle") or "", "status": status,
+             "opening": date(item.get("plannedOpeningDateLong")), "deadlines": deadlines, "parts": parts, "actions": actions,
+             "keywords": keywords + [t for t in tags if t not in keywords], "url": PORTAL + identifier.lower()}
+    if detail:
+        props.update(topic_detail_props(detail))
+        if props.get("expected_outcome") or props.get("scope"):
+            text += "\n" + description(props)
+    return {"id": f"topic:{identifier}", "label": "CallTopic", "modality": "text", "content": text, "props": props}
 
 
 def to_records(projects: list[dict], organizations: list[dict], euroscivoc: list[dict], topics: list[dict],
-               legal_basis: list[dict], grants: list[dict]) -> list[dict]:
-    """Graph records (nodes then links) for the Horizon Europe bundle plus the call topics."""
+               legal_basis: list[dict], grants: list[dict], details: dict[str, dict] | None = None) -> list[dict]:
+    """Graph records (nodes then links) for the Horizon Europe bundle plus the call topics (with their details pages if given)."""
+    details = details or {}
     nodes, links = [], []
     keep = {p["id"] for p in projects if p.get("id") and p.get("title")}
 
@@ -100,7 +203,7 @@ def to_records(projects: list[dict], organizations: list[dict], euroscivoc: list
 
     call_topics = {}
     for item in grants:
-        node = call_topic(item)
+        node = call_topic(item, details.get(item.get("identifier") or ""))
         if node:
             call_topics[node["props"]["identifier"]] = node
     topic_titles = {row["topic"]: row.get("title") or "" for row in topics if row.get("topic")}

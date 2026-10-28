@@ -42,6 +42,15 @@ MAX_TOKENS = {
     "classification": 1024,
 }
 
+# Whether the model may think before answering. Classification asks for short,
+# checkable answers (a digit, a language tag, a score) and gets them in seconds
+# without thinking; with it, gemma4:e2b took 35-156 s per digit on the laptop.
+THINK = {
+    "reasoning": True,
+    "vision": True,
+    "classification": False,
+}
+
 
 def model(task: str) -> str:
     """The configured model for `task`; must be in MODEL_LICENCES."""

@@ -8,7 +8,12 @@ a header row is marked, the first heading becomes the title, the text before
 a bare URL becomes its link text). The LLM router is asked only for
 judgement: the document's language, and link text when the surrounding text
 does not say where a link goes (short answers, so the classification task's
-small model). Nothing is written back; the rebuild step
+small model). Scanned pages (A7) get an `ocr` proposal: the parser has
+already put the recognised text into the blocks, so applying it changes
+nothing (rebuild treats it as a no-op). It exists so a reviewer sees and
+approves the recognised text; the rebuilt DOCX and HTML carry that text, so
+the re-audit no longer sees a scan. Its confidence is the page's mean word
+confidence from Tesseract. Nothing is written back; the rebuild step
 (A5) applies approved fixes. Academic content is never changed: structure,
 markup and wording of links and titles only (master plan 3.2).
 """
@@ -19,10 +24,12 @@ import re
 from dataclasses import asdict, dataclass
 from json import dumps
 
-from campus_ai.course_access.audit import BARE_URL, FAKE_LIST, LANGUAGE_TAG, VAGUE_LINKS, STRUCTURE, TABLES, TEXT, audit
+from campus_ai.course_access.audit import BARE_URL, FAKE_LIST, LANGUAGE_TAG, OCR, VAGUE_LINKS, STRUCTURE, TABLES, TEXT, audit
 from campus_ai.course_access.model_answers import CONFIDENCE_THRESHOLD, ask, confidence
 from campus_ai.course_access.parser import Document, Heading, Link, ListItem, Paragraph, Table
 
+OCR_REVIEW_BELOW = 0.85  # page confidence under which a person must read the recognised text
+OCR_MIN_WORDS = 10  # a page with fewer words is probably a cover, a figure or a bad scan
 MAX_LINK_TEXT = 100
 MAX_HEADING_CANDIDATE = 60  # characters: a short paragraph without a final period may be a heading
 LANGUAGE_SAMPLE = 600  # characters of text the language question is asked about
@@ -66,6 +73,7 @@ ACTIONS = {
     "set-title": "set the document title",
     "set-language": "set the document language",
     "set-link-text": "replace the link text",
+    "ocr": "the page's text was recognised from a scan: approve it (applying changes nothing)",
 }
 
 
@@ -230,7 +238,27 @@ def link_text(document, issue, data_class):
                  "the model's reading of the URL and the surrounding text", model=model)]
 
 
+# --- OCR --------------------------------------------------------------------
+
+def scanned_page(document, issue, data_class):
+    own = [b for b in document.blocks if isinstance(b, Paragraph) and b.ocr and b.page == issue.page]
+    text = "\n\n".join(b.text for b in own)
+    words = len(text.split())
+    conf = (own[0].ocr_confidence or 0.0) if own else 0.0
+    reasons = []
+    if conf < OCR_REVIEW_BELOW:
+        reasons.append(f"mean word confidence {conf:.2f} is below {OCR_REVIEW_BELOW}")
+    if words < OCR_MIN_WORDS:
+        reasons.append(f"only {words} words recognised")
+    languages = document.ocr_engine[document.ocr_engine.find("(") + 1:-1] if "(" in document.ocr_engine else ""
+    engine = document.ocr_engine.split(" (")[0] or "tesseract"
+    return [Fix(issue.rule, OCR, "ocr", text, conf, bool(reasons), "; ".join(reasons),
+                f"{words} words, mean confidence {conf:.2f}, engine {engine}, languages {languages or 'unknown'}",
+                issue.page, None)]
+
+
 HANDLERS = {
+    "scanned-page": scanned_page,
     "fake-list": fake_list,
     "heading-level-skipped": heading_level_skipped,
     "slide-title-duplicate": slide_title_duplicate,
@@ -259,7 +287,7 @@ def report_markdown(fixes: list[Fix], name: str = "") -> str:
     lines = [f"# Proposed fixes{': ' + name if name else ''}", "",
              f"{len(fixes)} proposals; {review} need review, {len(fixes) - review} can be applied as proposed. "
              "Nothing is changed until approved.", ""]
-    for worker in (STRUCTURE, TABLES, TEXT):
+    for worker in (STRUCTURE, TABLES, TEXT, OCR):
         own = [f for f in fixes if f.worker == worker]
         if not own:
             continue

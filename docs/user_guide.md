@@ -39,6 +39,23 @@ dates, deadlines and the portal page. Everything is retrieval and graph
 arithmetic over public records; no model writes any of it, and every item
 links to its source.
 
+**Analyse this call.** Each call on the Horizon calls page has *Analyse
+this call*. The top panel comes straight from the funding records: action
+type and the consortium rule it implies, whether a Canadian partner counts,
+deadlines, budget, programme part, keywords and the topic's own eligibility
+conditions. Below it the local model reads the topic's full description
+(its "Expected outcome" and "Scope" sections, fetched once by
+`fetch-cordis`) and lists the research topics, the expected outcomes and
+the kinds of partner the call needs (a clinical partner, an SME for
+exploitation, ...). Each item shows the passage of the topic text it rests
+on; an item whose quoted passage is not in the text is dropped, and the
+page says how many were. *Find partners for this call* runs the EU partners
+search on those topics and that partner profile rather than on the call's
+title. The first analysis of a call takes a minute or two on the laptop;
+it is then kept until the `api` service restarts. A topic whose page was
+not fetched (closed topics, or `--topics none`) is read from its title and
+keywords only, and the page says so.
+
 **Draft a consortium.** From a call on the Horizon calls page, *Draft a
 consortium* builds the partner shortlist for that call, applies the Horizon
 Europe consortium rule (three independent entities in three different
@@ -336,7 +353,10 @@ Put the files in a folder (here `samples/`) and mount it read-only as shown.
 The report lists each problem with its WCAG criterion, where it is and what
 will fix it, then what the automatic checks can't judge (such as colour
 contrast and whether existing alt text is accurate). Add `--json` for a
-machine-readable report.
+machine-readable report. Scanned PDF pages (images of text) are read with the
+built-in offline OCR (Tesseract, English and French): the audit lists each as
+a scanned page with the words recovered and the confidence, and a person must
+check the recognised text, which can hold errors.
 
 **Alt text proposals.** For the images the audit flags, the local vision
 model proposes alt text (the `ollama` service must be running and the vision
@@ -419,6 +439,49 @@ docker compose run --rm test python evals/course_access/audit_corpus.py
 The report (one row per document: pages, images, tables, issues by rule)
 is the raw material for the gold set (A6), which still needs a specialist's
 labels. The documents are evaluation input only and are never committed.
+
+## 7b. MCP servers (any MCP client)
+
+Both products are also MCP servers, so any MCP client (an IDE, a desktop
+assistant, the Teamworx HR platform) can call their tools. Each server speaks
+stdio: the client spawns the command below and talks to it over stdin/stdout.
+Everything stays local; the tools call the same functions as the web app and
+CLI, and every call is traced (tool, data class, latency, outcome; never
+inputs or outputs) under `traces/`.
+
+| Server | Command | Tools |
+|---|---|---|
+| Course Access | `docker compose run --rm -T -v "$PWD/samples:/samples" test python -m campus_ai.course_access.mcp_server` | `audit_document(path)`, `propose_fixes(path, with_alt_text)`, `remediate(path, out_dir, approve_all)` |
+| Research Assistant | `docker compose run --rm -T embed python -m campus_ai.research_assistant.mcp_server` | `find_experts`, `find_partners`, `find_calls`, `get_call`, `check_consortium`, `draft_brief`, `search_collections` |
+
+Paths are paths inside the container (so mount your documents, as above).
+Every tool takes a `data_class` (default `I` for course documents, `P` for
+the Research Assistant); `R` is refused. The Research Assistant loads its
+model and connects to Neo4j on the first tool call, so listing the tools is
+instant. Course Access proposals need `ollama` up (`docker compose up -d ollama`).
+
+A client entry (`mcpServers` in the client's JSON config):
+
+```json
+{
+  "mcpServers": {
+    "campus-ai-course-access": {
+      "command": "docker",
+      "args": ["compose", "-f", "C:/path/to/campus-ai/compose.yaml", "run", "--rm", "-T",
+               "-v", "C:/path/to/samples:/samples", "test",
+               "python", "-m", "campus_ai.course_access.mcp_server"]
+    },
+    "campus-ai-research-assistant": {
+      "command": "docker",
+      "args": ["compose", "-f", "C:/path/to/campus-ai/compose.yaml", "run", "--rm", "-T", "embed",
+               "python", "-m", "campus_ai.research_assistant.mcp_server"]
+    }
+  }
+}
+```
+
+Each server also takes `--http PORT` to serve streamable HTTP instead (for a
+client on the compose network); no compose service is defined for it yet.
 
 ## 8. Troubleshooting
 

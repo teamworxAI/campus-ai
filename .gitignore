@@ -232,3 +232,6 @@ evals/**/raw/
 
 # Run traces (CAMPUS_AI_TRACE_DIR default)
 /traces/
+
+# Agent worktrees (coordinator sessions)
+.claude/worktrees/

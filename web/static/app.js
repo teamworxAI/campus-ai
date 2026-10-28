@@ -352,7 +352,57 @@ function callRow(c) {
       (c.clusters || []).length || (c.actions || []).length ? h("p", { class: "muted", text: [...(c.clusters || []), ...(c.actions || [])].join(" · ") }) : null),
     h("div", { class: "row" },
       h("span", { class: "badge eu", text: c.status }),
+      h("a", { class: "btn", href: `#/analysis?call=${encodeURIComponent(c.id)}`, text: "Analyse this call" }),
       h("a", { class: "btn", href: `#/brief?call=${encodeURIComponent(c.id)}`, text: "Draft a consortium" })));
+}
+
+// The call analyst (R4): facts from the funding records, then topics, outcomes and partner profile
+// from the local model, each with the passage of the topic text it quotes (unquotable items are dropped).
+function quotedList(title, items) {
+  return h("section", { class: "panel" }, h("h2", { text: title }),
+    items.length ? h("ul", { class: "evidence" }, items.map((item) => h("li", {}, h("strong", { text: item.text }),
+      h("br"), h("span", { class: "muted", text: `“${item.span}”` }))))
+      : h("p", { class: "muted", text: "Nothing the model said here could be found in the topic text." }));
+}
+
+async function renderAnalysis(params) {
+  const callId = params.get("call");
+  document.title = "Call analysis · Research Assistant";
+  const results = h("section", { id: "results", class: "results", "aria-live": "polite" });
+  app.replaceChildren(
+    h("section", { class: "hero" }, h("div", { class: "wrap" }, h("h1", { text: "What does this call ask for?" }),
+      h("p", { class: "muted", text: "Action type, consortium rule, deadlines and budget come from the funding records. Topics, expected outcomes and the partner profile are a reading by the local model; each quotes the topic text, and anything it cannot quote is dropped." }))),
+    h("main", { id: "main", class: "wrap layout" }, results));
+  if (!callId) { results.append(h("div", { class: "state", text: "Pick a call on the Horizon calls page." })); return; }
+  results.append(h("div", { class: "state", role: "status", text: "Reading the call (the local model can take a few minutes)…" }));
+  try {
+    const a = await api(`/api/calls/${encodeURIComponent(callId)}/analysis`);
+    const when = [a.opening ? "opens " + a.opening : null, a.deadlines.length ? "deadline " + a.deadlines.join(", ") : null].filter(Boolean).join(" · ");
+    const money = a.budget ? `EUR ${(a.budget / 1e6).toLocaleString("en", { maximumFractionDigits: 1 })} million` + (a.expected_grants ? ` for about ${a.expected_grants} grant(s)` : "") : null;
+    results.replaceChildren(
+      h("div", { class: "head-row" }, h("h2", {}, h("a", { href: a.url, rel: "noopener", target: "_blank", text: `${a.identifier}: ${a.title}` }))),
+      h("section", { class: "panel" }, h("h2", { text: "From the funding records" }),
+        h("p", { text: [a.call, a.status, when].filter(Boolean).join(" · ") }),
+        h("p", { text: `${a.action_type || "Action type not given"}: ${a.consortium_rule} (${a.rule_source}).` }),
+        h("p", { text: "Canada: " + a.canada + "." }),
+        money ? h("p", { text: "Budget: " + money + "." }) : null,
+        a.clusters.length ? h("p", { text: "Programme: " + a.clusters.join(" · ") }) : null,
+        a.keywords.length ? h("p", { class: "muted", text: "Keywords: " + a.keywords.join("; ") }) : null,
+        a.conditions ? h("p", { class: "muted", text: "Conditions: " + a.conditions }) : null,
+        a.described ? null : h("p", { class: "muted", text: "The topic page has not been fetched, so the reading below rests on the title and keywords only." })),
+      a.model_error ? h("div", { class: "state", role: "alert", text: "The model's reading is missing: " + a.model_error }) : null,
+      quotedList("Topics", a.topics),
+      quotedList("Expected outcomes", a.expected_outcomes),
+      quotedList("Partner profile", a.partner_profile),
+      h("p", { class: "muted", text: [a.analysed_by ? `Read by ${a.analysed_by}${a.seconds ? ` in ${a.seconds} s` : ""}` : null,
+        a.dropped ? `${a.dropped} item(s) dropped: their quote is not in the topic text` : null,
+        "Evidence: " + a.evidence.id].filter(Boolean).join(". ") + "." }),
+      h("div", { class: "row" },
+        h("a", { class: "btn primary", href: "#/partners?q=" + encodeURIComponent(a.partner_query), text: "Find partners for this call" }),
+        h("a", { class: "btn", href: `#/brief?call=${encodeURIComponent(a.id)}`, text: "Draft a consortium" })));
+  } catch (error) {
+    results.replaceChildren(h("div", { class: "state", role: "alert", text: "Failed: " + error.message }));
+  }
 }
 
 // Journey 3: the partner shortlist for a call, the eligibility check and a citation-checked brief for review.
@@ -440,10 +490,11 @@ function setNav(kind) {
 
 function route() {
   const hash = location.hash || "#/";
-  const journey = hash.match(/^#\/(experts|partners|calls|brief)(\?.*)?$/);
+  const journey = hash.match(/^#\/(experts|partners|calls|brief|analysis)(\?.*)?$/);
   if (journey) {
-    setNav(journey[1] === "brief" ? "calls" : journey[1]);
+    setNav(journey[1] === "brief" || journey[1] === "analysis" ? "calls" : journey[1]);
     const params = new URLSearchParams((journey[2] || "").slice(1));
+    if (journey[1] === "analysis") return renderAnalysis(params);
     return journey[1] === "brief" ? renderBrief(params) : renderJourney(journey[1], params);
   }
   setNav("collections");
