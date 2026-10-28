@@ -24,6 +24,7 @@ from io import BytesIO
 from pathlib import Path
 
 import docx
+from docx.oxml import parse_xml
 from docx.opc.constants import RELATIONSHIP_TYPE
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
@@ -31,7 +32,7 @@ from docx.shared import Inches
 
 from campus_ai.course_access.alt_text import AltText
 from campus_ai.course_access.audit import NOT_CHECKED, Issue, audit
-from campus_ai.course_access.parser import Block, Document, Heading, Image, Link, ListItem, Paragraph, Table, parse
+from campus_ai.course_access.parser import Block, Document, Equation, Heading, Image, Link, ListItem, Paragraph, Table, parse
 from campus_ai.course_access.workers import Fix, list_item_from
 
 DOCX_IMAGE_FORMATS = {"png", "jpg", "jpeg", "gif", "bmp", "tif", "tiff"}
@@ -167,6 +168,8 @@ def to_html(document: Document) -> str:
                 out.append(_html_image(block))
             elif isinstance(block, Link):
                 out.append(f"<p>{_html_link(block)}</p>")
+            elif isinstance(block, Equation):
+                out.append(_html_equation(block))
         out += [f"<p>{_html_link(link)}</p>" for link in leftover]
     close_lists()
     if slides and page is not None:
@@ -218,6 +221,13 @@ def _html_table(table: Table) -> str:
     return "".join(parts)
 
 
+def _html_equation(equation: Equation) -> str:
+    """The equation as MathML (its alttext is the linearised text); plain text if there is no MathML."""
+    if equation.mathml:
+        return equation.mathml
+    return f"<p>{html.escape(clean(equation.text))}</p>"
+
+
 def _html_image(image: Image) -> str:
     media = {"jpg": "jpeg", "tif": "tiff"}.get(image.format.lower(), image.format.lower())
     src = f"data:image/{media};base64,{base64.b64encode(image.data).decode()}"
@@ -258,10 +268,23 @@ def to_docx(document: Document, path: str | Path) -> list[str]:
                 notes.append(note)
         elif isinstance(block, Link):
             _docx_runs(out.add_paragraph(), "", [block])
+        elif isinstance(block, Equation):
+            _docx_equation(out.add_paragraph(), block)
         for link in leftover:
             _docx_runs(out.add_paragraph(), "", [link])
     out.save(str(path))
     return notes
+
+
+def _docx_equation(paragraph, equation: Equation) -> None:
+    """Write the original OMML back so Word keeps a real equation; the text if the XML is missing or unreadable."""
+    if equation.omml:
+        try:
+            paragraph._p.append(parse_xml(equation.omml))
+            return
+        except Exception:  # not well-formed XML: fall back to the text
+            pass
+    paragraph.add_run(clean(equation.text))
 
 
 def _docx_list_level(out, paragraph, style: str, level: int) -> None:

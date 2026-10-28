@@ -16,6 +16,12 @@ Each block records the 1-based page (PDF) or slide (PPTX) it came from. DOCX
 has no fixed pages, so ``page`` is ``None``. Links are emitted right after
 the block that contains them (PDF: at the end of their page).
 
+Native equations (DOCX and PPTX; Office MathML) become ``Equation`` blocks.
+An equation, inline or display, is emitted as its own block right after the
+paragraph that holds it (after that paragraph's links), and the paragraph
+text is left as the file has it, without the equation's words. PDF
+equations are not recovered. Equations in table cells stay out of cell text.
+
 All libraries are open source and permissively licensed (prime directive 1):
 python-docx, python-pptx (MIT) and pdfplumber on pdfminer.six (MIT).
 """
@@ -29,11 +35,14 @@ from pathlib import Path
 import docx
 import pdfplumber
 import pptx
+from lxml import etree
 from pdfminer.pdftypes import resolve1
 from pdfminer.utils import decode_text
 from docx.oxml.ns import qn
 from docx.table import Table as DocxTable
 from pptx.enum.shapes import MSO_SHAPE_TYPE, PP_PLACEHOLDER
+
+from campus_ai.course_access import mathml
 
 
 @dataclass(kw_only=True)
@@ -80,7 +89,15 @@ class Link(_Block):
     url: str
 
 
-Block = Heading | Paragraph | ListItem | Table | Image | Link
+@dataclass
+class Equation(_Block):
+    mathml: str  # presentation MathML, with display and alttext set
+    text: str  # the equation read as one line of text
+    display: bool = False  # a display equation (m:oMathPara) rather than inline (m:oMath)
+    omml: str = ""  # the original OMML XML, so a rebuilt DOCX keeps a real equation
+
+
+Block = Heading | Paragraph | ListItem | Table | Image | Link | Equation
 
 
 @dataclass
@@ -129,6 +146,20 @@ def _is_decorative(element) -> bool:
         el.tag.endswith("}decorative") and el.get("val") in ("1", "true")
         for el in element.iter()
     )
+
+
+def _equations(p_element, page: int | None = None) -> list[Equation]:
+    """The equations in a paragraph element (w:p or a:p), in order; an oMath inside an oMathPara is part of it."""
+    m = mathml.M_NS
+    out = []
+    for el in p_element.iter(f"{{{m}}}oMathPara", f"{{{m}}}oMath"):
+        if el.tag.endswith("}oMath") and el.getparent() is not None and el.getparent().tag.endswith("}oMathPara"):
+            continue
+        display = el.tag.endswith("}oMathPara")
+        text = mathml.to_text(el)
+        out.append(Equation(mathml=mathml.to_mathml(el, display=display, alttext=text or None), text=text,
+                            display=display, omml=etree.tostring(el, encoding="unicode"), page=page))
+    return out
 
 
 # --- PDF ------------------------------------------------------------------
@@ -272,6 +303,7 @@ def _docx_paragraph(paragraph, source) -> list[Block]:
     for link in paragraph.hyperlinks:
         if link.url:
             blocks.append(Link(text=link.text.strip(), url=link.url))
+    blocks.extend(_equations(paragraph._p))
     return blocks
 
 
@@ -362,6 +394,7 @@ def _pptx_shape(shape, page: int) -> list[Block]:
     for paragraph in shape.text_frame.paragraphs:
         text = paragraph.text.strip()
         if not text:
+            blocks.extend(_equations(paragraph._p, page))
             continue
         if _pptx_is_bullet(paragraph, placeholder in _BULLET_TYPES):
             blocks.append(ListItem(text=text, level=paragraph.level + 1,
@@ -372,6 +405,7 @@ def _pptx_shape(shape, page: int) -> list[Block]:
             if run.hyperlink.address:
                 blocks.append(Link(text=run.text.strip(),
                                    url=run.hyperlink.address, page=page))
+        blocks.extend(_equations(paragraph._p, page))
     return blocks
 
 
