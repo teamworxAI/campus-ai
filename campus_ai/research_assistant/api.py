@@ -8,7 +8,8 @@
     GET  /api/items/{id}                       one item with citations and similar pictures
     GET  /media/{path}                         images in media/ folders under DATA_DIR
     GET  /api/experts?q=wildfire+smoke         researchers for a topic, with their evidence (R4, journey 4)
-    GET  /api/partners?q=...&countries=eu      EU organisations for a call or idea, via matching projects (journey 1)
+    GET  /api/partners?q=...&countries=eu      EU organisations for a call or idea, via matching projects and their own
+                                               nodes (journey 1); `signal=projects|organisations|fused` picks the ranking
     GET  /api/calls?q=...&status=open          open and forthcoming Horizon Europe topics (journey 2)
     GET  /api/calls/for/{researcher_id}        the same for one researcher's own profile text
 """
@@ -26,7 +27,7 @@ from fastapi.responses import FileResponse
 from campus_ai.research_assistant import collections
 from campus_ai.research_assistant.collections import CollectionsSearch, picture_match
 from campus_ai.research_assistant.consortium import brief, eligibility
-from campus_ai.research_assistant.matching import COUNTRY_SETS, ResearchSearch
+from campus_ai.research_assistant.matching import COUNTRY_SETS, DEFAULT_SIGNAL, SIGNALS, ResearchSearch
 
 MAX_UPLOAD = 10 * 1024 * 1024
 CALL_STATUS = ("open", "forthcoming", "all")
@@ -76,12 +77,14 @@ def create_app(service: CollectionsSearch | None = None, research: ResearchSearc
 
     @app.get("/api/partners")
     def partners(q: str = Query(min_length=1, max_length=2000), k: int = Query(10, ge=1, le=30),
-                 countries: str = Query("associated")) -> dict:
+                 countries: str = Query("associated"), signal: str | None = Query(None)) -> dict:
         if countries not in COUNTRY_SETS:
             raise HTTPException(422, f"countries must be one of {', '.join(COUNTRY_SETS)}")
+        if signal is not None and signal not in SIGNALS:
+            raise HTTPException(422, f"signal must be one of {', '.join(SIGNALS)}")
         with lock:
-            found = graph().partners(q, k, countries)
-        return {"query": q, "countries": countries, "partners": found}
+            found = graph().partners(q, k, countries, signal=signal)
+        return {"query": q, "countries": countries, "signal": signal or DEFAULT_SIGNAL, "partners": found}
 
     @app.get("/api/calls")
     def calls(q: str = Query(min_length=1, max_length=2000), k: int = Query(10, ge=1, le=30),
