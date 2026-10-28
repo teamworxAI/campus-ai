@@ -72,6 +72,25 @@ def dims(embedder: Embedder) -> tuple[int, int]:
     return min(embedder.dims), embedder.dims[0]
 
 
+def check_embedder(run: Any, embedder: Embedder) -> None:
+    """Pin the graph to one embedder: record its name on first use, refuse any other later.
+
+    `run(query, **params)` runs Cypher and returns rows. Graphs indexed before
+    this check have no :IndexMeta node; they are taken to use `embedder`.
+    """
+    fast, _ = dims(embedder)
+    rows = run("MATCH (m:IndexMeta {name: $name}) RETURN m.embedder AS embedder", name=VECTOR_INDEX)
+    if rows and rows[0]["embedder"] != embedder.name:
+        raise RuntimeError(
+            f"{VECTOR_INDEX} was indexed with {rows[0]['embedder']} but the configured embedder is "
+            f"{embedder.name}; rebuild the graph (`docker compose down -v` wipes it)"
+        )
+    if not rows:
+        print(f"{VECTOR_INDEX}: no embedder recorded, assuming {embedder.name} and recording it")
+        run("MERGE (m:IndexMeta {name: $name}) SET m.embedder = $embedder, m.dimensions = $size",
+            name=VECTOR_INDEX, embedder=embedder.name, size=fast)
+
+
 class GraphStore:
     def __init__(self, driver: Any, embedder: Embedder, database: str | None = None):
         self.driver = driver
@@ -97,6 +116,7 @@ class GraphStore:
             if "kind" not in existing[0]["properties"]:  # graphs indexed before label filtering
                 self.run(f"MATCH (n:{LABEL}) SET n.kind = [label IN labels(n) WHERE label <> '{LABEL}'][0]")
                 self.run(f"DROP INDEX {VECTOR_INDEX}")
+        check_embedder(self.run, self.embedder)
         self.run(f"CREATE CONSTRAINT entity_id IF NOT EXISTS FOR (n:{LABEL}) REQUIRE n.id IS UNIQUE")
         self.run(
             f"CREATE VECTOR INDEX {VECTOR_INDEX} IF NOT EXISTS FOR (n:{LABEL}) ON n.vec_fast WITH [n.kind] "
