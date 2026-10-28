@@ -402,7 +402,8 @@ Other rules:
 | `table-no-header-row` | 1.3.1 | A | Table of 2+ rows without a marked header row | table worker |
 | `link-no-text`, `link-vague-text`, `link-bare-url` | 2.4.4 Link Purpose (In Context) | A | Empty, "click here"-style or raw-URL link text | text worker |
 | `fake-list` | 1.3.1 | A | Paragraphs typed as lists ("- ", "1. ", "a) ") instead of real list markup | structure worker |
-| `page-image-only` | 1.4.5 Images of Text | AA | PDF page with images and no text (probably scanned) | person (OCR is A7) |
+| `scanned-page` | 1.4.5 Images of Text | AA | PDF page that was an image of text, read by OCR (A7); lists words recovered and mean confidence | OCR, human review |
+| `page-image-only` | 1.4.5 | AA | PDF page with images and no text that OCR could not read (no Tesseract, or no words found) | person |
 
 Every report ends with what the audit cannot check (contrast, accuracy of
 existing alt text, meaningful sequence, PDF tags, language of parts,

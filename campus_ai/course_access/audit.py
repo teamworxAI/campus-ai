@@ -38,12 +38,14 @@ NOT_CHECKED = [
     "1.3.2 Meaningful Sequence: whether the reading order makes sense",
     "1.3.1 Info and Relationships: PDF structure tags (the parser reads untagged text)",
     "3.1.2 Language of Parts: passages in another language",
+    "OCR text from scanned pages may hold recognition errors (names, numbers, equations): a person must check it",
     "Equations that are images, charts and diagrams: always sent to human review",
     "Native equations are preserved as MathML (OMML in DOCX/PPTX), but whether their reading is right needs a person",
 ]
 
 # Fixers, matching the agent design (master plan 3.2).
 ALT_TEXT, STRUCTURE, TABLES, TEXT, PERSON = "alt-text worker", "structure worker", "table worker", "text worker", "person"
+OCR = "ocr, human review"  # A7: recognised text a person approves
 
 GENERIC_ALT = {"image", "picture", "photo", "graphic", "figure", "img", "chart", "diagram", "logo", "icon",
                "untitled", "placeholder", "screenshot", "image1", "picture1"}
@@ -168,14 +170,26 @@ def _link_checks(link: Link) -> list[dict]:
 
 
 def _image_only_pages(document: Document) -> list[Issue]:
-    """PDF pages with images and no text: likely scanned, so text is an image."""
+    """PDF pages with images and no text: scanned, so the text is an image. Pages the parser
+    read with OCR (A7) are `scanned-page` (a person approves the recognised text); pages it could
+    not read (no Tesseract, or no words found) stay `page-image-only`."""
     if document.source_format != "pdf":
         return []
+    issues = []
+    for page in document.ocr_pages:
+        own = [b for b in document.blocks if isinstance(b, Paragraph) and b.ocr and b.page == page]
+        words = sum(len(b.text.split()) for b in own)
+        confidence = own[0].ocr_confidence or 0.0 if own else 0.0
+        issues.append(Issue("scanned-page", "1.4.5",
+                            f"Page {page} is a scan (an image of text). OCR recovered {words} words with mean "
+                            f"confidence {confidence:.2f}; recognition errors are possible, so a person must check the text.",
+                            OCR, page))
     text_pages = {b.page for b in document.blocks if isinstance(b, (Heading, Paragraph, ListItem, Table))}
     image_pages = sorted({b.page for b in document.blocks if isinstance(b, Image)} - text_pages)
-    return [Issue("page-image-only", "1.4.5",
-                  f"Page {page} has images but no text: it may be scanned. OCR is next phase (A7); a person must "
-                  "check it until then.", PERSON, page) for page in image_pages]
+    issues += [Issue("page-image-only", "1.4.5",
+                     f"Page {page} has images but no text: it may be scanned and OCR could not read it; "
+                     "a person must check it.", PERSON, page) for page in image_pages]
+    return issues
 
 
 # --- Reports ----------------------------------------------------------------

@@ -122,6 +122,7 @@ Licences marked (verify) come from secondary sources.
 | Alternatives in the router's allow-list (for bake-offs) | `gemma4:e2b`, `qwen3:4b`, `qwen3-vl:4b`, `granite3.3:8b`, `mistral-small3.2:24b`, `olmo2:7b` | Apache-2.0 (each model's Ollama registry licence layer, checked Oct 21) | Ollama | Allowed, not default |
 | Reranker | `Qwen/Qwen3-Reranker-0.6B` (default: fits the 4 GB demo laptop, 1.2 GB of weights); `Qwen/Qwen3-Reranker-4B` for the team's inference box (does not fit 4 GB) | Apache-2.0 (both model cards' `license: apache-2.0`, not gated; checked Oct 23) | `embed` service (`campus_ai/core/embed/reranker.py`) | B2 run Oct 26: built, off by default (no lift on the back-test, about 10 s per query on the laptop); 4B untested |
 | Document parsing | Current A1 parser; candidate Docling + Granite-Docling-258M, hard pages to PaddleOCR-VL | MIT / Apache-2.0 (verify) | Docker service | B4 |
+| OCR for scanned PDFs | Tesseract 5 (Debian package, eng + fra) | Apache-2.0 | test image | A7 |
 | Speech to text | Granite Speech 4.1 2B | Apache-2.0 (verify) | Docker service | Stretch, B6 |
 | Diarization | Open: pyannote Community-1 is CC-BY-4.0, not an OSI software licence, so it fails D8 | - | - | Decide before use |
 
@@ -206,8 +207,8 @@ running offline.
   Confirm each licence and that they run fully offline in the image.
 - Vision (alt text): a local open-weight vision-language model under an
   OSI-approved licence, chosen by bake-off (decision D9). No hosted models.
-- OCR for scanned PDFs: **next phase** (card A7), with an open-source offline
-  engine (e.g. Tesseract, Apache-2.0).
+- OCR for scanned PDFs: Tesseract 5 (Apache-2.0; Debian packages with English
+  and French data), run as a program inside the image, offline (card A7, built).
 - Math: convert to MathML where detectable.
 
 ### 3.4 Evaluation
@@ -440,7 +441,7 @@ Each card is sized for one cloud session and one PR.
 | A4b | OMML -> MathML conversion for DOCX/PPTX equations (deterministic) | A1 | Built: `mathml.py` (runs, fractions, scripts, radicals, n-ary, delimiters, functions, accents, matrices, limits, boxes; unknown constructs degrade to text); parser emits `Equation` blocks; HTML writes `<math>` with `alttext`, DOCX writes the OMML back; audit flags empty equations |
 | A5 | Rebuild accessible DOCX/HTML + verify loop: `rebuild.py` applies approved proposals, writes DOCX and HTML, re-audits the DOCX and writes an accessibility statement; `scripts/remediate.py` is the end-to-end run | A2-A4 | Built; measured on the A6 corpus (`evals/course_access/`); the review cycle (P3) is the loop |
 | A6 | Gold set + eval metrics in `evals/course_access/`. Corpus: openly licensed course documents (CC BY, CC BY-SA) fetched by `fetch-course-docs` into `DATA_DIR/course_access` with a manifest of sources and licences; `evals/course_access/audit_corpus.py` audits them all | A2, P6 | Corpus started Oct 22: 20 documents (PDF, DOCX, PPTX) from Canadian and UK OER repositories, all parse; labels by a specialist (D6) and the metrics (P6) next |
-| A7 | OCR for scanned (image-only) PDFs with an open-source offline engine (e.g. Tesseract) | A1 | Next phase |
+| A7 | OCR for scanned (image-only) PDFs with an open-source offline engine (e.g. Tesseract) | A1 | Built: Tesseract 5 (eng + fra) in the image; the parser OCRs text-less pages with a full-page image, the audit reports `scanned-page` (1.4.5), an `ocr` proposal carries the page's mean confidence (review below 0.85) and the rebuilt DOCX/HTML hold the text |
 | R0 | REE integration spec with RIO: fields, access method, refresh, consent | - | Waiting: email drafted Oct 22, to be sent by the team |
 | R0b | Data agreement with BC ELN for ArcaBC (arcabc.ca): permission, interface, rights handling, pilot collection. Until signed, no code or session touches arcabc.ca | - | Waiting: email drafted Oct 22, to be sent by the team |
 | R1 | OpenAlex loader (SFU authors, topics); REE loader once R0 is agreed. `fetch-openalex` harvests an institution's recent works (CC0, class P) into `DATA_DIR/openalex/<name>/`; `research_assistant/openalex.py` maps them to Researcher, Publication, Topic, SDG and Institution nodes with AUTHORED, ABOUT, WORKS_ON, SUPPORTS, CONTRIBUTES_TO, AFFILIATED_WITH and COAUTHORED_WITH links (schema 4.2) | P5, R0 | OpenAlex part built; SFU graph indexed on the laptop and probed (`evals/research_assistant/`). REE part waits for R0 |
