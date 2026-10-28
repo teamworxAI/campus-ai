@@ -56,6 +56,28 @@ it is then kept until the `api` service restarts. A topic whose page was
 not fetched (closed topics, or `--topics none`) is read from its title and
 keywords only, and the page says so.
 
+**What each adds.** When you reach *EU partners* from an analysed call,
+the shortlist opens with *What each adds*: for every organisation, the
+call's topics, expertise and keywords that its matching projects cover,
+the roles from the partner profile it can fill (by its CORDIS type and
+name: a public body as end user, an SME for exploitation, a clinical
+partner...), its country and the projects it coordinated. Each claim cites
+the project or organisation id it rests on. Below, *Complementary set of 3*
+picks three partners one at a time, each the one that adds the most that
+the set does not have yet (ties go to the higher-ranked partner), lists
+what is still uncovered and checks the consortium rule with SFU as a
+member. This part is plain arithmetic over the records; no model is asked.
+
+**Ask.** The *Ask* page (top bar, or the link on *Experts*) takes one
+question in plain words and sends it to the right journey: partners for a
+call, calls for some work, a consortium, an SFU expert or sources in the
+collections. Fixed rules decide first (a topic identifier such as
+HORIZON-MISS-2027-03-OCEAN-01, "consortium", "which calls", "who works
+on", "images"...); only when none fits does the local model pick, and when
+its answer is unusable the question goes to expert search. The page says
+where it went and why ("Routed to: journey 4 (rule: ...)") above the
+results.
+
 **Draft a consortium.** From a call on the Horizon calls page, *Draft a
 consortium* builds the partner shortlist for that call, applies the Horizon
 Europe consortium rule (three independent entities in three different
