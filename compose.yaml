@@ -46,6 +46,7 @@ services:
     environment: *llm-env
     volumes:
       - ${DATA_DIR:-./data}:/app/data:ro
+      - ./evals:/app/evals  # eval reports (P6) land in the checkout
 
   embed:
     build:
@@ -63,6 +64,7 @@ services:
     volumes:
       - ${MODELS_DIR:-./models}:/models:ro
       - ${DATA_DIR:-./data}:/app/data:ro
+      - ./evals:/app/evals  # eval reports (P6) land in the checkout
     command: ["python", "scripts/embed_bakeoff.py", "evals/embed/sample_bakeoff.jsonl"]
 
   # Collections search API (R9): same image and isolation as embed.

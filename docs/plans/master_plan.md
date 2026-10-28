@@ -22,8 +22,12 @@ the demo laptop), the Course Access pipeline end to end (A1-A5, with the first A
 corpus of 20 open documents) and the Research Assistant's collections search (R8,
 R9, R10), loaders (R1 OpenAlex, R2 CORDIS and calls), expert, partner and call
 search (R4 first cut), consortium rule and citation-checked brief (R5) and the R6
-back-test; all of it runs on the demo laptop. Next: the eval harness (P6), the
-bake-offs (B2-B5), the Lisbon dry run. Open
+back-test; all of it runs on the demo laptop. Opened Oct 23-26 as independent
+PRs (#35-#39), waiting for review: the eval harness (P6), OMML to MathML (A4b),
+OCR for scanned PDFs (A7), the call analyst over full topic descriptions (R4)
+and the reranker step with its bake-off (B2: no lift, off by default). Next: the
+complementarity scorer and journey router (R4), the R5 network worker, B3 and B5
+once labels exist, the Lisbon dry run. Open
 decisions are in section 8; section 5 has the remaining schedule.
 
 > ## Prime directives (standing orders; they override everything else)
@@ -89,7 +93,7 @@ decisions are in section 8; section 5 has the remaining schedule.
 | Skills | Domain procedures as plain files (`SKILL.md` + scripts) the local agent loop reads: WCAG remediation playbook, Horizon call analysis | `campus_ai/<product>/skills/` |
 | MCP servers | One per product, thin wrappers over the product's functions | `campus_ai/<product>/mcp_server.py` |
 | Review queue | One approval UI pattern for both products: item, proposed change, evidence, approve/edit/reject. Built (P3) as a FastAPI service plus a static page in the existing `web` front end, not Streamlit: no new dependency or image, same offline stack as collections search | `campus_ai/course_access/api.py`, `web/static/review/` (Course Access first; the Research Assistant's outreach review reuses the pattern) |
-| Evaluation | RAGAS (Apache-2.0) + deterministic metrics, per-product gold sets; any LLM judge is a local model, never a hosted one | `campus_ai/core/eval/`, `evals/` |
+| Evaluation | Deterministic metrics (recall@k, MRR, nDCG, citation precision, issues fixed and introduced, share sent to review) + a small local-model judge (faithfulness, alt-text quality) instead of RAGAS (D11); per-product gold sets in one JSONL format; one report writer; any LLM judge is a local model, never a hosted one | `campus_ai/core/eval/`, `evals/` |
 | Tracing | Log every run: tool calls, model, host, data class, tokens, latency, outcome; metadata only, never inputs or outputs (no cost: models are local) | `campus_ai/core/tracing.py` |
 
 Hosting: everything, models included, runs in Docker on the institution's own
@@ -122,6 +126,7 @@ Licences marked (verify) come from secondary sources.
 | Alternatives in the router's allow-list (for bake-offs) | `gemma4:e2b`, `qwen3:4b`, `qwen3-vl:4b`, `granite3.3:8b`, `mistral-small3.2:24b`, `olmo2:7b` | Apache-2.0 (each model's Ollama registry licence layer, checked Oct 21) | Ollama | Allowed, not default |
 | Reranker | `Qwen/Qwen3-Reranker-0.6B` (default: fits the 4 GB demo laptop, 1.2 GB of weights); `Qwen/Qwen3-Reranker-4B` for the team's inference box (does not fit 4 GB) | Apache-2.0 (both model cards' `license: apache-2.0`, not gated; checked Oct 23) | `embed` service (`campus_ai/core/embed/reranker.py`) | B2 run Oct 26: built, off by default (no lift on the back-test, about 10 s per query on the laptop); 4B untested |
 | Document parsing | Current A1 parser; candidate Docling + Granite-Docling-258M, hard pages to PaddleOCR-VL | MIT / Apache-2.0 (verify) | Docker service | B4 |
+| OCR for scanned PDFs | Tesseract 5 (Debian package, eng + fra) | Apache-2.0 | test image | A7 |
 | Speech to text | Granite Speech 4.1 2B | Apache-2.0 (verify) | Docker service | Stretch, B6 |
 | Diarization | Open: pyannote Community-1 is CC-BY-4.0, not an OSI software licence, so it fails D8 | - | - | Decide before use |
 
@@ -206,8 +211,8 @@ running offline.
   Confirm each licence and that they run fully offline in the image.
 - Vision (alt text): a local open-weight vision-language model under an
   OSI-approved licence, chosen by bake-off (decision D9). No hosted models.
-- OCR for scanned PDFs: **next phase** (card A7), with an open-source offline
-  engine (e.g. Tesseract, Apache-2.0).
+- OCR for scanned PDFs: Tesseract 5 (Apache-2.0; Debian packages with English
+  and French data), run as a program inside the image, offline (card A7, built).
 - Math: convert to MathML where detectable.
 
 ### 3.4 Evaluation
@@ -245,7 +250,8 @@ Data sources:
   not scraping), enriched with OpenAlex and ORCID. Other BC universities
   after the pilot.
 - EU side: Horizon Europe projects and participants (CORDIS open data), open
-  calls (EU Funding & Tenders portal), EU author profiles (OpenAlex).
+  calls with their full topic descriptions (EU Funding & Tenders portal,
+  grants file and topicDetails pages), EU author profiles (OpenAlex).
 - Optional Canadian funding: NSERC/SSHRC award open data.
 - Four user journeys:
   1. "Find EU partners for this call" (research office).
@@ -347,7 +353,8 @@ citations, human approval before outreach.
   one EU partner, check whether it appears in the top 10 (recall@10).
 - Call-fit: research officers rate 20 shortlists (1-5).
 - Citation precision: share of claims backed by a valid ID (target 100%).
-- RAGAS faithfulness metrics from the shared eval harness.
+- Faithfulness of briefs to their evidence, scored 1-5 by the shared eval
+  harness's local judge (`campus_ai/core/eval/judge.py`, D11).
 - Collections search: recall@10 on 50 labelled queries across text, image,
   audio and video; cross-modal hits (text query finds a photo or clip).
 - Embedder bake-off (week 1): EmbeddingGemma 2 vs a text-only baseline on
@@ -363,7 +370,8 @@ deferred and now come first.
 | Week | Shared platform | Course Access Agent | Research Assistant |
 |---|---|---|---|
 | Oct 22-23 (done) | P9 Ollama in compose; B1 smoke test passed on the demo laptop (D5); P1b data-class gate; P2 tracing; P3 review queue | A6 corpus of 20 open documents; A3 alt text; A4 workers; A5 rebuild and verify: the pipeline runs end to end (862 audit issues to 360 on the corpus with rule-based fixes alone) | R10 rights filter; R1 OpenAlex and R2 CORDIS loaders; R4 expert, partner and call search; R5 consortium rule and citation-checked brief; R6 back-test (recall@10 0.32 on the full Horizon Europe graph) |
-| Oct 26-Nov 1 | P6 eval harness over the scripts in `evals/`; B2 embedder + reranker bake-off (R3), measured by the back-test; B5 judge calibration | B3 alt-text bake-off once a specialist labels the corpus (D6); A4b OMML->MathML; A7 OCR if time | Call analyst over full topic descriptions; R5 network worker (needs EU-side researchers); REE loader if R0 lands; R7 only if R0b is signed |
+| Oct 23-26 (in PRs #35-#39) | P6 eval harness: gold format, metrics, local judge (D11), one report writer, provisional gold sets; B2 reranker bake-off (R3): Qwen3-Reranker-0.6B step built, recall@10 0.30 to 0.26 on 50 back-test projects at 6x the time, so off by default | A4b OMML to MathML (native equations kept in HTML and DOCX); A7 OCR with Tesseract for scanned PDFs (`scanned-page` rule, `ocr` proposal with confidence) | R4 call analyst: topic pages fetched (365 open and forthcoming), span-checked topics, outcomes and partner profile, `partner_query` for the shortlist |
+| Oct 27-Nov 1 | Merge and rebuild on the demo laptop; B5 judge calibration once labels exist | B3 alt-text bake-off once a specialist labels the corpus (D6) | R4 complementarity scorer and journey router; R5 network worker (needs EU-side researchers); REE loader if R0 lands; R7 only if R0b is signed |
 | Nov 2-Lisbon | Demo laptop dry run with everything indexed, freeze a week before | Demo script, sample pack, one-pager | Demo script (expert search, partner shortlist and brief, collections search), one-pager |
 
 Exit criteria per week are the eval targets above, measured on the gold
@@ -420,13 +428,13 @@ Each card is sized for one cloud session and one PR.
 | ID | Card | Depends on | Status |
 |---|---|---|---|
 | P0 | Project skeleton: `pyproject.toml` (uv), `campus_ai/` package, unittest setup, SessionStart hook | - | Built (#1) |
-| P1 | LLM router over local open-weight models only, on Ollama (local, or the team's inference box). Defaults Gemma 4 (Apache-2.0); refuses models not in its open-licence allow-list | P0 | Built (#2, local-only in #10) |
+| P1 | LLM router over local open-weight models only, on Ollama (local, or the team's inference box). Defaults Gemma 4 (Apache-2.0); refuses models not in its open-licence allow-list | P0 | Built; classification runs with thinking off (`THINK` in `config.py`, Oct 28): one-digit and one-tag answers in seconds instead of minutes on gemma4 (#2, local-only in #10) |
 | P1b | Data-class gate in the router (P/I/S/R; R never reaches a model) and per-call trace of model, host and class | P1, P2 | Built (#18); embedder refuses R too |
 | P2 | Tracing module: per-run JSONL log of tool calls, model, host, data class, tokens, latency | P0 | Built (#18) |
 | P3 | Review queue (approve/edit/reject): `course-access` service (`campus_ai/course_access/api.py`) and `web/static/review/`; upload, audit, proposals with evidence and confidence, approve/edit/reject each, rebuild, download DOCX/HTML/statement. FastAPI + static page rather than Streamlit (decision: no new dependency, same stack as R9) | P0 | Built (Course Access); the Research Assistant's review reuses it when R4 lands |
-| P4 | MCP server template wrapping a product's public functions | P1 | To do |
+| P4 | MCP server template wrapping a product's public functions | P1 | Built: `campus_ai/core/mcp.py` builds a server from plain functions with the official `mcp` SDK (MIT): stdio, or `--http PORT`; class R refused, every call traced (P2). Servers: `campus_ai/course_access/mcp_server.py` (audit, propose, remediate) and `campus_ai/research_assistant/mcp_server.py` (experts, partners, calls, consortium, brief, collections); run them as in the user guide |
 | P5 | Graph core: Neo4j writer, vector + fulltext indexes, hybrid retriever (RRF) | P0, P7 | Built (#5) |
-| P6 | Eval harness: gold-set format, RAGAS + deterministic metrics, report | P0 | Next |
+| P6 | Eval harness: gold-set format, deterministic metrics + local judge (D11), report | P0 | Built: `campus_ai/core/eval/` holds the JSONL gold format (`gold.py`), pure metrics (`metrics.py`), a local-model judge (`judge.py`) and one report writer (`report.py`) used by all `evals/` scripts; `evals/run.py` runs them; provisional gold sets `gold_experts.jsonl` and `gold_partners.jsonl` scored by `evals/research_assistant/gold_eval.py` |
 | P7 | Embedder module with EmbeddingGemma 2 + text baseline + bake-off script (D7) | P0 | Built (#3); real bake-off B2 pending |
 | P8 | Licence guard: test that fails on any non-OSI licence in packages, images and model weights (two named exceptions) | P0 | Built (#9) |
 | P9 | Ollama in compose: an offline Ollama service from local weights (`MODELS_DIR/ollama`, read-only) on the internal network, a one-time `fetch-ollama` job, and `OLLAMA_HOST` (the service, or `OLLAMA_URL` from `.env`) / `CAMPUS_AI_MODEL_*` passed to `embed`, `api` and `smoke`. Also B1's smoke test (`scripts/smoke_test.py`) | P1 | Built; B1 passed on the demo laptop Oct 22 (9/9, `evals/smoke/`) |
@@ -436,16 +444,16 @@ Each card is sized for one cloud session and one PR.
 | A3 | Alt-text worker with a local open-weight vision model (D9) and confidence score: proposals for the images the audit flags, through the router's `vision` task; charts, diagrams, equations, images of text, decorative calls and low confidence always go to review; `scripts/alt_text.py` | A1, P1 | Built; probe run with `gemma4:e2b` 6/6 kinds (`evals/course_access/`); B3 on the gold set decides D9 |
 | A3b | Chart rule for A3: extract the chart's data as a table, write the description from it, flag any claim the table does not support | A3 | To do |
 | A4 | Structure, table and text workers: `workers.py` proposes a fix per audit issue (lists, heading levels, slide titles, header rows, layout tables, titles, language, link text) with confidence, review flag and evidence; rules first, the router only for language and link text | A1 | Built; reading order, captions and contrast wait on the parser; run on the A6 corpus (`evals/course_access/`) |
-| A4b | OMML -> MathML conversion for DOCX/PPTX equations (deterministic) | A1 | To do |
+| A4b | OMML -> MathML conversion for DOCX/PPTX equations (deterministic) | A1 | Built: `mathml.py` (runs, fractions, scripts, radicals, n-ary, delimiters, functions, accents, matrices, limits, boxes; unknown constructs degrade to text); parser emits `Equation` blocks; HTML writes `<math>` with `alttext`, DOCX writes the OMML back; audit flags empty equations |
 | A5 | Rebuild accessible DOCX/HTML + verify loop: `rebuild.py` applies approved proposals, writes DOCX and HTML, re-audits the DOCX and writes an accessibility statement; `scripts/remediate.py` is the end-to-end run | A2-A4 | Built; measured on the A6 corpus (`evals/course_access/`); the review cycle (P3) is the loop |
 | A6 | Gold set + eval metrics in `evals/course_access/`. Corpus: openly licensed course documents (CC BY, CC BY-SA) fetched by `fetch-course-docs` into `DATA_DIR/course_access` with a manifest of sources and licences; `evals/course_access/audit_corpus.py` audits them all | A2, P6 | Corpus started Oct 22: 20 documents (PDF, DOCX, PPTX) from Canadian and UK OER repositories, all parse; labels by a specialist (D6) and the metrics (P6) next |
-| A7 | OCR for scanned (image-only) PDFs with an open-source offline engine (e.g. Tesseract) | A1 | Next phase |
+| A7 | OCR for scanned (image-only) PDFs with an open-source offline engine (e.g. Tesseract) | A1 | Built: Tesseract 5 (eng + fra) in the image; the parser OCRs text-less pages with a full-page image, the audit reports `scanned-page` (1.4.5), an `ocr` proposal carries the page's mean confidence (review below 0.85) and the rebuilt DOCX/HTML hold the text |
 | R0 | REE integration spec with RIO: fields, access method, refresh, consent | - | Waiting: email drafted Oct 22, to be sent by the team |
 | R0b | Data agreement with BC ELN for ArcaBC (arcabc.ca): permission, interface, rights handling, pilot collection. Until signed, no code or session touches arcabc.ca | - | Waiting: email drafted Oct 22, to be sent by the team |
 | R1 | OpenAlex loader (SFU authors, topics); REE loader once R0 is agreed. `fetch-openalex` harvests an institution's recent works (CC0, class P) into `DATA_DIR/openalex/<name>/`; `research_assistant/openalex.py` maps them to Researcher, Publication, Topic, SDG and Institution nodes with AUTHORED, ABOUT, WORKS_ON, SUPPORTS, CONTRIBUTES_TO, AFFILIATED_WITH and COAUTHORED_WITH links (schema 4.2) | P5, R0 | OpenAlex part built; SFU graph indexed on the laptop and probed (`evals/research_assistant/`). REE part waits for R0 |
 | R2 | CORDIS loader (projects, participants) + calls loader: `fetch-cordis` downloads the Publications Office's Horizon Europe bundle and the Funding & Tenders grants file (EU open data, CC BY 4.0, no key) into `DATA_DIR/cordis/horizon/`; `research_assistant/cordis.py` maps them to Project, Organization, Topic (EuroSciVoc), Cluster (programme part) and CallTopic nodes with PARTICIPATED_IN, ABOUT, UNDER_TOPIC, FUNDED_UNDER and PART_OF links | P5 | Built; 3000 most recent projects indexed on the laptop and probed (`evals/research_assistant/`); the full bundle is 24k projects, 36k organisations |
 | R3 | Graph schema + indexing for Researcher/Project/Call; reranker step; every vector index records the embedding model id | R1, R2 | Schema and indexing done in R1/R2. Reranker step built (B2): `HybridRetriever(reranker=...)` scores the top 50 fused candidates with Qwen3-Reranker-0.6B (`campus_ai/core/embed/reranker.py`), `--rerank` on `graph_search.py search/eval`, the back-test and the probes, `ResearchSearch(reranker=research_reranker())`. **Off by default**: on 50 back-test projects recall@10 went 0.30 -> 0.26 and MRR 0.15 -> 0.13 at about 10 s per query on the RTX 2050 (`evals/research_assistant/b2_bakeoff_20261026.md`); the probes read somewhat better for experts. Follow-up Oct 27: weighting projects by reranked rank or by RRF with the fusion order was tried (`evals/research_assistant/b2_bakeoff_weights_20261027.md`); best is RRF at recall@10 0.32 against 0.30 for fusion only, under the +0.05 bar, so the default stays off. Embedding model id recorded: a `(:IndexMeta {name: "entity_vec"})` node holds the embedder name and fast dimension, written on first `ensure_schema` or search (older graphs are backfilled with the configured embedder) and checked on every later one; a different embedder raises and says to rebuild the graph |
-| R4 | Router + call analyst + partner scout + expert search (journey 4). First cut built in `research_assistant/matching.py`: expert search (Researcher hits with topics and publications as evidence), partner scout (matching Projects expanded to their participating Organizations, coordinators weighted, eligible countries only, the asking side's country left out) and call search (open and forthcoming CallTopics with deadlines), served at `/api/experts`, `/api/partners`, `/api/calls` and in the web app's Experts, EU partners and Horizon calls pages. Deterministic; every result cites its node ids and URLs. Still to come: the call analyst over full topic descriptions (needs the topic pages), the complementarity scorer and the router between journeys | R3, P1 | First cut built; evidence-only, no model call yet |
+| R4 | Router + call analyst + partner scout + expert search (journey 4). First cut built in `research_assistant/matching.py`: expert search (Researcher hits with topics and publications as evidence), partner scout (matching Projects expanded to their participating Organizations, coordinators weighted, eligible countries only, the asking side's country left out) and call search (open and forthcoming CallTopics with deadlines), served at `/api/experts`, `/api/partners`, `/api/calls` and in the web app's Experts, EU partners and Horizon calls pages. Deterministic; every result cites its node ids and URLs. Second cut: the call analyst over full topic descriptions. `fetch-cordis` caches each open and forthcoming topic's topicDetails JSON from the Funding & Tenders portal (365 topics, sequential, about 8 minutes; `--topics` picks which) and `cordis.py` adds the "Expected outcome:" and "Scope:" sections (HTML stripped, capped at 4000 characters) to the CallTopic text, with expected outcome, scope, action type, budget and topic-specific eligibility conditions as props. `research_assistant/call_analyst.py` reads the facts from the records (action type and the R5 consortium rule it implies, Canada's status, deadlines, budget, cluster, keywords) and asks the local model for topics, expected outcomes and a partner profile, each with a quoted span; a span check in code drops every item whose quote is not in the topic text and counts it. `partner_query` turns the analysis into the partner-search text. Served at `/api/calls/{id}/analysis` (cached per process) and the Horizon calls page's "Analyse this call" (`evals/research_assistant/call_analyst_20261026.md`). Still to come: the complementarity scorer and the router between journeys | R3, P1 | Call analyst built; complementarity scorer and router to do |
 | R5 | Network worker, eligibility rules, citation evaluator; code checks every cited span exists in its source before any LLM judge runs. Built in `research_assistant/consortium.py`: the Horizon Europe consortium rule in code (RIA/IA three entities in three member or associated states with one member state; single-entity actions; Canada associated to Pillar II only), a consortium brief from the local model that must cite ids, and a citation check that drops every sentence citing an id outside the evidence and flags uncited ones. `POST /api/brief` and the web app's "Draft a consortium" page (journey 3). The network worker (co-author paths to EU institutions) waits for EU-side researchers in the graph | R4 | Eligibility and citation check built; network worker to do |
 | R6 | Back-test eval (recall@10): `evals/research_assistant/backtest.py` hides the coordinator (or first eligible partner) of each indexed project with a Canadian participant, asks partner search with the project's own text and reports recall@10 and MRR | R3, P6 | Built; first run on the 3000-project subset in `evals/research_assistant/` |
 | R7 | ArcaBC loader, the BC counterpart of R8, writing the same JSONL records | P5, P7, R0b | Blocked on R0b |
@@ -479,6 +487,7 @@ Commit, push to your branch, and open a PR with the eval results.
 | D8 | Licences | **Decided (Oct 21, prime directive 1):** open source only, no paid licences. OSI-approved licences for all code, dependencies, images, tools and model weights; permissive preferred; no AGPL (so PyMuPDF is replaced). campus-ai is Apache-2.0. Two named exceptions: free GPU vendor runtimes (NVIDIA CUDA), optional, with a CPU path that always works; and Docker Desktop as a developer tool on Windows workstations (Oct 21). Deployments need only the open-source Docker Engine + Compose (or Podman), and nothing may depend on Desktop-only features |
 | D9 | Vision model for alt text (A3) | **Open:** a local open-weight vision-language model under an OSI-approved licence (e.g. Apache-2.0 or MIT weights; "community" licences don't qualify), chosen by bake-off on the A6 gold set, running in a container from local weights |
 | D10 | Model register | **Decided:** the table in section 2; the router's allow-list must match it. Adding a model means a D8 licence check and a register row in the same PR |
+| D11 | Eval judge | **Decided (Oct 23, P6):** a small local judge in `core/eval` instead of RAGAS (RAGAS pulls in langchain and OpenAI client packages, far more than needed). RAGAS could be added later behind the same metric names if its exact definitions are wanted |
 
 ## 9. Risks
 

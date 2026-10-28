@@ -16,6 +16,18 @@ Each block records the 1-based page (PDF) or slide (PPTX) it came from. DOCX
 has no fixed pages, so ``page`` is ``None``. Links are emitted right after
 the block that contains them (PDF: at the end of their page).
 
+Native equations (DOCX and PPTX; Office MathML) become ``Equation`` blocks.
+An equation, inline or display, is emitted as its own block right after the
+paragraph that holds it (after that paragraph's links), and the paragraph
+text is left as the file has it, without the equation's words. PDF
+equations are not recovered. Equations in table cells stay out of cell text.
+
+Scanned PDF pages (no text layer, one big image) are read with Tesseract (A7,
+Apache-2.0, run as a program, offline): the words come back as Paragraph
+blocks flagged as OCR output and the page is listed in ``Document.ocr_pages``.
+The page image is not kept: the scan is the text, and the text is now there.
+Without the binary, or when it finds no words, the page stays an Image block.
+
 All libraries are open source and permissively licensed (prime directive 1):
 python-docx, python-pptx (MIT) and pdfplumber on pdfminer.six (MIT).
 """
@@ -23,17 +35,22 @@ python-docx, python-pptx (MIT) and pdfplumber on pdfminer.six (MIT).
 from __future__ import annotations
 
 import io
+import shutil
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import docx
 import pdfplumber
 import pptx
+from lxml import etree
 from pdfminer.pdftypes import resolve1
 from pdfminer.utils import decode_text
 from docx.oxml.ns import qn
 from docx.table import Table as DocxTable
 from pptx.enum.shapes import MSO_SHAPE_TYPE, PP_PLACEHOLDER
+
+from campus_ai.course_access import mathml
 
 
 @dataclass(kw_only=True)
@@ -50,6 +67,8 @@ class Heading(_Block):
 @dataclass
 class Paragraph(_Block):
     text: str
+    ocr: bool = False  # recognised from a scanned page: may hold recognition errors
+    ocr_confidence: float | None = None  # mean word confidence of the page, 0-1 (OCR only)
 
 
 @dataclass
@@ -80,7 +99,15 @@ class Link(_Block):
     url: str
 
 
-Block = Heading | Paragraph | ListItem | Table | Image | Link
+@dataclass
+class Equation(_Block):
+    mathml: str  # presentation MathML, with display and alttext set
+    text: str  # the equation read as one line of text
+    display: bool = False  # a display equation (m:oMathPara) rather than inline (m:oMath)
+    omml: str = ""  # the original OMML XML, so a rebuilt DOCX keeps a real equation
+
+
+Block = Heading | Paragraph | ListItem | Table | Image | Link | Equation
 
 
 @dataclass
@@ -90,6 +117,8 @@ class Document:
     language: str | None = None  # e.g. "en-CA"
     page_count: int | None = None  # pages or slides; None for DOCX
     blocks: list[Block] = field(default_factory=list)
+    ocr_pages: list[int] = field(default_factory=list)  # PDF pages whose text came from OCR
+    ocr_engine: str = ""  # e.g. "tesseract 5.3.0 (eng+fra)"; empty when nothing was OCR'd
 
 
 def parse(path: str | Path) -> Document:
@@ -131,6 +160,20 @@ def _is_decorative(element) -> bool:
     )
 
 
+def _equations(p_element, page: int | None = None) -> list[Equation]:
+    """The equations in a paragraph element (w:p or a:p), in order; an oMath inside an oMathPara is part of it."""
+    m = mathml.M_NS
+    out = []
+    for el in p_element.iter(f"{{{m}}}oMathPara", f"{{{m}}}oMath"):
+        if el.tag.endswith("}oMath") and el.getparent() is not None and el.getparent().tag.endswith("}oMathPara"):
+            continue
+        display = el.tag.endswith("}oMathPara")
+        text = mathml.to_text(el)
+        out.append(Equation(mathml=mathml.to_mathml(el, display=display, alttext=text or None), text=text,
+                            display=display, omml=etree.tostring(el, encoding="unicode"), page=page))
+    return out
+
+
 # --- PDF ------------------------------------------------------------------
 
 IMAGE_DPI = 150  # resolution of the PNG made for each PDF image (for the alt-text worker)
@@ -145,7 +188,13 @@ def _parse_pdf(path: Path) -> Document:
             page_count=len(pdf.pages),
         )
         for number, page in enumerate(pdf.pages, start=1):
-            document.blocks.extend(_pdf_page_blocks(page, number))
+            scanned = _ocr_page(page, number, document.language) if _is_scanned(page) else None
+            if scanned:
+                document.blocks.extend(scanned[0])
+                document.ocr_pages.append(number)
+                document.ocr_engine = scanned[1]
+            else:
+                document.blocks.extend(_pdf_page_blocks(page, number))
     return document
 
 
@@ -176,6 +225,85 @@ def _pdf_page_blocks(page, page_no: int) -> list[Block]:
             text = (page.crop(box).extract_text() or "").strip() if box else ""
             blocks.append(Link(text=text, url=link["uri"], page=page_no))
     return blocks
+
+
+# --- OCR (A7) ---------------------------------------------------------------
+
+OCR_DPI = 300  # the usual resolution for OCR
+OCR_MAX_PIXELS = 40_000_000  # a huge page is rendered at a lower resolution to bound memory
+SCANNED_COVERAGE = 0.5  # share of the page one image must cover for a text-less page to count as a scan
+OCR_LANGUAGES = {"en": "eng", "fr": "fra"}  # the trained data in the image
+
+
+def _is_scanned(page) -> bool:
+    """No text layer, but one image covering most of the page."""
+    if page.chars:
+        return False
+    area = page.width * page.height
+    for image in page.images:
+        box = _clip((image["x0"], image["top"], image["x1"], image["bottom"]), page.bbox)
+        if box and (box[2] - box[0]) * (box[3] - box[1]) >= SCANNED_COVERAGE * area:
+            return True
+    return False
+
+
+def _ocr_languages(language: str | None) -> str:
+    """Tesseract `-l` value: the document's declared language if we have it, else English and French."""
+    code = OCR_LANGUAGES.get((language or "").replace("_", "-").split("-")[0].lower())
+    return code or "+".join(OCR_LANGUAGES.values())
+
+
+def _ocr_resolution(page) -> int:
+    """300 dpi, lowered for a huge page so the rendered image stays under OCR_MAX_PIXELS."""
+    pixels_at_300 = page.width * page.height * (OCR_DPI / 72) ** 2
+    return max(72, min(OCR_DPI, int(OCR_DPI * (OCR_MAX_PIXELS / pixels_at_300) ** 0.5)))
+
+
+def _ocr_page(page, page_no: int, language: str | None) -> tuple[list[Block], str] | None:
+    """(Paragraph blocks, engine description) for a scanned page, or None when Tesseract
+    is missing, fails or finds no words (the page then stays an image for a person)."""
+    binary = shutil.which("tesseract")
+    if not binary:
+        return None
+    buffer = io.BytesIO()
+    page.to_image(resolution=_ocr_resolution(page)).original.save(buffer, "PNG")
+    languages = _ocr_languages(language)
+    try:
+        result = subprocess.run([binary, "stdin", "stdout", "-l", languages, "tsv"], input=buffer.getvalue(),
+                                capture_output=True, timeout=300, check=True)
+        version = subprocess.run([binary, "--version"], capture_output=True, timeout=30, check=True)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    paragraphs, confidence = _tsv_paragraphs(result.stdout.decode("utf-8", errors="replace"))
+    if not paragraphs:
+        return None
+    first = (version.stdout or version.stderr).decode(errors="replace").split()
+    engine = f"tesseract {first[1] if len(first) > 1 else ''} ({languages})".replace("  ", " ")
+    return [Paragraph(text=t, page=page_no, ocr=True, ocr_confidence=confidence) for t in paragraphs], engine
+
+
+def _tsv_paragraphs(tsv: str) -> tuple[list[str], float]:
+    """Paragraph texts and the mean word confidence (0-1) from Tesseract's TSV output.
+    Words become lines and lines paragraphs as for born-digital text; each text block
+    (a column, say) is handled on its own, in the order Tesseract reads them."""
+    lines: dict[tuple[int, int, int], dict] = {}
+    confidences: list[float] = []
+    for row in tsv.splitlines()[1:]:
+        cols = row.split("\t")
+        if len(cols) < 12 or cols[0] != "5" or not cols[11].strip() or float(cols[10]) < 0:
+            continue
+        left, top, width, height = (int(c) for c in cols[6:10])
+        confidences.append(float(cols[10]) / 100)
+        line = lines.setdefault((int(cols[2]), int(cols[3]), int(cols[4])),
+                                {"x0": left, "top": top, "bottom": top + height, "words": []})
+        line["x0"], line["top"] = min(line["x0"], left), min(line["top"], top)
+        line["bottom"] = max(line["bottom"], top + height)
+        line["words"].append(cols[11].strip())
+    paragraphs: list[str] = []
+    for block in sorted({key[0] for key in lines}):
+        block_lines = [{**line, "text": " ".join(line["words"])} for key, line in lines.items() if key[0] == block]
+        paragraphs += [text for _, _, text in _paragraphs(block_lines, [])]
+    return paragraphs, (sum(confidences) / len(confidences) if confidences else 0.0)
 
 
 def _paragraphs(lines: list[dict], others: list) -> list[tuple[float, float, str]]:
@@ -272,6 +400,7 @@ def _docx_paragraph(paragraph, source) -> list[Block]:
     for link in paragraph.hyperlinks:
         if link.url:
             blocks.append(Link(text=link.text.strip(), url=link.url))
+    blocks.extend(_equations(paragraph._p))
     return blocks
 
 
@@ -362,6 +491,7 @@ def _pptx_shape(shape, page: int) -> list[Block]:
     for paragraph in shape.text_frame.paragraphs:
         text = paragraph.text.strip()
         if not text:
+            blocks.extend(_equations(paragraph._p, page))
             continue
         if _pptx_is_bullet(paragraph, placeholder in _BULLET_TYPES):
             blocks.append(ListItem(text=text, level=paragraph.level + 1,
@@ -372,6 +502,7 @@ def _pptx_shape(shape, page: int) -> list[Block]:
             if run.hyperlink.address:
                 blocks.append(Link(text=run.text.strip(),
                                    url=run.hyperlink.address, page=page))
+        blocks.extend(_equations(paragraph._p, page))
     return blocks
 
 

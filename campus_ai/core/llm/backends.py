@@ -10,6 +10,12 @@ import urllib.request
 from .response import LLMResponse
 
 
+def _post(url: str, body: dict) -> dict:
+    request = urllib.request.Request(url, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(request, timeout=600) as resp:
+        return json.load(resp)
+
+
 def _to_ollama(message: dict) -> dict:
     """Convert a message with text and base64 image blocks to Ollama's format."""
     content = message["content"]
@@ -29,7 +35,10 @@ def _to_ollama(message: dict) -> dict:
     return out
 
 
-def ollama(messages, model, max_tokens, host, system=None) -> LLMResponse:
+def ollama(messages, model, max_tokens, host, system=None, think=True) -> LLMResponse:
+    """One chat call. `think=False` turns the model's thinking off (short answers in
+    seconds); a model that has no thinking mode rejects the option, so the call is
+    then repeated without it."""
     chat = [{"role": "system", "content": system}] if system else []
     chat += [_to_ollama(m) for m in messages]
     body = {
@@ -38,16 +47,15 @@ def ollama(messages, model, max_tokens, host, system=None) -> LLMResponse:
         "stream": False,
         "options": {"num_predict": max_tokens},
     }
-    request = urllib.request.Request(
-        f"{host.rstrip('/')}/api/chat",
-        data=json.dumps(body).encode(),
-        headers={"Content-Type": "application/json"},
-    )
+    if not think:
+        body["think"] = False
     try:
-        with urllib.request.urlopen(request, timeout=600) as resp:
-            data = json.load(resp)
+        data = _post(f"{host.rstrip('/')}/api/chat", body)
     except urllib.error.HTTPError as e:
         detail = e.read().decode(errors="replace")[:200]
+        if "think" in body and "think" in detail.lower():
+            del body["think"]
+            return ollama(messages, model, max_tokens, host, system, think=True)
         raise RuntimeError(
             f"Ollama at {host} rejected the request ({e.code}): {detail}. If the model is missing, "
             "download it once with `docker compose run --rm fetch-ollama <model>`."
