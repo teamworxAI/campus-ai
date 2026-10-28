@@ -164,6 +164,41 @@ class RetrieverTests(unittest.TestCase):
         self.assertEqual(driver.calls[0][1]["labels"], ["Item"])
         self.assertEqual(len(driver.calls[0][1]["vector"]), 128)
 
+    def test_reranker_orders_the_fused_pool_with_fusion_as_tie_break(self):
+        embedder = gemma()
+        query_vector = embedder.embed(["salmon ocean"], kind="query", data_class="P")[0].tolist()
+        rows = [{"id": f"n{i}", "labels": ["Entity", "Item"], "text": f"text {i}", "vec": query_vector, "score": 1.0}
+                for i in range(5)]
+        driver = FakeDriver(lambda query, params: rows if "VECTOR INDEX" in query else [])
+        reranker = mock.Mock()
+        # fused order is n0..n4 (vector rank); the reranker prefers n3, then ties n1 and n2, then n0
+        reranker.score.side_effect = lambda query, docs, data_class: [{"text 3": 0.9, "text 1": 0.5, "text 2": 0.5}.get(d, 0.1)
+                                                                      for d in docs]
+        hits = HybridRetriever(driver, embedder, candidates=4, reranker=reranker).search("salmon ocean", k=3, neighbors=0)
+        self.assertEqual([hit.id for hit in hits], ["n3", "n1", "n2"])  # n1 before n2: higher fusion score
+        self.assertEqual([hit.rerank for hit in hits], [0.9, 0.5, 0.5])
+        self.assertEqual(hits[0].weight, 0.9)
+        self.assertGreater(hits[1].score, hits[2].score)
+        self.assertEqual([hit.found_by for hit in hits], [["meaning"]] * 3)
+        query, docs = reranker.score.call_args.args
+        self.assertEqual((query, docs), ("salmon ocean", ["text 0", "text 1", "text 2", "text 3"]))  # top `candidates` only
+        self.assertEqual(reranker.score.call_args.kwargs, {"data_class": "P"})
+
+    def test_without_reranker_rerank_is_none(self):
+        embedder = gemma()
+        vector = embedder.embed(["q"], kind="query", data_class="P")[0].tolist()
+        driver = FakeDriver(lambda query, params: [{"id": "a", "labels": ["Entity"], "text": "a", "vec": vector, "score": 1.0}]
+                            if "VECTOR INDEX" in query else [])
+        (hit,) = HybridRetriever(driver, embedder).search("q", neighbors=0)
+        self.assertIsNone(hit.rerank)
+        self.assertEqual(hit.weight, hit.score)
+
+    def test_restricted_query_never_reaches_the_reranker(self):
+        reranker = mock.Mock()
+        with self.assertRaises(RestrictedDataError):
+            HybridRetriever(FakeDriver(), gemma(), reranker=reranker).search("restricted", data_class="R")
+        reranker.score.assert_not_called()
+
     def test_media_query_skips_fulltext(self):
         driver = FakeDriver()
         embedder = gemma()
@@ -190,6 +225,13 @@ class ScriptTests(unittest.TestCase):
             path.write_text('{"id": "p", "modality": "image", "content": "red.png"}\n', encoding="utf-8")
             (node,), _, _ = self.module.load(path)
         self.assertEqual((node.text, node.content), ("", str(Path(tmp) / "red.png")))
+
+    def test_rerank_flag(self):
+        args = self.module.parse(["search", "salmon", "--rerank", "--label", "Project"])
+        self.assertTrue(args.rerank)
+        self.assertEqual(args.labels, ["Project"])
+        self.assertFalse(self.module.parse(["search", "salmon"]).rerank)
+        self.assertTrue(self.module.parse(["eval", "x.jsonl", "--rerank"]).rerank)
 
     def test_record_data_class_kept(self):
         with tempfile.TemporaryDirectory() as tmp:
