@@ -18,10 +18,31 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
+from campus_ai.core.eval import report
 from campus_ai.course_access.audit import audit
 from campus_ai.course_access.parser import Image, Table, parse
 
 HERE = Path(__file__).parent
+
+
+def build_report(rows: list[tuple], failures: list[tuple], when: datetime, sha: str | None = None) -> str:
+    """rows: (path, licence, pages, blocks, images, tables, issue rules Counter, seconds); failures: (path, error)."""
+    totals = Counter()
+    for row in rows:
+        totals.update(row[6])
+    table = [(p, lic, pages if pages is not None else "-", blocks, img, tab, sum(rules.values()),
+              ", ".join(f"{r} x{n}" if n > 1 else r for r, n in sorted(rules.items())), f"{s:.1f}")
+             for p, lic, pages, blocks, img, tab, rules, s in rows]
+    sections = [(None, report.table(["Document", "Licence", "Pages", "Blocks", "Images", "Tables", "Issues", "Rules", "Seconds"],
+                                    table))]
+    if failures:
+        sections.append(("Failed to parse", [f"- `{p}`: {err}" for p, err in failures]))
+    sections.append(("Issues by rule, all documents", report.table(["Rule", "Count"], totals.most_common())))
+    return report.render(
+        "Audit of the A6 corpus",
+        f"{len(rows)} documents audited, {len(failures)} failed to parse. "
+        "Issue counts are what the deterministic rules find; they are not yet checked against a specialist's labels.",
+        when=when, sections=sections, sha=sha)
 
 
 def main() -> int:
@@ -31,10 +52,11 @@ def main() -> int:
         print(f"No corpus at {root}: run `docker compose run --rm fetch-course-docs` first")
         return 1
     records = {}
-    for line in manifest.read_text(encoding="utf-8").splitlines():
-        record = json.loads(line)
-        records[record["path"]] = record  # the last record per path wins
-    rows, totals, failures = [], Counter(), []
+    for line in manifest.read_text(encoding="utf-8").split("\n"):
+        if line.strip():
+            record = json.loads(line)
+            records[record["path"]] = record  # the last record per path wins
+    rows, failures = [], []
     for path, record in sorted(records.items()):
         start = time.perf_counter()
         try:
@@ -44,29 +66,12 @@ def main() -> int:
             failures.append((path, f"{type(exc).__name__}: {exc}"))
             continue
         seconds = time.perf_counter() - start
-        rules = Counter(issue.rule for issue in issues)
-        totals.update(rules)
         images = sum(isinstance(b, Image) for b in document.blocks)
         tables = sum(isinstance(b, Table) for b in document.blocks)
         rows.append((path, record["licence"], document.page_count, len(document.blocks), images, tables,
-                     len(issues), ", ".join(f"{r} x{n}" if n > 1 else r for r, n in sorted(rules.items())), seconds))
+                     Counter(issue.rule for issue in issues), seconds))
     when = datetime.now(timezone.utc)
-    lines = [f"# Audit of the A6 corpus", "",
-             f"{when:%Y-%m-%d %H:%M} UTC. {len(rows)} documents audited, {len(failures)} failed to parse. "
-             "Issue counts are what the deterministic rules find; they are not yet checked against a specialist's labels.",
-             "", "| Document | Licence | Pages | Blocks | Images | Tables | Issues | Rules | Seconds |",
-             "|---|---|---|---|---|---|---|---|---|"]
-    lines += [f"| {p} | {lic} | {pages if pages is not None else '-'} | {blocks} | {img} | {tab} | {n} | {rules} | {s:.1f} |"
-              for p, lic, pages, blocks, img, tab, n, rules, s in rows]
-    if failures:
-        lines += ["", "## Failed to parse", ""] + [f"- `{p}`: {err}" for p, err in failures]
-    lines += ["", "## Issues by rule, all documents", "", "| Rule | Count |", "|---|---|"]
-    lines += [f"| {rule} | {n} |" for rule, n in totals.most_common()]
-    report = "\n".join(lines) + "\n"
-    print(report)
-    out = HERE / f"audit_corpus_{when:%Y%m%d}.md"
-    out.write_text(report, encoding="utf-8")
-    print(f"Report: {out.relative_to(HERE.parents[1])}")
+    report.save(build_report(rows, failures, when, report.git_sha(HERE)), "audit_corpus", HERE, when)
     return 0
 
 

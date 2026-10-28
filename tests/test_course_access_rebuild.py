@@ -3,13 +3,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import docx
 from PIL import Image as PILImage
 
 from campus_ai.course_access.alt_text import AltText
 from campus_ai.course_access.audit import STRUCTURE, TABLES, TEXT, audit
-from campus_ai.course_access.parser import Document, Heading, Image, Link, ListItem, Paragraph, Table, parse
+from campus_ai.course_access.parser import Document, Equation, Heading, Image, Link, ListItem, Paragraph, Table, parse
 from campus_ai.course_access.rebuild import apply, compare, statement, to_docx, to_html, verify
 from campus_ai.course_access.workers import Fix
+from test_course_access_mathml import QUADRATIC, SUM, add_equation as _add_equation, display
 
 
 def png() -> bytes:
@@ -140,6 +142,59 @@ class DocxRoundTripTests(unittest.TestCase):
         self.assertEqual(back.blocks[10].text, "[An EMF drawing]")
         self.assertEqual(back.blocks[11].text, "Soft break here")  # control characters can't go into XML
         self.assertEqual([i.rule for i in issues], [])
+
+
+class EquationRebuildTests(unittest.TestCase):
+    def _document(self):
+        d = docx.Document()
+        d.core_properties.title = "Maths"
+        d.core_properties.language = "en-CA"
+        d.add_heading("Algebra", level=1)
+        _add_equation(d.add_paragraph("Solve it:"), display(QUADRATIC))
+        _add_equation(d.add_paragraph("The total is "), SUM)
+        return d
+
+    def test_html_has_math_with_alttext(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "maths.docx"
+            self._document().save(path)
+            page = to_html(parse(path))
+        self.assertIn('<math xmlns="http://www.w3.org/1998/Math/MathML" display="block" alttext="x = (-b', page)
+        self.assertIn("<mfrac>", page)
+        self.assertIn("<munderover>", page)
+        self.assertEqual(page.count("<math "), 2)
+        self.assertEqual(page.count('display="block"'), 1)  # the inline one is not display
+        self.assertIn("<p>Solve it:</p>", page)
+
+    def test_docx_round_trip_keeps_real_equations(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source, rebuilt = Path(tmp) / "maths.docx", Path(tmp) / "out.docx"
+            self._document().save(source)
+            original = parse(source)
+            to_docx(original, rebuilt)
+            again = parse(rebuilt)
+            xml = docx.Document(str(rebuilt)).element.xml
+        equations = [b for b in again.blocks if isinstance(b, Equation)]
+        self.assertEqual([(e.text, e.display) for e in equations],
+                         [(b.text, b.display) for b in original.blocks if isinstance(b, Equation)])
+        self.assertEqual(equations[0].mathml, [b for b in original.blocks if isinstance(b, Equation)][0].mathml)
+        self.assertIn("<m:nary>", xml)  # a real Word equation, not text
+
+    def test_docx_falls_back_to_text_without_xml(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "out.docx"
+            to_docx(doc(Equation(mathml="<math/>", text="x = 1")), path)
+            again = parse(path)
+        self.assertEqual([type(b).__name__ for b in again.blocks], ["Paragraph"])
+        self.assertEqual(again.blocks[0].text, "x = 1")
+
+    def test_html_without_mathml_falls_back_to_text(self):
+        self.assertIn("<p>x &lt; 1</p>", to_html(doc(Equation(mathml="", text="x < 1"))))
+
+    def test_empty_equation_is_flagged(self):
+        issues = audit(doc(Equation(mathml="<math/>", text="")))
+        self.assertEqual([(i.rule, i.criterion) for i in issues], [("equation-empty", "1.1.1")])
+        self.assertEqual(audit(doc(Equation(mathml="<math/>", text="x"))), [])
 
 
 class StatementTests(unittest.TestCase):

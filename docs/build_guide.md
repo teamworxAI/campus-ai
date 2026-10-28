@@ -190,9 +190,10 @@ PyAV (embed image) or Neo4j, and run in step 7.
 docker compose run --rm fetch-models
 ```
 
-This downloads EmbeddingGemma 2 and the e5-small baseline (about 2 GB) into
-`MODELS_DIR`, using the layout `<org>/<model>`. It is the only step that
-downloads models.
+This downloads EmbeddingGemma 2, the e5-small baseline and the
+Qwen3-Reranker-0.6B reranker (about 3 GB) into `MODELS_DIR`, using the layout
+`<org>/<model>`. It is the only step that downloads models. (On the team's
+inference box, `--reranker qwen3-reranker-4b` fetches the larger reranker instead.)
 
 Then fetch the language and vision models that the LLM router uses, served by
 the `ollama` service:
@@ -285,6 +286,28 @@ The first router call per model includes loading it, so it is the slowest;
 repeat the run for warm timings. Commit the report: it is B1's evidence and
 the input for sizing hardware. On Linux the report is owned by root; `sudo
 chown` it if needed.
+
+### Run the evals
+
+Every eval script in `evals/` writes a dated Markdown report next to itself
+(`<name>_<YYYYMMDD>.md`) through the shared harness in `campus_ai/core/eval/`
+(gold-set format, metrics, local judge, report writer). `evals/run.py` runs
+them and lists the reports; commit the reports with the PR that changed the
+product.
+
+```bash
+docker compose run --rm test python evals/run.py            # no stack: audit of the A6 corpus
+docker compose run --rm test python evals/run.py --ollama   # + alt-text probes, worker proposals, remediation
+docker compose run --rm embed python evals/run.py --no-offline --graph --limit 100   # probes, R6 back-test, gold sets
+docker compose run --rm embed python evals/research_assistant/gold_eval.py           # gold sets only
+```
+
+The `test` and `embed` services mount `./evals`, so the reports land in
+your checkout. `gold_eval.py` scores the gold
+sets in `evals/research_assistant/` (recall@10, MRR, nDCG@10); the format is
+the docstring of `campus_ai/core/eval/gold.py`. The containers have no git,
+so a report records the commit only when you pass it:
+`-e GIT_SHA=$(git rev-parse --short HEAD)`.
 
 ## 11. Optional: NVIDIA GPU
 
