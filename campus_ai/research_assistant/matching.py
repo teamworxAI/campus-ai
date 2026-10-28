@@ -22,8 +22,10 @@ from typing import Any
 
 from campus_ai.core.embed.reranker import Reranker
 from campus_ai.core.graph import HybridRetriever
+from campus_ai.core.graph.retriever import RRF_K
 
 CANDIDATES = 50
+WEIGHTINGS = ("probability", "rank", "rrf")  # how reranked projects count towards their organisations (B2 follow-up)
 COORDINATOR_WEIGHT = 1.25  # a coordinator of a matching project is a stronger lead than a participant
 
 # Horizon Europe eligibility by country, as of 2026 (check before relying on it: associations change).
@@ -42,12 +44,37 @@ def research_reranker() -> Reranker:
     return Reranker(instruction=RERANK_INSTRUCTION)
 
 
+def project_weights(hits: list, weighting: str = "probability") -> dict[str, float]:
+    """What each matching project counts for when its organisations are scored.
+
+    Hits arrive in the order the search ranked them. Without a reranker every
+    weighting is the fusion score. With one: `probability` is the reranker's
+    score (it saturates near 0 or 1, so a few projects dominate), `rank` is
+    1 / (k + reranked rank), and `rrf` adds the fusion rank's 1 / (k + rank),
+    the same reciprocal rank fusion the retriever uses.
+    """
+    if weighting not in WEIGHTINGS:
+        raise ValueError(f"weighting must be one of {WEIGHTINGS}")
+    if not hits or any(h.rerank is None for h in hits) or weighting == "probability":
+        return {h.id: h.weight for h in hits}
+    by_rerank = sorted(hits, key=lambda h: -h.rerank)  # stable: the order the retriever gave breaks ties
+    weights = {h.id: 1.0 / (RRF_K + rank) for rank, h in enumerate(by_rerank, start=1)}
+    if weighting == "rrf":
+        for rank, h in enumerate(sorted(hits, key=lambda h: -h.score), start=1):
+            weights[h.id] += 1.0 / (RRF_K + rank)
+    return weights
+
+
 class ResearchSearch:
     """`reranker` (e.g. `research_reranker()`) adds the cross-encoder step to every search; None leaves it off."""
 
-    def __init__(self, driver: Any, embedder: Any, database: str | None = None, reranker: Any = None):
+    def __init__(self, driver: Any, embedder: Any, database: str | None = None, reranker: Any = None,
+                 pool: int | None = None, weighting: str = "probability"):
+        if weighting not in WEIGHTINGS:
+            raise ValueError(f"weighting must be one of {WEIGHTINGS}")
         self.driver = driver
-        self.retriever = HybridRetriever(driver, embedder, database, candidates=CANDIDATES, reranker=reranker)
+        self.weighting = weighting
+        self.retriever = HybridRetriever(driver, embedder, database, candidates=CANDIDATES, reranker=reranker, pool=pool)
         self.database = database
 
     def run(self, query: str, **params: Any) -> list[dict]:
@@ -85,10 +112,19 @@ class ResearchSearch:
     # --- journey 1: partners --------------------------------------------------
 
     def partners(self, query: str, k: int = 10, countries: str = "associated", exclude_project: str | None = None,
-                 candidates: int = 30, home: str = "CA") -> list[dict]:
-        """EU organisations ranked by the matching projects they took part in; `home` (the asking side) is left out."""
-        hits = self.retriever.search(query, candidates + 1, labels=["Project"], neighbors=0)
-        hits = [h for h in hits if h.id != exclude_project][:candidates]
+                 candidates: int = 30, home: str = "CA", weighting: str | None = None) -> list[dict]:
+        """EU organisations ranked by the matching projects they took part in; `home` (the asking side) is left out.
+
+        `weighting` overrides the search's default (see `project_weights`).
+        """
+        weighting = weighting or self.weighting
+        # With a reranker, take its whole pool: the combined weightings need the fusion ranks of all of it.
+        want = max(candidates + 1, self.retriever.pool) if self.retriever.reranker is not None else candidates + 1
+        hits = [h for h in self.retriever.search(query, want, labels=["Project"], neighbors=0) if h.id != exclude_project]
+        weight_of = project_weights(hits, weighting)
+        if weighting == "rrf":
+            hits.sort(key=lambda h: -weight_of[h.id])
+        hits = hits[:candidates]
         if not hits:
             return []
         allowed = COUNTRY_SETS.get(countries, EU | ASSOCIATED)
@@ -98,7 +134,7 @@ class ResearchSearch:
             "o.url AS url, o.fields AS fields, o.projects AS projects, r.role AS role, "
             "p.id AS project, p.acronym AS acronym, p.title AS title, p.url AS project_url, p.start AS start",
             ids=[hit.id for hit in hits])
-        score_of = {hit.id: hit.weight for hit in hits}
+        score_of = weight_of
         orgs: dict[str, dict] = {}
         total: defaultdict[str, float] = defaultdict(float)
         for row in rows:

@@ -64,11 +64,12 @@ def fuse(rankings: Sequence[Sequence[str]], k: int = RRF_K) -> dict[str, float]:
 
 class HybridRetriever:
     def __init__(self, driver: Any, embedder: Embedder, database: str | None = None, candidates: int = 50,
-                 reranker: Any = None):
+                 reranker: Any = None, pool: int | None = None):
         self.driver = driver
         self.embedder = embedder
         self.database = database
         self.candidates = candidates
+        self.pool = pool or candidates  # how many fused candidates the reranker scores
         self.reranker = reranker  # e.g. campus_ai.core.embed.reranker.Reranker; None skips the step
 
     def run(self, query: str, **params: Any) -> list[dict]:
@@ -128,7 +129,7 @@ class HybridRetriever:
         fused = sorted(scores, key=lambda id_: -scores[id_])
         rerank: dict[str, float] = {}
         if self.reranker is not None and modality == "text":
-            pool = fused[:max(k, self.candidates)]
+            pool = fused[:max(k, self.pool)]
             rerank = dict(zip(pool, self.reranker.score(query, [found[id_]["text"] or "" for id_ in pool],
                                                         data_class=data_class)))
             fused = sorted(pool, key=lambda id_: (-rerank[id_], -scores[id_]))
