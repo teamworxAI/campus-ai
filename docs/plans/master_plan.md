@@ -424,7 +424,7 @@ Each card is sized for one cloud session and one PR.
 | P1b | Data-class gate in the router (P/I/S/R; R never reaches a model) and per-call trace of model, host and class | P1, P2 | Built (#18); embedder refuses R too |
 | P2 | Tracing module: per-run JSONL log of tool calls, model, host, data class, tokens, latency | P0 | Built (#18) |
 | P3 | Review queue (approve/edit/reject): `course-access` service (`campus_ai/course_access/api.py`) and `web/static/review/`; upload, audit, proposals with evidence and confidence, approve/edit/reject each, rebuild, download DOCX/HTML/statement. FastAPI + static page rather than Streamlit (decision: no new dependency, same stack as R9) | P0 | Built (Course Access); the Research Assistant's review reuses it when R4 lands |
-| P4 | MCP server template wrapping a product's public functions | P1 | To do |
+| P4 | MCP server template wrapping a product's public functions | P1 | Built: `campus_ai/core/mcp.py` builds a server from plain functions with the official `mcp` SDK (MIT): stdio, or `--http PORT`; class R refused, every call traced (P2). Servers: `campus_ai/course_access/mcp_server.py` (audit, propose, remediate) and `campus_ai/research_assistant/mcp_server.py` (experts, partners, calls, consortium, brief, collections); run them as in the user guide |
 | P5 | Graph core: Neo4j writer, vector + fulltext indexes, hybrid retriever (RRF) | P0, P7 | Built (#5) |
 | P6 | Eval harness: gold-set format, RAGAS + deterministic metrics, report | P0 | Next |
 | P7 | Embedder module with EmbeddingGemma 2 + text baseline + bake-off script (D7) | P0 | Built (#3); real bake-off B2 pending |
