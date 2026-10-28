@@ -434,10 +434,11 @@ over 3000 SFU works (2226 researchers) and the full Horizon Europe bundle
 (24k projects, 36k organisations, 3808 call topics; 71k nodes in the Neo4j
 volume), and the Course Access review queue at `/review/`. Harvests live in
 `D:/campus-ai/data/{europeana,course_access,openalex,cordis}`; Ollama's
-weights in `D:/models/ollama` (`gemma4:e2b` only; `.env` points the three
-router tasks at it). `.env` there sets `MODELS_DIR=D:/models`,
-`DATA_DIR=D:/campus-ai/data`, `COMPOSE_FILE=compose.yaml;compose.gpu.yaml`,
-`CAMPUS_AI_MODEL_*=gemma4:e2b`, `OPENALEX_API_KEY` and `EUROPEANA_API_KEY`
+weights in `D:/models/ollama` (`gemma4:e2b` and, since Oct 28, `gemma4:e4b`;
+`.env` points the three router tasks at e4b). `.env` there sets
+`MODELS_DIR=D:/models`, `DATA_DIR=D:/campus-ai/data`,
+`COMPOSE_FILE=compose.yaml;compose.gpu.yaml`,
+`CAMPUS_AI_MODEL_*=gemma4:e4b`, `OPENALEX_API_KEY` and `EUROPEANA_API_KEY`
 (the leaked one, until rotated). After pulling `main`, run `docker compose
 build` and `docker compose up -d web ollama`, then `docker compose exec web
 nginx -s reload` if the `web` container was not recreated; the graph in the
@@ -466,9 +467,14 @@ discover -s tests` for quick checks inside its cloud container. On Oct 22,
   `r1-openalex`, `r2-cordis`, `r4-matching`, `r5-consortium`,
   `fix-jsonl-line-separators`, `fix-rights-screen-research-graph`,
   `docs-handoff-oct23` (all merged).
-- Models on the laptop: only `gemma4:e2b` is downloaded (via `fetch-ollama`,
-  Oct 22). `gemma4:e4b` (7 GB) would improve alt text and the brief; the
-  12B model belongs on the inference box (4 GB GPU here).
+- Models on the laptop: `gemma4:e2b` (Oct 22) and `gemma4:e4b` (Oct 28, the
+  user's yes; 6.6 GB via `fetch-ollama`). Measured on the quiet laptop with
+  the same brief prompt: e4b 104 s for 1101 tokens with 7 citations, e2b
+  98 s for 962 tokens with 5 citations, so e4b costs no time (both run at
+  about 10 tokens/s, split between the 4 GB GPU and the CPU) and reads
+  better; `.env` now points all three tasks at e4b. The first call after
+  five minutes idle pays 70-100 s of model loading: warm it before a demo.
+  The 12B model belongs on the inference box.
 - Decide on NC-licensed course material for the A6 corpus (KPU Discrete Math
   slides, MIT OCW, LOUIS biology slides were found and left out); CUNY's CC BY
   lectures sit behind a bot check and need downloading by hand.
@@ -497,9 +503,11 @@ graph. Then: the reranker retry's verdict once its report lands; R5's
 network worker once EU-side researchers are in the graph; a search to fill
 the roles the complementary set leaves open; B3 and B5 once a specialist
 and the research officers label the gold sets (the P6 format is ready); the
-full-graph embedder comparison (needs a second index); whether the demo
-laptop gets `gemma4:e4b` (the brief took 9 minutes under load on e2b); the
-Lisbon dry run with `docs/demo/demo_script.md`.
+full-graph embedder comparison (needs a second index); a per-organisation
+signal in partner search (the reranker retry showed retrieval, not
+reranking, is the ceiling: the hidden partner is in the top 30 projects
+only 62% of the time); the Lisbon dry run with `docs/demo/demo_script.md`
+on `gemma4:e4b`.
 
 ## 7. Lessons and gotchas
 
