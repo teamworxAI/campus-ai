@@ -269,9 +269,32 @@ independent PRs against `main`, open at hand-off:
   projects) at 10 s per query; expert results read better with it, partner
   search sums probabilities that cluster at 0 or 1. Next try: rank weights.
 
+The second round (Oct 27-28, same recipe, four agents plus the coordinator):
+
+- **#41 P4** MCP servers: `core/mcp.py` over the official `mcp` SDK (the one
+  new dependency, MIT; lock diff additive), one server per product, class R
+  refused, every call traced; verified over stdio against the live stack.
+- **#42** one-line nginx fix: `/review/` fell through to the collections page
+  (`try_files` had no directory index). Found by the demo-script agent.
+- **#43** demo docs: `docs/demo/` script, sample pack and two one-pagers,
+  every Research Assistant step verified live with queries and timings.
+- **#44 R4** complementarity scorer and journey router, a draft stacked on
+  #38: "adds" lines citing project ids, the complementary set of three with
+  the consortium rule, `/api/ask` routing by rules first and the model second.
+- **#45 P1** thinking off for the classification task: one-digit answers in
+  2 s instead of 35-156 s on gemma4 (the router's model fallback, the judge
+  and the A4 workers all go through it).
+- The reranker retry (rank and RRF weightings, pool size, multi-variant
+  back-test; branch `b2-reranker-weights`, stacked on #39) is coded and
+  tested but its CPU measurement runs for hours (500 s per project at pool
+  50); its PR waits for the report.
+
 Overlaps to expect when merging: #36 and #39 both touch the three research
-eval scripts; #35 and #37 both touch `parser.py` (different functions).
-Merge `main` into whichever lands second.
+eval scripts; #35 and #37 both touch `parser.py` (different functions); #38
+and #42 both touch `web/nginx.conf` (different lines). Merge `main` into
+whichever lands second. The running `web` container had the config from
+before the Course Access proxy rule until the Oct 28 reload: `nginx -s reload`
+is now in the demo pre-flight.
 
 How the agents were run (the recipe is in section 4 and the lessons in
 section 7): their worktrees were bind-mounted over the shared images
@@ -465,18 +488,18 @@ discover -s tests` for quick checks inside its cloud container. On Oct 22,
 - Answer: remove the early plan copy on `sfu-aria/student-assistant` branch
   `ccr-b486116f-phsbvu`?
 
-**Next cards** (section 5 of the plan, after the Oct 23-26 session): first
-merge #35-#39 and on the laptop run `docker compose build` (A7 changed the
-Dockerfile), `docker compose up -d web` (recreates `api` and `course-access`
-on the new images) and `docker compose exec web nginx -s reload` (R4 added a
-location); the CallTopic nodes are already updated in the graph. Then: the
-R4 complementarity scorer (what each partner adds) and the router between
-journeys; a second reranker attempt weighting organisations by reranked
-rank rather than summed probabilities (B2's report lists it); R5's network
-worker once EU-side researchers are in the graph; B3 and B5 once a
-specialist and the research officers label the gold sets (the P6 format is
-ready); the full-graph embedder comparison (needs a second index); the
-Lisbon dry run.
+**Next cards** (section 5 of the plan, after the Oct 23-28 sessions): first
+merge #35-#45 (#44 after #38) and on the laptop run `docker compose build`
+(A7 changed the Dockerfile, P4 the lock), `docker compose up -d web`
+(recreates `api` and `course-access` on the new images) and `docker compose
+exec web nginx -s reload`; the CallTopic nodes are already updated in the
+graph. Then: the reranker retry's verdict once its report lands; R5's
+network worker once EU-side researchers are in the graph; a search to fill
+the roles the complementary set leaves open; B3 and B5 once a specialist
+and the research officers label the gold sets (the P6 format is ready); the
+full-graph embedder comparison (needs a second index); whether the demo
+laptop gets `gemma4:e4b` (the brief took 9 minutes under load on e2b); the
+Lisbon dry run with `docs/demo/demo_script.md`.
 
 ## 7. Lessons and gotchas
 
