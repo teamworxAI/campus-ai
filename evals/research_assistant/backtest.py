@@ -8,7 +8,7 @@ participant) back among the top 10 organisations. Reports recall@10 and the
 mean reciprocal rank, with the misses listed. Runs in the `embed` service
 over whatever is indexed (plan 4.5).
 
-    docker compose run --rm embed python evals/research_assistant/backtest.py [--limit 100] [--rerank]
+    docker compose run --rm embed python evals/research_assistant/backtest.py [--limit 100] [--rerank] [--backend e5-small]
 
 With `--rerank --weightings probability,rank,rrf` one pass scores every project's
 pool once (the scores are cached per query and document) and reports recall@10
@@ -25,7 +25,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from campus_ai.core.embed import get_embedder
+from campus_ai.core.embed import BACKENDS, DEFAULT_BACKEND, get_embedder
 from campus_ai.core.graph import connect
 from campus_ai.research_assistant.matching import ASSOCIATED, CANDIDATES, EU, WEIGHTINGS, ResearchSearch, research_reranker
 
@@ -38,6 +38,8 @@ def parse(argv=None) -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=100, help="projects to test (most recent first)")
     parser.add_argument("--home", default="CA", help="the home country whose projects are tested")
     parser.add_argument("--rerank", action="store_true", help="add the cross-encoder reranker step (B2)")
+    parser.add_argument("--backend", default=DEFAULT_BACKEND, choices=list(BACKENDS),
+                        help="embedder to query with (the graph must be indexed with the same one; B2)")
     parser.add_argument("--weightings", default="probability",
                         help=f"with --rerank, comma-separated project weightings to compare: {', '.join(WEIGHTINGS)}")
     parser.add_argument("--pool", type=int, default=None, help="with --rerank, rerank only the top N fused candidates")
@@ -95,7 +97,7 @@ def score(ranks: list) -> tuple[float, float]:
 
 def main(argv=None) -> int:
     args = parse(argv)
-    embedder = CachedEmbedder(get_embedder())
+    embedder = CachedEmbedder(get_embedder(args.backend))
     reranker = CachedReranker(research_reranker()) if args.rerank else None
     model = embedder.name + (f" + {reranker.name}" if reranker else "")
     variants = [w for w in args.weightings.split(",") if w] if reranker else []
@@ -161,7 +163,8 @@ def main(argv=None) -> int:
         lines.append(f"| {a} | {nm} | {c} | {cells} |" + (f" {in_pool or 'no'} |" if variants else ""))
     report = "\n".join(lines) + "\n"
     print(report)
-    stem = args.report or f"backtest_{'rerank_' if reranker else ''}{when:%Y%m%d}"
+    tag = "" if args.backend == DEFAULT_BACKEND else f"{args.backend}_"
+    stem = args.report or f"backtest_{'rerank_' if reranker else ''}{tag}{when:%Y%m%d}"
     out = HERE / f"{stem}.md"
     out.write_text(report, encoding="utf-8")
     print(f"Report: {out.relative_to(HERE.parents[1])}")
