@@ -89,7 +89,7 @@ decisions are in section 8; section 5 has the remaining schedule.
 | Skills | Domain procedures as plain files (`SKILL.md` + scripts) the local agent loop reads: WCAG remediation playbook, Horizon call analysis | `campus_ai/<product>/skills/` |
 | MCP servers | One per product, thin wrappers over the product's functions | `campus_ai/<product>/mcp_server.py` |
 | Review queue | One approval UI pattern for both products: item, proposed change, evidence, approve/edit/reject. Built (P3) as a FastAPI service plus a static page in the existing `web` front end, not Streamlit: no new dependency or image, same offline stack as collections search | `campus_ai/course_access/api.py`, `web/static/review/` (Course Access first; the Research Assistant's outreach review reuses the pattern) |
-| Evaluation | RAGAS (Apache-2.0) + deterministic metrics, per-product gold sets; any LLM judge is a local model, never a hosted one | `campus_ai/core/eval/`, `evals/` |
+| Evaluation | Deterministic metrics (recall@k, MRR, nDCG, citation precision, issues fixed and introduced, share sent to review) + a small local-model judge (faithfulness, alt-text quality) instead of RAGAS (D11); per-product gold sets in one JSONL format; one report writer; any LLM judge is a local model, never a hosted one | `campus_ai/core/eval/`, `evals/` |
 | Tracing | Log every run: tool calls, model, host, data class, tokens, latency, outcome; metadata only, never inputs or outputs (no cost: models are local) | `campus_ai/core/tracing.py` |
 
 Hosting: everything, models included, runs in Docker on the institution's own
@@ -347,7 +347,8 @@ citations, human approval before outreach.
   one EU partner, check whether it appears in the top 10 (recall@10).
 - Call-fit: research officers rate 20 shortlists (1-5).
 - Citation precision: share of claims backed by a valid ID (target 100%).
-- RAGAS faithfulness metrics from the shared eval harness.
+- Faithfulness of briefs to their evidence, scored 1-5 by the shared eval
+  harness's local judge (`campus_ai/core/eval/judge.py`, D11).
 - Collections search: recall@10 on 50 labelled queries across text, image,
   audio and video; cross-modal hits (text query finds a photo or clip).
 - Embedder bake-off (week 1): EmbeddingGemma 2 vs a text-only baseline on
@@ -426,7 +427,7 @@ Each card is sized for one cloud session and one PR.
 | P3 | Review queue (approve/edit/reject): `course-access` service (`campus_ai/course_access/api.py`) and `web/static/review/`; upload, audit, proposals with evidence and confidence, approve/edit/reject each, rebuild, download DOCX/HTML/statement. FastAPI + static page rather than Streamlit (decision: no new dependency, same stack as R9) | P0 | Built (Course Access); the Research Assistant's review reuses it when R4 lands |
 | P4 | MCP server template wrapping a product's public functions | P1 | To do |
 | P5 | Graph core: Neo4j writer, vector + fulltext indexes, hybrid retriever (RRF) | P0, P7 | Built (#5) |
-| P6 | Eval harness: gold-set format, RAGAS + deterministic metrics, report | P0 | Next |
+| P6 | Eval harness: gold-set format, deterministic metrics + local judge (D11), report | P0 | Built: `campus_ai/core/eval/` holds the JSONL gold format (`gold.py`), pure metrics (`metrics.py`), a local-model judge (`judge.py`) and one report writer (`report.py`) used by all `evals/` scripts; `evals/run.py` runs them; provisional gold sets `gold_experts.jsonl` and `gold_partners.jsonl` scored by `evals/research_assistant/gold_eval.py` |
 | P7 | Embedder module with EmbeddingGemma 2 + text baseline + bake-off script (D7) | P0 | Built (#3); real bake-off B2 pending |
 | P8 | Licence guard: test that fails on any non-OSI licence in packages, images and model weights (two named exceptions) | P0 | Built (#9) |
 | P9 | Ollama in compose: an offline Ollama service from local weights (`MODELS_DIR/ollama`, read-only) on the internal network, a one-time `fetch-ollama` job, and `OLLAMA_HOST` (the service, or `OLLAMA_URL` from `.env`) / `CAMPUS_AI_MODEL_*` passed to `embed`, `api` and `smoke`. Also B1's smoke test (`scripts/smoke_test.py`) | P1 | Built; B1 passed on the demo laptop Oct 22 (9/9, `evals/smoke/`) |
@@ -479,6 +480,7 @@ Commit, push to your branch, and open a PR with the eval results.
 | D8 | Licences | **Decided (Oct 21, prime directive 1):** open source only, no paid licences. OSI-approved licences for all code, dependencies, images, tools and model weights; permissive preferred; no AGPL (so PyMuPDF is replaced). campus-ai is Apache-2.0. Two named exceptions: free GPU vendor runtimes (NVIDIA CUDA), optional, with a CPU path that always works; and Docker Desktop as a developer tool on Windows workstations (Oct 21). Deployments need only the open-source Docker Engine + Compose (or Podman), and nothing may depend on Desktop-only features |
 | D9 | Vision model for alt text (A3) | **Open:** a local open-weight vision-language model under an OSI-approved licence (e.g. Apache-2.0 or MIT weights; "community" licences don't qualify), chosen by bake-off on the A6 gold set, running in a container from local weights |
 | D10 | Model register | **Decided:** the table in section 2; the router's allow-list must match it. Adding a model means a D8 licence check and a register row in the same PR |
+| D11 | Eval judge | **Decided (Oct 23, P6):** a small local judge in `core/eval` instead of RAGAS (RAGAS pulls in langchain and OpenAI client packages, far more than needed). RAGAS could be added later behind the same metric names if its exact definitions are wanted |
 
 ## 9. Risks
 
