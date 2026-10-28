@@ -420,7 +420,7 @@ Each card is sized for one cloud session and one PR.
 | ID | Card | Depends on | Status |
 |---|---|---|---|
 | P0 | Project skeleton: `pyproject.toml` (uv), `campus_ai/` package, unittest setup, SessionStart hook | - | Built (#1) |
-| P1 | LLM router over local open-weight models only, on Ollama (local, or the team's inference box). Defaults Gemma 4 (Apache-2.0); refuses models not in its open-licence allow-list | P0 | Built (#2, local-only in #10) |
+| P1 | LLM router over local open-weight models only, on Ollama (local, or the team's inference box). Defaults Gemma 4 (Apache-2.0); refuses models not in its open-licence allow-list | P0 | Built; classification runs with thinking off (`THINK` in `config.py`, Oct 28): one-digit and one-tag answers in seconds instead of minutes on gemma4 (#2, local-only in #10) |
 | P1b | Data-class gate in the router (P/I/S/R; R never reaches a model) and per-call trace of model, host and class | P1, P2 | Built (#18); embedder refuses R too |
 | P2 | Tracing module: per-run JSONL log of tool calls, model, host, data class, tokens, latency | P0 | Built (#18) |
 | P3 | Review queue (approve/edit/reject): `course-access` service (`campus_ai/course_access/api.py`) and `web/static/review/`; upload, audit, proposals with evidence and confidence, approve/edit/reject each, rebuild, download DOCX/HTML/statement. FastAPI + static page rather than Streamlit (decision: no new dependency, same stack as R9) | P0 | Built (Course Access); the Research Assistant's review reuses it when R4 lands |
