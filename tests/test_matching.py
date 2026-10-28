@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from campus_ai.core.graph import Hit
 from campus_ai.research_assistant.api import create_app
-from campus_ai.research_assistant.matching import ASSOCIATED, EU, ResearchSearch
+from campus_ai.research_assistant.matching import ASSOCIATED, EU, RERANK_INSTRUCTION, ResearchSearch, research_reranker
 
 
 class Record(dict):
@@ -90,6 +90,50 @@ class PartnerTests(unittest.TestCase):
         self.assertEqual([p["acronym"] for p in wien["evidence"]["projects"]], ["SMOKE", "AIR"])
         self.assertEqual(wien["evidence"]["projects"][0]["role"], "coordinator")
         self.assertEqual(wien["projects_total"], 9)
+
+    def test_reranked_projects_weigh_by_rerank_score(self):
+        driver = FakeDriver({"PARTICIPATED_IN": self.rows})
+        smoke, air = hit("cordis:101", 0.04), hit("cordis:102", 0.02)
+        smoke.rerank, air.rerank = 0.1, 0.9  # the reranker prefers AIR
+        out = search_with(driver, {"Project": [air, smoke]}).partners("air quality", k=10)
+        self.assertEqual([o["name"] for o in out], ["UNIVERSITAET WIEN", "OSLO MET"])
+        self.assertAlmostEqual(out[0]["score"], 0.1 * 1.25 + 0.9)
+        self.assertAlmostEqual(out[1]["score"], 0.9)
+        self.assertEqual([p["acronym"] for p in out[0]["evidence"]["projects"]], ["AIR", "SMOKE"])
+
+    def test_rank_and_rrf_weightings_do_not_saturate(self):
+        driver = FakeDriver({"PARTICIPATED_IN": self.rows})
+        smoke, air = hit("cordis:101", 0.04), hit("cordis:102", 0.02)
+        smoke.rerank, air.rerank = 0.001, 0.999  # the reranker prefers AIR; fusion preferred SMOKE
+        s = search_with(driver, {"Project": [air, smoke]})
+        by_rank = s.partners("air quality", k=10, weighting="rank")
+        self.assertAlmostEqual(by_rank[1]["score"], 1 / 61, places=4)  # OSLO MET: AIR only, reranked first
+        self.assertAlmostEqual(by_rank[0]["score"], 1 / 61 + 1.25 / 62, places=4)
+        by_rrf = s.partners("air quality", k=10, weighting="rrf")
+        self.assertAlmostEqual(by_rrf[1]["score"], 1 / 61 + 1 / 62, places=4)  # AIR: reranked 1st, fused 2nd
+        self.assertAlmostEqual(by_rrf[0]["score"], 2.25 * (1 / 61 + 1 / 62), places=4)
+        self.assertAlmostEqual(by_rrf[0]["evidence"]["projects"][0]["score"], 1 / 62 + 1 / 61, places=4)
+
+    def test_weightings_without_a_reranker_use_fusion_scores(self):
+        from campus_ai.research_assistant.matching import project_weights
+        hits = [hit("a", 0.04), hit("b", 0.02)]
+        for weighting in ("probability", "rank", "rrf"):
+            self.assertEqual(project_weights(hits, weighting), {"a": 0.04, "b": 0.02})
+        with self.assertRaises(ValueError):
+            project_weights(hits, "sum")
+        with self.assertRaises(ValueError):
+            ResearchSearch(FakeDriver({}), None, weighting="sum")
+
+    def test_pool_reaches_the_retriever(self):
+        s = ResearchSearch(FakeDriver({}), None, reranker=object(), pool=20)
+        self.assertEqual((s.retriever.pool, s.retriever.candidates), (20, 50))
+        self.assertEqual(ResearchSearch(FakeDriver({}), None).retriever.pool, 50)
+
+    def test_reranker_reaches_the_retriever(self):
+        reranker = object()
+        self.assertIs(ResearchSearch(FakeDriver({}), None, reranker=reranker).retriever.reranker, reranker)
+        self.assertIsNone(ResearchSearch(FakeDriver({}), None).retriever.reranker)
+        self.assertEqual(research_reranker().instruction, RERANK_INSTRUCTION)
 
     def test_country_sets_and_exclusion(self):
         driver = FakeDriver({"PARTICIPATED_IN": self.rows})

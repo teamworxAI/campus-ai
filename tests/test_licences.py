@@ -15,6 +15,7 @@ import unittest
 from pathlib import Path
 
 from campus_ai.core.embed import BACKENDS
+from campus_ai.core.embed.reranker import RERANKERS
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -42,6 +43,9 @@ IMAGES = {
 MODELS = {
     "google/embeddinggemma-2": "Apache-2.0",
     "intfloat/multilingual-e5-small": "MIT",
+    # Rerankers (B2): model card metadata `license: apache-2.0`, not gated; both read Oct 23, 2026.
+    "Qwen/Qwen3-Reranker-0.6B": "Apache-2.0",
+    "Qwen/Qwen3-Reranker-4B": "Apache-2.0",
 }
 
 
@@ -102,8 +106,9 @@ class LicenceGuardTests(unittest.TestCase):
         self.assertEqual(missing, [], "add these images and their licences to IMAGES")
 
     def test_models_are_listed_and_open(self):
-        for name, make in BACKENDS.items():
-            model_id = make().model_id
+        loadable = [make().model_id for make in BACKENDS.values()] + list(RERANKERS.values())
+        self.assertEqual(sorted(loadable), sorted(MODELS), "MODELS must list exactly the models the code can load")
+        for model_id in loadable:
             self.assertIn(model_id, MODELS, f"add {model_id} and its weight licence to MODELS")
             self.assertTrue(is_open(MODELS[model_id]), model_id)
 
