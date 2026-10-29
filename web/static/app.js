@@ -324,7 +324,7 @@ function expertRow(r) {
   return h("li", { class: "row-card" },
     h("div", { class: "row-main" },
       h("h3", {}, r.url ? h("a", { href: r.url, rel: "noopener", target: "_blank", text: r.name }) : r.name),
-      h("p", { class: "meta", text: [r.institution, e.works ? `${e.works} works since 2021` : null].filter(Boolean).join(" · ") }),
+      h("p", { class: "meta", text: [r.institution, e.works ? `${e.works} ${e.works === 1 ? "publication" : "publications"} in the index` : null].filter(Boolean).join(" · ") }),
       e.topics.length ? h("p", { class: "muted", text: "Topics: " + e.topics.slice(0, 5).join("; ") }) : null,
       e.publications.length ? h("ul", { class: "evidence" }, e.publications.map((p) => h("li", {},
         p.url ? h("a", { href: p.url, rel: "noopener", target: "_blank", text: p.title }) : p.title, p.year ? ` (${p.year})` : ""))) : null),

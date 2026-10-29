@@ -172,8 +172,8 @@ For expert search (Research Assistant journey 4), harvest an institution's
 recent works from OpenAlex, open scholarly metadata under CC0:
 
 ```bash
-docker compose run --rm fetch-openalex                                  # SFU, since 2021, the 3000 most-cited works
-docker compose run --rm fetch-openalex --ror 03rmrcq20 --name ubc --max-works 500
+docker compose run --rm fetch-openalex                                  # SFU, 2021 to this year, the 1200 most-cited works of each year
+docker compose run --rm fetch-openalex --ror 03rmrcq20 --name ubc --per-year 100
 docker compose run --rm embed python scripts/graph_search.py index data/openalex/sfu/records.jsonl
 docker compose run --rm embed python scripts/graph_search.py search "wildfire smoke and health" --label Researcher
 ```

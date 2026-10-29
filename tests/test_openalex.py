@@ -108,17 +108,35 @@ class FetchTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp, mock.patch.object(fetcher, "get", side_effect=fake_get), \
              mock.patch.dict("os.environ", {"DATA_DIR": tmp}), mock.patch("sys.stdout", io.StringIO()) as out:
-            self.assertEqual(fetcher.main(["--max-works", "10", "--since", "2022"]), 0)
+            self.assertEqual(fetcher.main(["--per-year", "10", "--since", "2022", "--until", "2022"]), 0)
             folder = Path(tmp) / "openalex" / "sfu"
             works = [json.loads(l) for l in (folder / "works.jsonl").read_text(encoding="utf-8").splitlines()]
             records = [json.loads(l) for l in (folder / "records.jsonl").read_text(encoding="utf-8").splitlines()]
         self.assertEqual([w["id"] for w in works], ["https://openalex.org/W1", "https://openalex.org/W2"])
         self.assertEqual(calls[0][0], "institutions/ror:0213rcc28")
-        self.assertIn("from_publication_date:2022-01-01", calls[1][1]["filter"])
+        self.assertIn("publication_year:2022", calls[1][1]["filter"])
         self.assertIn("authors_count:<31", calls[1][1]["filter"])
         self.assertEqual(calls[1][1]["sort"], "cited_by_count:desc")
         self.assertEqual(sum("label" in r for r in records), 5)  # 2 publications, 1 researcher, 1 topic, 1 institution...
-        self.assertIn("2 works since 2022", out.getvalue())
+        self.assertIn("2 works 2022-2022", out.getvalue())
+
+    def test_takes_the_most_cited_of_each_year(self):
+        years = []
+
+        def fake_get(path, params):
+            if path.startswith("institutions/"):
+                return {"display_name": "Simon Fraser University", "country_code": "CA"}
+            year = int(params["filter"].split("publication_year:")[1].split(",")[0])
+            years.append((year, params["per-page"]))
+            return {"results": [work(year * 10 + n, [author(1, [SFU])]) for n in range(3)], "meta": {"next_cursor": "more"}}
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(fetcher, "get", side_effect=fake_get), \
+             mock.patch.dict("os.environ", {"DATA_DIR": tmp}), mock.patch("sys.stdout", io.StringIO()) as out:
+            self.assertEqual(fetcher.main(["--per-year", "2", "--since", "2024", "--until", "2026"]), 0)
+            works = (Path(tmp) / "openalex" / "sfu" / "works.jsonl").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(years, [(2024, 2), (2025, 2), (2026, 2)])  # one page each: the quota is filled from the first
+        self.assertEqual(len(works), 6)
+        self.assertIn("2025: 2 works", out.getvalue())
 
     def test_stops_at_max_works(self):
         big = {"results": [work(n, [author(1, [SFU])]) for n in range(1, 201)], "meta": {"next_cursor": "more"}}
@@ -156,7 +174,7 @@ class FetchTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp, mock.patch.object(fetcher, "get", side_effect=fake_get), \
              mock.patch.dict("os.environ", {"DATA_DIR": tmp}), mock.patch("sys.stdout", io.StringIO()) as out:
-            self.assertEqual(fetcher.main(["--max-works", "10"]), 1)
+            self.assertEqual(fetcher.main(["--per-year", "10"]), 1)
             records = [json.loads(l) for l in (Path(tmp) / "openalex" / "sfu" / "records.jsonl").read_text(encoding="utf-8").splitlines()]
         self.assertIn("openalex:W1", {r.get("id") for r in records})
         self.assertIn("HTTP 401 from OpenAlex after 1 works", out.getvalue())

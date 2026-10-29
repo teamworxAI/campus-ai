@@ -1,7 +1,8 @@
 """Probe expert search (journey 4) over the OpenAlex graph: who works on what, with evidence.
 
-Runs a few plain-language questions through the hybrid retriever restricted
-to Researcher nodes and prints the top researchers with the topics and
+Runs a few plain-language questions through expert search as the app runs
+it (hybrid retrieval over Researcher nodes, one-paper authors after the
+established) and prints the top researchers with the topics and
 titles that put them there. Not the R6 back-test: a readable check that the
 R1 graph answers the kind of question the demo asks. Needs the graph
 indexed (`graph_search.py index data/openalex/<name>/records.jsonl`) and
@@ -21,8 +22,8 @@ from pathlib import Path
 
 from campus_ai.core.embed import BACKENDS, DEFAULT_BACKEND, get_embedder
 from campus_ai.core.eval import report
-from campus_ai.core.graph import HybridRetriever, connect
-from campus_ai.research_assistant.matching import research_reranker
+from campus_ai.core.graph import connect
+from campus_ai.research_assistant.matching import ResearchSearch, research_reranker
 
 HERE = Path(__file__).parent
 QUERIES = [
@@ -45,12 +46,12 @@ def build_report(probes: list[tuple], model: str, when: datetime, sha: str | Non
             lines.append("- (no researchers found)")
         for hit in hits:
             topics = "; ".join((hit.get("topics") or [])[:4]) or "(no topics)"
-            lines.append(f"- **{hit.get('name') or hit['id']}** ({hit.get('works') or '?'} works, score {hit['score']:.3f}, "
+            lines.append(f"- **{hit.get('name') or hit['id']}** ({hit.get('works') or '?'} indexed publications, score {hit['score']:.3f}, "
                          f"found by {'+'.join(hit['found_by']) or '?'}): {topics}")
         sections.append((query, lines))
     return report.render(
         f"Expert search probes over the OpenAlex graph ({model})",
-        f"Top {K} researchers per question, hybrid retrieval restricted to Researcher nodes, with the topics and "
+        f"Top {K} researchers per question from expert search (researchers with one indexed publication after the rest), with the topics and "
         "titles that put them there. Read the names and topics: a plausible expert for every question is the bar.",
         when=when, sha=sha, sections=sections)
 
@@ -70,16 +71,14 @@ def main(argv=None) -> int:
     model = embedder.name + (f" + {reranker.name}" if reranker else "")
     probes = []
     with connect() as driver:
-        retriever = HybridRetriever(driver, embedder, reranker=reranker)
+        search = ResearchSearch(driver, embedder, reranker=reranker)  # the ranking the web app and API run
         for query in QUERIES:
             start = time.perf_counter()
-            hits = retriever.search(query, K, labels=["Researcher"], neighbors=0)
+            found = search.experts(query, K)
             seconds = time.perf_counter() - start
-            rows = retriever.run("MATCH (n:Entity) WHERE n.id IN $ids RETURN n.id AS id, n.name AS name, n.topics AS topics, "
-                                 "n.works AS works", ids=[hit.id for hit in hits]) if hits else []
-            props = {row["id"]: row for row in rows}
-            probes.append((query, seconds, [{**props.get(hit.id, {}), "id": hit.id, "score": hit.weight,
-                                             "found_by": hit.found_by} for hit in hits]))
+            probes.append((query, seconds, [{"id": r["id"], "name": r["name"], "topics": r["evidence"]["topics"],
+                                             "works": r["evidence"]["works"], "score": r["score"], "found_by": r["found_by"]}
+                                            for r in found]))
     when = datetime.now(timezone.utc)
     name = ("expert_search_rerank" if reranker else "expert_search") + ("" if args.backend == DEFAULT_BACKEND else f"_{args.backend}")
     report.save(build_report(probes, model, when, report.git_sha(HERE)), name, HERE, when)
