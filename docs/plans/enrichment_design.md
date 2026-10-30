@@ -36,8 +36,8 @@ collections OCR (section 4, D20).
 4. **No store or index change.** Everything goes through `props`,
    `Link.props` and `text`; the embedder stays pinned, so no rebuild.
 5. **One resident model on the laptop.** `gemma4:e4b` does every Ollama
-   task there. Larger models (`gemma4:12b`, olmOCR 2) run on the inference
-   box.
+   task there. Larger models (`gemma4:12b`, olmOCR 2) run on the team's
+   inference box, `araia-gb10` (D16).
 
 ## 2. Schema
 
@@ -86,7 +86,7 @@ accessible.
 
 | # | Stage | Where | Det./model | Notes |
 |---|---|---|---|---|
-| 1 | Fetch | `fetch-europeana` (network, one-time) | D | Rotate the key first (D19). `raw.jsonl` beside `items.jsonl` for items passing `is_open`, with `link` dropped and `guid` query strings stripped (both carry the key). `--from-raw` remaps offline. R11 starts with a field-frequency dump; if the rich profile lacks a needed field, one Record API call per item in the same job |
+| 1 | Fetch | `fetch-europeana` (network, one-time) | D | Key rotation deferred (D19). `raw.jsonl` beside `items.jsonl` for items passing `is_open`, with `link` dropped and `guid` query strings stripped (both carry the key). `--from-raw` remaps offline. R11 starts with a field-frequency dump; if the rich profile lacks a needed field, one Record API call per item in the same job |
 | 2 | Map | `europeana.to_records` | D | Fields as in section 2 |
 | 3 | Screen | `rights.screen` + classify | D | `rights.UNITS` grows to `{Item, Image, Text, Audio, Video}` before any new unit exists. Runs before any model; each node's own data class is passed, never a hard-coded "P" |
 | 4 | Propose | new `enrich` compose service (test image, `graph` network, llm-env, `DATA_DIR` ro + `${DATA_DIR}/enrich` rw); `scripts/enrich.py propose` | M | Cache key: input sha + task + model digest + prompt version. Writes `DATA_DIR/enrich/<source>/<name>/proposals.jsonl` |
@@ -127,9 +127,9 @@ Model tasks:
 | Embeddings, all modalities | `google/embeddinggemma-2` | Apache-2.0 | D7, `MODELS` | both; unchanged |
 | Alt text, long description | `gemma4:e4b` (`CAMPUS_AI_MODEL_VISION`) | Apache-2.0 | `MODEL_LICENCES`; add to the D10 vision row | both. `e2b` is the floor in R16; `12b` on the box only if `e4b` scores under 3.5/5 |
 | Language fallback, entity spans | `gemma4:e4b` (`classification`, thinking off) | Apache-2.0 | yes | both |
-| OCR, collections (printed, tables, hard pages, handwriting) | `allenai/olmOCR-2-7B-1025` (FP8 variant where the GPU supports it), fine-tuned from `Qwen/Qwen2.5-VL-7B-Instruct` | Apache-2.0 (model card metadata; base model Apache-2.0; checked Oct 29) | **New:** D10 row, `MODELS` row, router task in R17 | box only (8B; needs an NVIDIA GPU). Served by a pinned vLLM service (`vllm/vllm-openai`, Apache-2.0) on the internal network, weights from `MODELS_DIR`, called through the router's `ocr` task with its data-class gate and trace. olmOCR-Bench 82.4 (FP8) |
+| OCR, collections (printed, tables, hard pages, handwriting) | `allenai/olmOCR-2-7B-1025` (FP8 variant where the GPU supports it), fine-tuned from `Qwen/Qwen2.5-VL-7B-Instruct` | Apache-2.0 (model card metadata; base model Apache-2.0; checked Oct 29) | **New:** D10 row, `MODELS` row, router task in R17 | box only (8B; needs an NVIDIA GPU). Already served on the inference box `araia-gb10` (NVIDIA GB10) at its OpenAI-compatible endpoint `http://araia-gb10:8080/v1`; campus-ai reaches it through `OCR_URL` (like `OLLAMA_URL`) and the router's `ocr` task with its data-class gate and trace, recording the served revision. A pinned optional vLLM service (`vllm/vllm-openai`, Apache-2.0, weights from `MODELS_DIR`) lets the stack rebuild without the box. olmOCR-Bench 82.4 (FP8) |
 | OCR, laptop and CPU path | `gemma4:e4b` (`vision`) reading the page image | Apache-2.0 | yes | both. Every page goes to review, labelled machine-read |
-| Transcripts, captions (R18, stretch) | `google/gemma-4-E4B-it` audio via transformers in the `embed` image, 30 s chunks | Apache-2.0 | **New:** D10 + `MODELS` rows | GPU preferred. Ollama's gemma4 accepts text and image only |
+| Transcripts, captions (R18, stretch) | `google/gemma-4-E4B-it` audio via transformers in the `embed` image, 30 s chunks | Apache-2.0 | **New:** D10 + `MODELS` rows | GPU preferred (`araia-gb10`). Ollama's gemma4 accepts text and image only |
 | ASR fallback (only if Gemma fails the WER bar) | `openai/whisper-large-v3-turbo` + faster-whisper + CTranslate2 | MIT (confirm each) | rows only if used | either |
 | Eval judge | `qwen3:8b` against the specialist's reference; `qwen3-vl:8b` where there is no reference | Apache-2.0 | allow-listed, D10 judge row | box preferred; trusted after kappa ≥ 0.6 (B5) |
 
@@ -143,7 +143,8 @@ is measured, not assumed. Tesseract stays in the image for Course Access
 
 **Never used:** Chandra OCR 2 (weights under a modified OpenRAIL-M licence
 with a revenue threshold and a no-competition clause; code Apache-2.0, weights
-not open source), Gemma 1-3, Gemma 3n, EmbeddingGemma v1, PaliGemma,
+not open source). `araia-gb10` serves it for other work, but it is never
+added to `MODEL_LICENCES`, so the router refuses it; Gemma 1-3, Gemma 3n, EmbeddingGemma v1, PaliGemma,
 ShieldGemma (all Gemma Terms of Use), MedGemma, TranslateGemma, Ollama
 `-cloud` tags (already refused by `OLLAMA_NO_CLOUD=1` and `MODEL_LICENCES`),
 pyannote, fastText language-ID weights.
@@ -195,7 +196,8 @@ local single-machine tool with no logins.
 
 ## 7. Evaluation (`evals/collections/`, `core/eval`, dated reports)
 
-Gold sets are provisional until the D6 labels exist (D15).
+Gold sets are provisional until the D6 labels exist; labels are dated
+Oct 29, 2026 (D15).
 
 - **Retrieval:** 50 librarian queries (at least 10 lay-language or
   description-style); recall@10 and MRR per language on today's mapping,
@@ -225,7 +227,7 @@ Gold sets are provisional until the D6 labels exist (D15).
 Found by the judge; no design or evaluator raised them.
 
 1. The Europeana API key would leak into `raw.jsonl` (`guid`, `link`):
-   drop `link`, strip `guid`, rotate the key (D19).
+   drop `link` and strip `guid`. Rotation is deferred by the user (D19).
 2. Reusing the Course Access queue would auto-apply `needs_review=False`
    proposals: collections need an explicit decision for every output.
 3. Re-indexing the plain `items.jsonl` wipes approved alt text: index the
