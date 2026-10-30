@@ -119,16 +119,28 @@ Licences marked (verify) come from secondary sources.
 | Step | Model | Licence | Served by | Status |
 |---|---|---|---|---|
 | Reasoning, orchestration | `gemma4:12b`; candidate Qwen 3.5 35B-A3B for harder steps | Apache-2.0 (Qwen: verify) | Ollama | Default set; B5 decides |
-| Vision, alt text | `gemma4:12b` or `qwen3-vl:8b` | Apache-2.0 | Ollama | D9, B3 decides |
+| Vision, alt text | `gemma4:12b` or `qwen3-vl:8b`; `gemma4:e4b` for collections on the laptop (R13, R16) | Apache-2.0 | Ollama | D9, B3 decides (R16 for collections) |
 | Classification, routing | `gemma4:e4b` | Apache-2.0 | Ollama | Default set |
 | Judge (evals, verify loop) | A different model family from the generator (e.g. `qwen3:8b` if Gemma generates) | Apache-2.0 | Ollama | B5 calibrates |
 | Embeddings | EmbeddingGemma 2, `google/embeddinggemma-2` (contingency Qwen3-Embedding-4B; never EmbeddingGemma v1, Gemma Terms of Use); text baseline `intfloat/multilingual-e5-small` | Apache-2.0; e5 MIT | `embed` service | D7. B2 embedder run Oct 28 (`evals/research_assistant/b2_embedder_20261028.md`): on the 100-project partner back-test EmbeddingGemma 2 recall@10 0.32, MRR 0.133 against e5-small 0.29, 0.126, so EmbeddingGemma 2 stays; e5 remains the text-only baseline |
 | Alternatives in the router's allow-list (for bake-offs) | `gemma4:e2b`, `qwen3:4b`, `qwen3-vl:4b`, `granite3.3:8b`, `mistral-small3.2:24b`, `olmo2:7b` | Apache-2.0 (each model's Ollama registry licence layer, checked Oct 21) | Ollama | Allowed, not default |
 | Reranker | `Qwen/Qwen3-Reranker-0.6B` (default: fits the 4 GB demo laptop, 1.2 GB of weights); `Qwen/Qwen3-Reranker-4B` for the team's inference box (does not fit 4 GB) | Apache-2.0 (both model cards' `license: apache-2.0`, not gated; checked Oct 23) | `embed` service (`campus_ai/core/embed/reranker.py`) | B2 run Oct 26: built, off by default (no lift on the back-test, about 10 s per query on the laptop); 4B untested |
 | Document parsing | Current A1 parser; candidate Docling + Granite-Docling-258M, hard pages to PaddleOCR-VL | MIT / Apache-2.0 (verify) | Docker service | B4 |
-| OCR for scanned PDFs | Tesseract 5 (Debian package, eng + fra) | Apache-2.0 | test image | A7 |
-| Speech to text | Granite Speech 4.1 2B | Apache-2.0 (verify) | Docker service | Stretch, B6 |
+| OCR for scanned PDFs | Tesseract 5 (Debian package, eng + fra) | Apache-2.0 | test image | A7; stays until the R17 bake-off says whether A7 moves to olmOCR 2 |
+| OCR for collections | `allenai/olmOCR-2-7B-1025` (FP8 where the GPU supports it), fine-tuned from `Qwen/Qwen2.5-VL-7B-Instruct`; laptop and CPU path `gemma4:e4b` | Apache-2.0 (both model cards' metadata, checked Oct 29) | the inference box `araia-gb10` (OpenAI-compatible endpoint, `OCR_URL`), through the router's `ocr` task; pinned optional vLLM service (`vllm/vllm-openai`, Apache-2.0) for rebuilds without the box | R17 adds it with its `MODELS` and `IMAGES` rows; bake-off against `gemma4:12b`/`e4b` on character error rate |
+| Speech to text | `google/gemma-4-E4B-it` audio (transformers, in the `embed` image; Ollama's gemma4 has no audio input); fallback `openai/whisper-large-v3-turbo` + faster-whisper (MIT, confirm each) only if Gemma fails the WER bar | Apache-2.0 | `embed` service | Stretch, B6, R18 |
 | Diarization | Open: pyannote Community-1 is CC-BY-4.0, not an OSI software licence, so it fails D8 | - | - | Decide before use |
+
+Notes (Oct 29, `docs/plans/enrichment_design.md`): the goal is a local-first
+system on Google's open-weight models, EmbeddingGemma 2 and Gemma 4, both
+Apache-2.0; other models only where no Google open-weight model does the
+job. The Gemma 4 and EmbeddingGemma 2 cards ask deployments to follow
+Google's Prohibited Use Policy, and olmOCR 2's points to Ai2's Responsible
+Use Guidelines: usage notes, not licence terms (the licences are plain
+Apache-2.0); re-check if the wording changes. Never: Gemma 1-3, Gemma 3n,
+EmbeddingGemma v1, PaliGemma, ShieldGemma (Gemma Terms of Use); Ollama
+`-cloud` tags; Chandra OCR 2 (weights under a modified OpenRAIL-M licence
+with a revenue threshold), even though `araia-gb10` serves it.
 
 Week-1 bake-offs (details and pass rules in the research report): B1 local
 stack smoke test on the demo laptop (`docker compose run --rm smoke`; passes
@@ -306,7 +318,12 @@ Pipeline:
    audio segments, video clips.
 3. Embed every unit with EmbeddingGemma 2 into the shared vector space.
 4. Graph links: `(Item)-[:IN]->(Collection)-[:HELD_BY]->(Institution)`,
-   `(Item)-[:CREATED_BY]->(Creator)`, `(Item)-[:ABOUT]->(Topic)<-[:ABOUT]-(Publication)<-[:AUTHORED]-(Researcher)`.
+   `(Item)-[:CREATED_BY]->(Creator)`, `(Item)-[:ABOUT]->(Concept)`,
+   `(Item)-[:SPATIAL]->(Place)` (Concept and Place keyed by authority URI,
+   R11), and to researchers through reviewed
+   `(Concept)-[:RELATED]->(Topic)<-[:ABOUT]-(Publication)<-[:AUTHORED]-(Researcher)`
+   links (R20). Accessibility content (approved alt text, long
+   descriptions, OCR text, transcripts) per `docs/plans/enrichment_design.md`.
 5. Answers cite the item, with timestamps for audio and video and image
    regions for photos.
 
@@ -460,6 +477,17 @@ Each card is sized for one cloud session and one PR.
 | R8 | Europeana loader. Pilot theme: salmon (*Salmo*, *Oncorhynchus*, salmonids; salmon fishing in titles in 7 languages), about 150 items, open licences only (CC0, PDM, CC BY, CC BY-SA); 400 px thumbnails; full media, audio and video later | P5, P7 | Built (#6) |
 | R9 | Collections search: API (`research_assistant/api.py`) and web UI (`web/`) over Europeana; pictures and texts ranked separately; APA/Chicago/BibTeX citations. Timestamps and image regions wait on audio/video and region detection | R7, R8 | First cut built (#8) |
 | R10 | Rights and governance filter ahead of any collections indexing: Europeana `edm:rights` per item, ArcaBC access flags and TK Labels; restricted items get data class R | R8 | Built: `research_assistant/rights.py` in `graph_search.py index`; R7 must write `source`, `rights`, `access`, `tk_labels` |
+| R11 | Europeana deep mapping (deterministic, `docs/plans/enrichment_design.md`): field-frequency dump of a fresh harvest; `raw.jsonl` for kept items with `link` dropped and `guid` stripped, `--from-raw` remap; `to_records` adds languages (ISO 639 to BCP-47 table), date_from/date_to/date_text, shown_at/shown_by, tiers, access_mode, LIX reading level; `Concept` and `Place` nodes keyed by authority URI (`wd:`, `aat:`, `geonames:` as identifiers only; else `europeana:concept:`/`europeana:place:`), `ABOUT` and `SPATIAL` edges with `basis: source` and `field`, `CREATED_BY {role}`; subject and place labels in Item text; `rights.UNITS` adds Text, Audio, Video; `CARDS` and the UI show the new fields | R8, R10 | To do |
+| R12 | Collections gold sets and metrics in `evals/collections/`: 50 queries (incl. lay-language), 50 alt-text images (stratified, reference + rubric), 50 metadata items, about 20 OCR pages; recall@10/MRR per language, coverage KPI, link-precision audit; baseline report on today's graph vs R11 | R11, P6, D6 | To do (provisional gold until labelled, D15) |
+| R13 | Enrichment runner and collection alt text (propose only): `enrich` compose service (test image, graph network, DATA_DIR ro, DATA_DIR/enrich rw); `scripts/enrich.py propose` with the rights screen before any model call, each node's data class, cache (input sha, task, model digest, prompt version), `proposals.jsonl`; `alt_text.describe_bytes` refactor; collection prompt and context; unsupported-specifics check; `gemma4:e4b` vision probe and seconds per image with thinking on/off | R11, A3 | To do |
+| R14 | Collections review and apply: review endpoints in `api` (DATA_DIR/enrich rw) and `web/static/review/collections/` (WCAG 2.2, triage order, no auto-apply: every model output needs approve or edit); `decisions.jsonl`; `enrich.py apply` writes the enriched JSONL that `index` reads, sets Image alt/text and provenance, `a11y_features` from approved output only; UI uses approved alt | R13, P3 | To do |
+| R15 | Language fallback and subject/place/person proposals: deterministic first, `LANGUAGE_SYSTEM` on classification when no tag; entity JSON with spans, `check_spans`, link only by exact same-language label match to an existing Concept/Place, all reviewed; precision gate (D14) on R12 | R13, R14 | To do |
+| R16 | B3 for collections: `gemma4:e2b` vs `e4b` on the laptop (`12b` on the inference box only if `e4b` < 3.5/5), thinking on/off; updates D9 and the D10 vision row | R12, R14, D6 | To do |
+| R17 | Full-size media and OCR text layer: open-rights `shown_by` download with size cap; olmOCR 2 (`allenai/olmOCR-2-7B-1025`) from the inference box's OpenAI-compatible endpoint (`OCR_URL`, e.g. `http://araia-gb10:8080/v1`, like `OLLAMA_URL`) behind a router `ocr` task (data-class gate, trace, served revision recorded), plus a pinned optional vLLM compose service so the stack rebuilds without the box; D10, `MODELS` and `IMAGES` rows; `gemma4:e4b` on the laptop; `Text` units PART_OF Item; every page proposed for review, machine-read text searchable before review (D13); bake-off olmOCR 2 vs `gemma4:12b`/`e4b` on character error rate, which also decides whether A7 leaves Tesseract | R12, R14, A7 | To do |
+| R18 | Audio and video: EmbeddingGemma 2 windows as `Audio`/`Video` units; transcripts and WebVTT captions with `google/gemma-4-E4B-it` audio in the embed image (30 s chunks), Whisper large-v3-turbo fallback only if WER fails (D17); detect and skip unsupported languages, never auto-transcribe Indigenous languages; D10 and `MODELS` rows | R14, B6 | Stretch |
+| R19 | Wikimedia Commons adapter: per-file licence filter, depicts (P180) to `wd:` Concepts, same JSONL and enrichment path | R11, R14 | To do |
+| R20 | Collections to researchers: `(Concept)-[:RELATED]->(Topic)` proposals from EmbeddingGemma 2 label similarity, reviewed by the librarian; never by name alone | R11, R1, R14 | To do |
+| R21 | ArcaBC enrichment config (alt text and descriptions for thin records); class R never described | R0b, R7, R14 | Blocked on R0b |
 
 Kickoff prompt template for a card:
 
@@ -485,9 +513,18 @@ Commit, push to your branch, and open a PR with the eval results.
 | D6 | Who labels gold sets | One accessibility specialist (A); two research officers (R); one librarian for collections search |
 | D7 | Default embedder | **Decided (B2 embedder run Oct 28, `evals/research_assistant/b2_embedder_20261028.md`: EmbeddingGemma 2 recall@10 0.32 against e5-small 0.29 on the 100-project back-test):** EmbeddingGemma 2 (`google/embeddinggemma-2`, released Oct 6, 2026, Apache 2.0, not gated; Matryoshka dims 768/512/256/128), run offline in the `embed` Docker image from local weights, text, image, audio and video. vLLM (0.31.0) does not support it yet and Ollama lists only text and image, so neither serves it for now. Text baseline: `intfloat/multilingual-e5-small`. The baseline lost the B2 back-test and stays as the text-only comparison; re-run the bake-off when a gold set lands |
 | D8 | Licences | **Decided (Oct 21, prime directive 1):** open source only, no paid licences. OSI-approved licences for all code, dependencies, images, tools and model weights; permissive preferred; no AGPL (so PyMuPDF is replaced). campus-ai is Apache-2.0. Two named exceptions: free GPU vendor runtimes (NVIDIA CUDA), optional, with a CPU path that always works; and Docker Desktop as a developer tool on Windows workstations (Oct 21). Deployments need only the open-source Docker Engine + Compose (or Podman), and nothing may depend on Desktop-only features |
-| D9 | Vision model for alt text (A3) | **Open:** a local open-weight vision-language model under an OSI-approved licence (e.g. Apache-2.0 or MIT weights; "community" licences don't qualify), chosen by bake-off on the A6 gold set, running in a container from local weights |
+| D9 | Vision model for alt text (A3, and collections via R16) | **Open:** a local open-weight vision-language model under an OSI-approved licence (e.g. Apache-2.0 or MIT weights; "community" licences don't qualify), chosen by bake-off on the A6 gold set, running in a container from local weights |
 | D10 | Model register | **Decided:** the table in section 2; the router's allow-list must match it. Adding a model means a D8 licence check and a register row in the same PR |
 | D11 | Eval judge | **Decided (Oct 23, P6):** a small local judge in `core/eval` instead of RAGAS (RAGAS pulls in langchain and OpenAI client packages, far more than needed). RAGAS could be added later behind the same metric names if its exact definitions are wanted |
+| D12 | Alt-text language for collections | **Decided (Oct 29):** English first, stored as `alt_lang: en` (the D6 reviewers are at SFU); alt text in the record's own language later, once a holding institution can review it |
+| D13 | Unreviewed machine-read OCR text | **Decided (Oct 29):** indexed for search before review, shown as "machine-read, unreviewed"; never an accessibility feature, never exported. Pages whose output fails the deterministic checks (empty, repeated text, wrong language) are not indexed until reviewed |
+| D14 | Bar for model-proposed entities | **Decided (Oct 29):** precision ≥ 0.9 on the R12 gold set before proposals reach reviewers |
+| D15 | Collections gold-set labels | **Decided (Oct 29):** the librarian labels queries and metadata, the accessibility specialist labels alt text (D6); provisional sets now. Labels are dated Oct 29, 2026 |
+| D16 | Where large models run | **Decided (Oct 29):** the laptop runs `gemma4:e4b` for every Ollama task; `gemma4:12b` and olmOCR 2 run only on the team's inference box, `araia-gb10` (NVIDIA GB10). It already serves olmOCR 2 on an OpenAI-compatible endpoint (`http://araia-gb10:8080/v1`); `gemma4:12b` is to be pulled there |
+| D17 | Transcripts | **Decided (Oct 29):** Gemma 4 E4B audio in the `embed` image first (Google-first, Apache-2.0); Whisper (MIT) only if Gemma fails the WER bar. Stretch (B6) |
+| D18 | Scope of prime directive 1 for data | **Decided (Oct 29):** the directive covers software, images, tools and weights; data follows R10 and permission rules (as CORDIS CC BY 4.0 already does). Authority files: only URIs from Europeana's CC0 metadata; no AAT, GeoNames or VIAF data is loaded |
+| D19 | Europeana key | **Decided (Oct 29):** rotation deferred by the user (the harvested content is open); raw retention still drops `link` and strips `guid`, so new files never hold the key |
+| D20 | OCR engine for collections | **Decided (Oct 29):** olmOCR 2 (Apache-2.0) on `araia-gb10` replaces Tesseract for collections, `gemma4:e4b` on the laptop. Chandra OCR 2 is also served on `araia-gb10` but is excluded from the product (weights under a modified OpenRAIL-M licence with a revenue threshold, prime directive 1): it is never added to `MODEL_LICENCES`, so the router refuses it. R17's bake-off confirms olmOCR 2 and decides A7 |
 
 ## 9. Risks
 
