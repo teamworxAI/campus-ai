@@ -55,6 +55,13 @@ class ExpertTests(unittest.TestCase):
         self.assertEqual(out[0]["found_by"], ["meaning", "words"])
         self.assertEqual(driver.calls[0][1]["ids"], ["openalex:A1", "openalex:A9"])
 
+    def test_one_paper_authors_follow_the_established(self):
+        def row(n, works):
+            return {"id": f"openalex:A{n}", "name": f"R{n}", "works": works, "publications": []}
+        driver = FakeDriver({"AUTHORED": [row(1, 1), row(2, 5), row(3, 1), row(4, 2)]})
+        s = search_with(driver, {"Researcher": [hit(f"openalex:A{n}", 0.05 - n / 100) for n in (1, 2, 3, 4)]})
+        self.assertEqual([r["name"] for r in s.experts("x", k=3)], ["R2", "R4", "R1"])  # fit order within each group
+
     def test_no_hits_no_queries(self):
         driver = FakeDriver({})
         self.assertEqual(search_with(driver, {"Researcher": []}).experts("x"), [])

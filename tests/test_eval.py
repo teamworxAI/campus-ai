@@ -236,7 +236,7 @@ class EvalScriptReportTests(unittest.TestCase):
         text = experts.build_report([("salmon", 0.4, [{"id": "openalex:A1", "name": "J. Moore", "works": 18, "score": 0.031,
                                                        "found_by": ["meaning", "words"], "topics": ["Fish", "Rivers"]}]),
                                      ("nothing", 0.1, [])], "embeddinggemma-2", WHEN)
-        self.assertIn("## salmon\n\n0.4 s\n\n- **J. Moore** (18 works, score 0.031, found by meaning+words): Fish; Rivers\n", text)
+        self.assertIn("## salmon\n\n0.4 s\n\n- **J. Moore** (18 indexed publications, score 0.031, found by meaning+words): Fish; Rivers\n", text)
         self.assertIn("## nothing\n\n0.1 s\n\n- (no researchers found)", text)
         partners = load_eval("research_assistant/partner_search.py")
         text = partners.build_report([("housing", [

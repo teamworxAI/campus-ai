@@ -13,7 +13,8 @@ Three questions, one retriever:
 Deterministic throughout: hybrid retrieval, graph expansion and arithmetic.
 No model writes anything here; every result carries the node ids and URLs
 of its evidence (plan 4.3: every claim cites an ID). Ranking is by fit to
-the question only, never by any attribute of a person (plan 4.4).
+the question and the amount of evidence behind it, never by any attribute
+of a person (plan 4.4).
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from campus_ai.core.graph import HybridRetriever
 from campus_ai.core.graph.retriever import RRF_K
 
 CANDIDATES = 50
+MIN_WORKS = 2  # indexed publications for a researcher to rank with the established ones (experts)
 WEIGHTINGS = ("probability", "rank", "rrf")  # how reranked projects count towards their organisations (B2 follow-up)
 # What ranks a partner: the matching projects it took part in, its own Organization node, or both fused by RRF.
 SIGNALS = ("projects", "organisations", "fused")
@@ -95,7 +97,13 @@ class ResearchSearch:
     # --- journey 4: experts ---------------------------------------------------
 
     def experts(self, query: str, k: int = 10) -> list[dict]:
-        hits = self.retriever.search(query, k, labels=["Researcher"], neighbors=0)
+        """Researchers backed by at least MIN_WORKS indexed publications first, then the rest, each group by fit.
+
+        A one-paper author (often a student or co-author) has a profile made of
+        that paper alone, so it can match a topic more closely than an established
+        researcher's; demoted, not hidden, so fields that publish less stay reachable.
+        """
+        hits = self.retriever.search(query, max(k, CANDIDATES), labels=["Researcher"], neighbors=0)
         if not hits:
             return []
         rows = self.run(
@@ -118,7 +126,8 @@ class ResearchSearch:
                              "publications": [p for p in row.get("publications") or [] if p.get("title")],
                              "works": row.get("works") or 0},
             })
-        return out
+        out.sort(key=lambda r: r["evidence"]["works"] < MIN_WORKS)  # stable: fit order holds within each group
+        return out[:k]
 
     # --- journey 1: partners --------------------------------------------------
 
