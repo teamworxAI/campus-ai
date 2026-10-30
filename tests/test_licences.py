@@ -1,8 +1,8 @@
 """Licence guard (P8): prime directive 1, open source only, no paid licences.
 
 Fails when anything in the stack is not under an OSI-approved open-source
-licence: an installed Python package, a Docker image in compose.yaml or the
-Dockerfile, or a model the embedder can load. AGPL always fails. The only
+licence: an installed Python package, a Docker image in the compose files or
+the Dockerfile, or a model the embedder can load. AGPL always fails. The only
 named exceptions (AGENTS.md) are free GPU vendor runtimes, listed below.
 Docker Desktop, the other exception, is a developer tool and not in the stack.
 
@@ -96,7 +96,7 @@ class LicenceGuardTests(unittest.TestCase):
         self.assertIn("Apache License", (ROOT / "LICENSE").read_text(encoding="utf-8"))
 
     def test_docker_images_are_listed_and_open(self):
-        text = (ROOT / "compose.yaml").read_text(encoding="utf-8")
+        text = "".join(f.read_text(encoding="utf-8") for f in sorted(ROOT.glob("compose*.yaml")))
         refs = re.findall(r"^\s+image:\s*(\S+)", text, re.MULTILINE)
         refs += re.findall(r"^FROM\s+(\S+)", (ROOT / "Dockerfile").read_text(encoding="utf-8"), re.MULTILINE)
         missing = []

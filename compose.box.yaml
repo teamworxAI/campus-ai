@@ -1,0 +1,22 @@
+# Use the team's inference box for the LLM router instead of the local `ollama`
+# service. Opt in per machine, e.g. in .env:
+#   COMPOSE_FILE=compose.yaml;compose.box.yaml   (":" on Linux, WSL)
+#   OLLAMA_BOX=aria-spark1:11434
+#   OLLAMA_URL=http://ollama-box:11434
+# The graph network stays internal: this relay is the only service on it that can
+# reach the LAN, and it forwards to that one box and port only. It refuses Ollama's
+# pull, push, create and delete calls, so nothing downloads at runtime.
+services:
+  ollama-box:
+    image: nginx:1.30.6-alpine
+    restart: unless-stopped
+    networks: [graph, edge]
+    environment:
+      OLLAMA_BOX: ${OLLAMA_BOX:?set OLLAMA_BOX in .env, e.g. aria-spark1:11434}
+    volumes:
+      - ./ollama-box.conf.template:/etc/nginx/templates/default.conf.template:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:11434/api/version"]
+      interval: 15s
+      timeout: 5s
+      retries: 3

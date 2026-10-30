@@ -1,0 +1,23 @@
+# Relay from the internal graph network to the team's inference box (compose.box.yaml).
+# The nginx image fills in ${OLLAMA_BOX} at start.
+server {
+    listen 11434;
+    server_tokens off;
+    client_max_body_size 100m;  # images go to vision models as base64
+
+    # Resolve the box per request (cached 30 s), so nginx starts even if the box is down.
+    resolver 127.0.0.11 valid=30s ipv6=off;
+    set $box http://${OLLAMA_BOX};
+
+    # Model management stays with fetch-ollama: nothing downloads at runtime.
+    location ~ ^/api/(pull|push|create|copy|delete|blobs) {
+        return 403;
+    }
+
+    location / {
+        proxy_pass $box;
+        proxy_http_version 1.1;
+        proxy_buffering off;  # stream tokens as they come
+        proxy_read_timeout 600s;
+    }
+}
