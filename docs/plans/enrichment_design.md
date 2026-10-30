@@ -37,7 +37,7 @@ collections OCR (section 4, D20).
    `Link.props` and `text`; the embedder stays pinned, so no rebuild.
 5. **One resident model on the laptop.** `gemma4:e4b` does every Ollama
    task there. Larger models (`gemma4:12b`, olmOCR 2) run on the team's
-   inference box, `araia-gb10` (D16).
+   inference boxes, `aria-gb10-2` (Ollama) and `araia-gb10` (D16).
 
 ## 2. Schema
 
@@ -127,25 +127,26 @@ Model tasks:
 | Embeddings, all modalities | `google/embeddinggemma-2` | Apache-2.0 | D7, `MODELS` | both; unchanged |
 | Alt text, long description | `gemma4:e4b` (`CAMPUS_AI_MODEL_VISION`) | Apache-2.0 | `MODEL_LICENCES`; add to the D10 vision row | both. `e2b` is the floor in R16; `12b` on the box only if `e4b` scores under 3.5/5 |
 | Language fallback, entity spans | `gemma4:e4b` (`classification`, thinking off) | Apache-2.0 | yes | both |
-| OCR, collections (printed, tables, hard pages, handwriting) | `allenai/olmOCR-2-7B-1025` (FP8 variant where the GPU supports it), fine-tuned from `Qwen/Qwen2.5-VL-7B-Instruct` | Apache-2.0 (model card metadata; base model Apache-2.0; checked Oct 29) | **New:** D10 row, `MODELS` row, router task in R17 | box only (8B; needs an NVIDIA GPU). Already served on the inference box `araia-gb10` (NVIDIA GB10) at its OpenAI-compatible endpoint `http://araia-gb10:8080/v1`; campus-ai reaches it through `OCR_URL` (like `OLLAMA_URL`) and the router's `ocr` task with its data-class gate and trace, recording the served revision. A pinned optional vLLM service (`vllm/vllm-openai`, Apache-2.0, weights from `MODELS_DIR`) lets the stack rebuild without the box. olmOCR-Bench 82.4 (FP8) |
-| OCR, laptop and CPU path | `gemma4:e4b` (`vision`) reading the page image | Apache-2.0 | yes | both. Every page goes to review, labelled machine-read |
-| Transcripts, captions (R18, stretch) | `google/gemma-4-E4B-it` audio via transformers in the `embed` image, 30 s chunks | Apache-2.0 | **New:** D10 + `MODELS` rows | GPU preferred (`araia-gb10`). Ollama's gemma4 accepts text and image only |
+| OCR, collections (printed, tables, hard pages, handwriting): R17 bake-off | `glm-ocr` (GLM-OCR, 1.1B; OmniDocBench v1.5 94.62 per its card); `deepseek-ocr` (DeepSeek-OCR, 3.3B); `allenai/olmOCR-2-7B-1025` (8B, from `Qwen/Qwen2.5-VL-7B-Instruct`; olmOCR-Bench 82.4) | GLM-OCR MIT (its layout model PP-DocLayoutV3 Apache-2.0); DeepSeek-OCR MIT; olmOCR 2 Apache-2.0 (model cards and Ollama licence layers, checked Oct 29) | **New:** D10 and `MODEL_LICENCES` rows for the winner, router `ocr` task (R17) | GLM-OCR and DeepSeek-OCR already run in Ollama on the inference box `aria-gb10-2` (NVIDIA GB10, Ollama 0.21.2), so the router reaches them through `OLLAMA_URL` with no new backend. olmOCR 2 is reported on `araia-gb10` (`:8080/v1`, OpenAI-compatible, not reachable from the laptop on Oct 29); it joins the bake-off if the stack can reach it, or through a pinned optional vLLM service (`vllm/vllm-openai`, Apache-2.0) |
+| OCR, laptop and CPU path | `gemma4:e4b` (`vision`) or `glm-ocr` if R17 shows it fits the 4 GB laptop | Apache-2.0 / MIT | yes / R17 | both. Every page goes to review, labelled machine-read |
+| Transcripts, captions (R18, stretch) | Gemma 4 E4B audio, 30 s chunks: through Ollama if its audio input holds up (Ollama 0.21.2 on `aria-gb10-2` reports `audio` for `gemma4:latest`), else `google/gemma-4-E4B-it` via transformers in the `embed` image | Apache-2.0 | **New:** D10 (+ `MODELS` row if transformers) | GPU preferred (inference box) |
 | ASR fallback (only if Gemma fails the WER bar) | `openai/whisper-large-v3-turbo` + faster-whisper + CTranslate2 | MIT (confirm each) | rows only if used | either |
 | Eval judge | `qwen3:8b` against the specialist's reference; `qwen3-vl:8b` where there is no reference | Apache-2.0 | allow-listed, D10 judge row | box preferred; trusted after kappa ≥ 0.6 (B5) |
 
-**Why olmOCR 2 and not a Google model for OCR:** no Gemma 4 OCR variant
-exists under Apache-2.0, and a document-OCR model trained for it reads
-tables, equations, multi-column pages and handwriting better than a
-general vision model. R17 runs a bake-off (olmOCR 2 against `gemma4:12b`
-and `gemma4:e4b`, character error rate on the R12 OCR pages) so the choice
-is measured, not assumed. Tesseract stays in the image for Course Access
+**Why a dedicated OCR model and not a Google one:** no Gemma 4 OCR
+variant exists under Apache-2.0, and a document-OCR model reads tables,
+equations, multi-column pages and handwriting better than a general vision
+model. R17 runs a bake-off (GLM-OCR, DeepSeek-OCR, olmOCR 2 if reachable,
+`gemma4:12b`, `gemma4:e4b`; character error rate and seconds per page on
+the R12 OCR pages) so the choice is measured, not assumed. Tesseract stays in the image for Course Access
 (A7) until that bake-off says whether A7 should move too.
 
 **Never used:** Chandra OCR 2 (weights under a modified OpenRAIL-M licence
 with a revenue threshold and a no-competition clause; code Apache-2.0, weights
-not open source). `araia-gb10` serves it for other work, but it is never
-added to `MODEL_LICENCES`, so the router refuses it; Gemma 1-3, Gemma 3n, EmbeddingGemma v1, PaliGemma,
-ShieldGemma (all Gemma Terms of Use), MedGemma, TranslateGemma, Ollama
+not open source). An inference box may serve it for other work, but it is
+never added to `MODEL_LICENCES`, so the router refuses it; Gemma 1-3, Gemma 3n, EmbeddingGemma v1, PaliGemma,
+ShieldGemma, TranslateGemma (all Gemma Terms of Use), MedGemma (Health AI
+Developer Foundations terms; TranslateGemma and MedGemma are both on `aria-gb10-2`), Ollama
 `-cloud` tags (already refused by `OLLAMA_NO_CLOUD=1` and `MODEL_LICENCES`),
 pyannote, fastText language-ID weights.
 
@@ -176,7 +177,7 @@ data is loaded (D18).
 
 Always an explicit approve or edit, never auto-applied: alt text and long
 descriptions, model language tags, model subject/place/person links, all
-model OCR pages (olmOCR 2 and Gemma), transcripts and captions, decorative
+model OCR pages (any OCR model and Gemma), transcripts and captions, decorative
 calls.
 
 No review: mapped source fields (provenance shown; audited by the R12
@@ -214,7 +215,7 @@ Oct 29, 2026 (D15).
   proposals: precision, recall, span-drop rate. Bar: D14. Includes a hand
   audit of Europeana's own concept links.
 - **OCR:** character error rate on about 20 pages (provider fulltext where
-  it exists, else hand transcription), for olmOCR 2, `gemma4:12b` and
+  it exists, else hand transcription), for GLM-OCR, DeepSeek-OCR, olmOCR 2 (if reachable), `gemma4:12b` and
   `gemma4:e4b`; seconds per page on the box and the laptop.
 - **ASR:** word error rate on about 20 clips per supported language; skip
   rate.
